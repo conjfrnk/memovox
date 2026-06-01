@@ -1,7 +1,7 @@
 # memovox — implementation notes & spec mapping
 
 This document maps the codebase to [`../spec.md`](../spec.md) and records what is
-fully implemented in **Phase 0** versus scaffolded for later phases.
+fully implemented in **Phases 0–1** versus scaffolded for later phases.
 
 ## Guiding constraint
 
@@ -13,17 +13,14 @@ standard library**.
 
 ## Subsystem ↔ module map (spec §3)
 
-| Codename | Module | Phase-0 status |
+| Codename | Module | Status |
 |----------|--------|----------------|
 | **Stentor** (acquire/ASR/diarize) | `memovox.stentor` | ✅ local files + URL (yt-dlp opt); captions/whisper/fake ASR; ffprobe pre-check + demux; speaker-label fallback |
-| **Tessera** (visual track) | `memovox.audio.extract_frame`, `memovox.tessera`* | ⏳ frame extraction helper present; keyframe/VLM/OCR is Phase 1 |
-| **Escapement** (fusion → Moments) | `memovox.escapement` | ✅ speaker/gap/duration/event/topic-shift boundaries |
+| **Tessera** (visual track) | `memovox.tessera` | ✅ ffmpeg frame sampling, content-aware scene segmentation, information-gain keyframe selection, free visual-signature embedding; VLM caption + OCR slots (Null fallback / Ollama-vision / tesseract); graceful degradation with no video |
+| **Escapement** (fusion → Moments) | `memovox.escapement` | ✅ speaker/gap/duration/event/topic-shift boundaries; ✅ tri-modal fusion of visual events (caption/OCR/visual embedding) into Moments |
 | **Assay** (claims + verify) | `memovox.assay` | ✅ rule-based + LLM-opt extraction, epistemic typing, NLI gate, salience |
-| **Loom** (indices + graph + synthesis) | `memovox.loom` | ✅ relational + FTS5 lexical + BLOB vectors + edge-table graph; ✅ basic cross-corpus contradiction/agreement |
-| **Augur** (retrieve + answer) | `memovox.augur` | ✅ planner, dense+lexical RRF, cited extractive/LLM answers |
-
-\* `tessera` is a planned package; the frame-extraction primitive it will use
-already lives in `memovox.audio`.
+| **Loom** (indices + graph + synthesis) | `memovox.loom` | ✅ relational + FTS5 lexical + BLOB vectors + visual vectors + edge-table graph; ✅ basic cross-corpus contradiction/agreement |
+| **Augur** (retrieve + answer) | `memovox.augur` | ✅ planner, dense+lexical RRF, cited extractive/LLM answers (on-screen text retrievable via fused Moment text) |
 
 ## Pipeline stages (spec §4)
 
@@ -32,8 +29,8 @@ already lives in `memovox.audio`.
 | 0 Acquire | `stentor/acquire.py` | local media/transcript (free) + yt-dlp; content-hash idempotency key |
 | 1 Demux | `audio.demux_to_wav`, `audio.probe` | ffmpeg → 16 kHz mono WAV; ffprobe validation pre-check |
 | 2 Audio/ASR | `stentor/asr.py`, `backends/asr_whisper.py` | captions / faster-whisper / fake; filler stripping + audio-event markers; glossary biasing |
-| 3 Visual | — | Phase 1 |
-| 4 Fusion | `escapement/fusion.py` | Moments are the atomic retrieval/citation unit |
+| 3 Visual | `tessera/` (`frames`/`scenes`/`keyframes`) | ffmpeg signatures → content-aware scenes → information-gain keyframes → caption/OCR/visual-embedding events; degrades to no-op without a video stream |
+| 4 Fusion | `escapement/fusion.py` | Moments are the atomic retrieval/citation unit; visual events bound by time overlap → `visual_caption`/`ocr_text`/visual embedding |
 | 5 Claims+verify | `assay/` | entailment gate; unsupported claims flagged, never silently dropped |
 | 6 Resolution+index | `loom/store.py`, `pipeline.py` | triple write; within-video speakers; PRECEDES/STATES/ATTRIBUTED_TO edges |
 | 7 Consolidation | `loom/consolidate.py` | contradiction/agreement via inverted-index + NLI (sync, not yet async/background) |
@@ -61,9 +58,12 @@ Markdown digest is written per video.
 
 ## What is intentionally deferred (spec §11 roadmap)
 
-- **Phase 1** Tessera: scene detection, adaptive (information-gain) keyframe
-  selection, VLM captioning, OCR, ColPali visual embeddings, Moment fusion of
-  visual events. (Hooks: `Moment.visual_caption/ocr_text`, `audio.extract_frame`.)
+- **Phase 1 — remaining upgrades.** The visual track ships (scene detection,
+  information-gain keyframe selection, caption/OCR slots, Moment fusion). Still
+  optional/future: PySceneDetect/SigLIP/ColPali multi-vector embeddings and
+  query-side visual late-interaction retrieval (the stored visual vectors are not
+  yet a retrieval leg in Augur); the free defaults are a content-diff scene
+  detector and a downscaled-intensity visual signature.
 - **Phase 2** Full entity/speaker resolution across videos; richer graph retrieval.
 - **Phase 3** Async background consolidation, claim-evolution tracking, consensus
   scoring, topic induction.
@@ -79,6 +79,9 @@ Markdown digest is written per video.
 | Embedder | hashing | `sentence-transformers` `[embed]` |
 | NLI | lexical | DeBERTa-NLI `[nli]` |
 | LLM | none (extractive) | Ollama (stdlib HTTP) / `[llm]` |
+| VLM caption | none (NullVLM) | Ollama vision (stdlib HTTP) |
+| OCR | none (NullOCR) | `tesseract` binary on PATH |
+| Frames/scenes | ffmpeg + stdlib signature | PySceneDetect/SigLIP (future) |
 | Vector/Lexical/Graph | SQLite | Qdrant/LanceDB/Kùzu (future) |
 
 ## Tests

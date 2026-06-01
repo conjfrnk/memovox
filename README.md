@@ -11,9 +11,11 @@ it doesn't claim it.
 > *Jaeger-LeCoultre's Memovox (1950) was the wristwatch that spoke back — an alarm
 > that gave time a voice. This is the memory that speaks back: voice in, knowledge out.*
 
-This repository implements **Phase 0** of [`spec.md`](spec.md) (the audio
-skeleton — "a genuinely useful tool on its own") and lays down the architecture
-for the later multimodal, knowledge-graph, and synthesis phases.
+This repository implements **Phases 0–1** of [`spec.md`](spec.md): the audio
+skeleton ("a genuinely useful tool on its own") plus the **tri-modal visual
+track** — content-aware scene detection, information-gain keyframe selection,
+and fusion of on-screen text/captions into Moments — and lays down the
+architecture for the later knowledge-graph and synthesis phases.
 
 ## Local-first and free by default
 
@@ -130,10 +132,12 @@ make lint     # ruff, if installed
 ## Status
 
 Phase 0 (audio skeleton: ingest → Moments → verified claims → hybrid cited
-retrieval → CLI/SDK/REST/MCP) is implemented and tested with stdlib fallbacks.
-Phases 1–4 (visual track, full knowledge graph, cross-corpus synthesis, scale)
-have scaffolding and extension points in place. See [`spec.md`](spec.md) and the
-roadmap therein.
+retrieval → CLI/SDK/REST/MCP) and Phase 1 (visual track: scene detection →
+information-gain keyframes → VLM-caption/OCR slots → tri-modal Moment fusion)
+are implemented and tested with stdlib fallbacks; the visual track degrades
+gracefully to a no-op when there is no video stream. Phases 2–4 (full knowledge
+graph, cross-corpus synthesis, scale) have scaffolding and extension points in
+place. See [`spec.md`](spec.md) and the roadmap therein.
 
 ## License
 
