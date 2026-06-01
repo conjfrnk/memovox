@@ -85,6 +85,11 @@ CREATE TABLE IF NOT EXISTS vectors (
     dim INTEGER, vec BLOB
 );
 
+CREATE TABLE IF NOT EXISTS visual_vectors (
+    moment_id TEXT PRIMARY KEY REFERENCES moments(moment_id) ON DELETE CASCADE,
+    dim INTEGER, vec BLOB
+);
+
 CREATE TABLE IF NOT EXISTS edges (
     edge_id INTEGER PRIMARY KEY AUTOINCREMENT,
     src TEXT, rel TEXT, dst TEXT, src_type TEXT, dst_type TEXT,
@@ -212,7 +217,13 @@ class LoomStore:
 
     # -- moments -----------------------------------------------------------
 
-    def add_moment(self, moment: Moment, embedding: Optional[Sequence[float]] = None) -> None:
+    def add_moment(
+        self,
+        moment: Moment,
+        embedding: Optional[Sequence[float]] = None,
+        *,
+        visual_embedding: Optional[Sequence[float]] = None,
+    ) -> None:
         self.conn.execute(
             """
             INSERT OR REPLACE INTO moments
@@ -237,7 +248,18 @@ class LoomStore:
                 "INSERT OR REPLACE INTO vectors (moment_id, dim, vec) VALUES (?, ?, ?)",
                 (moment.moment_id, len(embedding), pack_floats(embedding)),
             )
+        if visual_embedding is not None:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO visual_vectors (moment_id, dim, vec) VALUES (?, ?, ?)",
+                (moment.moment_id, len(visual_embedding), pack_floats(visual_embedding)),
+            )
         self.conn.commit()
+
+    def get_visual_vector(self, moment_id: str) -> Optional[List[float]]:
+        row = self.conn.execute(
+            "SELECT vec FROM visual_vectors WHERE moment_id = ?", (moment_id,)
+        ).fetchone()
+        return unpack_floats(row["vec"]) if row else None
 
     def get_moment(self, moment_id: str) -> Optional[Moment]:
         row = self.conn.execute("SELECT * FROM moments WHERE moment_id = ?", (moment_id,)).fetchone()
@@ -453,6 +475,7 @@ class LoomStore:
             "speakers": count("speakers"),
             "edges": count("edges"),
             "vectors": count("vectors"),
+            "visual_vectors": count("visual_vectors"),
             "fts5": self.fts,
             "embed_meta": self.get_meta("embed_backend"),
             "store": str(self.config.store),

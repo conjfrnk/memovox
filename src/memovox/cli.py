@@ -36,6 +36,11 @@ def cmd_ingest(args, mv: Memovox) -> int:
     print(f"  moments: {report.n_moments}   claims: {report.n_claims_committed} committed, "
           f"{report.n_claims_unsupported} unsupported")
     print(f"  asr: {report.asr_backend}   embed: {report.embed_backend}   nli: {report.nli_backend}")
+    if report.visual_available:
+        print(f"  visual: {report.n_visual_events} events   "
+              f"vlm: {report.vlm_backend}   ocr: {report.ocr_backend}")
+    else:
+        print("  visual: none (no video stream)")
     return 0
 
 
@@ -138,7 +143,7 @@ def cmd_show(args, mv: Memovox) -> int:
 def cmd_stats(args, mv: Memovox) -> int:
     s = mv.stats()
     for key in ("videos", "moments", "claims", "claims_committed", "claims_unsupported",
-                "entities", "speakers", "edges", "vectors"):
+                "entities", "speakers", "edges", "vectors", "visual_vectors"):
         print(f"{key:<20}: {s.get(key)}")
     print(f"{'fts5':<20}: {s.get('fts5')}")
     print(f"{'embedder':<20}: {s.get('embed_meta')}")

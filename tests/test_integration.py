@@ -70,6 +70,48 @@ class TestEndToEnd(unittest.TestCase):
         self.assertIsNotNone(prov)
         self.assertIn("deep_link", prov["provenance"])
 
+    def test_transcript_only_ingest_degrades_visual_gracefully(self):
+        # A transcript-only source has no video stream; the visual track must be
+        # cleanly unavailable while transcript knowledge still commits (spec §9).
+        vtt = write_vtt(self.dir, "rag.en.vtt", VTT_RAG)
+        report = self.mv.ingest(vtt, source_url="https://youtu.be/abc123")
+        self.assertFalse(report.visual_available)
+        self.assertEqual(report.n_visual_events, 0)
+        self.assertGreaterEqual(report.n_moments, 1)
+        self.assertGreaterEqual(report.n_claims_committed, 1)
+
+    def test_multimodal_lift_onscreen_text_becomes_retrievable(self):
+        from unittest import mock
+
+        from memovox.tessera import VisualEvent, VisualResult
+
+        # The transcript never mentions "backpropagation"; only the slide does.
+        fake = VisualResult(
+            available=True, n_frames=3, n_scenes=1,
+            vlm_backend="fixed", ocr_backend="fixed",
+            events=[VisualEvent(
+                t_start_s=10.0, t_end_s=30.0,
+                ocr_text="Diagram: Backpropagation through time",
+                caption="a slide showing a recurrent neural network diagram",
+                embedding=[0.5, 0.25, 0.75, 0.125],
+            )],
+        )
+        vtt = write_vtt(self.dir, "vis.en.vtt", VTT_RAG)
+        with mock.patch("memovox.tessera.run", return_value=fake):
+            report = self.mv.ingest(vtt, source_url="https://youtu.be/vis1")
+
+        self.assertTrue(report.visual_available)
+        self.assertGreaterEqual(report.n_visual_events, 1)
+        self.assertGreaterEqual(self.mv.stats()["visual_vectors"], 1)
+
+        # Tri-modal lift: a query for on-screen-only text now retrieves a Moment.
+        ans = self.mv.ask("backpropagation through time diagram")
+        self.assertTrue(ans.citations)
+        self.assertTrue(
+            any(c.modality == "speech+slide" for c in ans.citations),
+            "expected a fused speech+slide citation",
+        )
+
     def test_cross_corpus_contradiction(self):
         a = write_vtt(self.dir, "a.en.vtt",
                       "WEBVTT\n\n00:00:01.000 --> 00:00:09.000\n"

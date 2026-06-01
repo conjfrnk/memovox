@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional
 
-from . import assay, escapement, stentor
+from . import assay, escapement, stentor, tessera
 from .backends import get_embedder, get_llm, get_nli
 from .config import PIPELINE_VERSION, Config, Settings
 from .loom import Claim, LoomStore, Speaker, Video
@@ -31,6 +31,10 @@ class IngestReport:
     embed_backend: str = ""
     nli_backend: str = ""
     duration_s: Optional[float] = None
+    visual_available: bool = False
+    n_visual_events: int = 0
+    vlm_backend: str = ""
+    ocr_backend: str = ""
 
     def to_dict(self) -> dict:
         return dict(self.__dict__)
@@ -96,8 +100,14 @@ def ingest(
         llm = get_llm(settings.llm_backend, config=config)
         store.set_meta("embed_backend", embedder.name)
 
-        # --- Escapement: Moments ----------------------------------------
-        moments = escapement.build_moments(video_id, st.segments, embedder=embedder, settings=settings)
+        # --- Tessera: visual track (degrades gracefully, spec §9) -------
+        visual = tessera.run(config, meta, settings=settings)
+
+        # --- Escapement: Moments (fused with visual events) -------------
+        moments = escapement.build_moments(
+            video_id, st.segments, embedder=embedder, settings=settings,
+            visual_events=visual.events,
+        )
         for m in moments:
             m.speaker_id = _namespace_speaker(video_id, m.speaker_id)
 
@@ -115,7 +125,8 @@ def ingest(
         else:
             embeddings = []
         for m, emb in zip(moments, embeddings):
-            store.add_moment(m, emb)
+            vis_emb = escapement.moment_visual_embedding(m, visual.events) if visual.events else None
+            store.add_moment(m, emb, visual_embedding=vis_emb)
 
         # PRECEDES edges along the timeline.
         for prev, nxt in zip(moments, moments[1:]):
@@ -157,6 +168,10 @@ def ingest(
             embed_backend=embedder.name,
             nli_backend=nli.name,
             duration_s=st.duration,
+            visual_available=visual.available,
+            n_visual_events=len(visual.events),
+            vlm_backend=visual.vlm_backend,
+            ocr_backend=visual.ocr_backend,
         )
     finally:
         if owns_store:

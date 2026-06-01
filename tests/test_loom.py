@@ -42,6 +42,26 @@ class TestVideosMoments(LoomTestBase):
         moments = self.store.moments_for_video("yt:abc")
         self.assertEqual([m.index for m in moments], [0, 1])
 
+    def test_visual_embedding_stored_and_counted(self):
+        vm = Moment(
+            "yt:abc#m0009", "yt:abc", 90.0, 120.0, "a slide is shown", "spk_0",
+            visual_caption="bar chart", ocr_text="Loss curve", index=9,
+        )
+        self.store.add_moment(
+            vm, self.emb.embed_one(vm.text_for_embedding()),
+            visual_embedding=[0.5, 0.25, 0.75],
+        )
+        self.assertEqual(self.store.stats()["visual_vectors"], 1)
+        self.assertEqual(self.store.get_visual_vector("yt:abc#m0009"), [0.5, 0.25, 0.75])
+
+    def test_visual_embedding_cascades_on_video_delete(self):
+        vm = Moment("yt:abc#m0009", "yt:abc", 90.0, 120.0, "slide", "spk_0",
+                    ocr_text="Loss curve", index=9)
+        self.store.add_moment(vm, self.emb.embed_one("slide Loss curve"),
+                              visual_embedding=[0.5, 0.25, 0.75])
+        self.store.delete_video("yt:abc")
+        self.assertEqual(self.store.stats()["visual_vectors"], 0)
+
     def test_idempotency_unchanged(self):
         same = Video("yt:abc", "https://youtu.be/abc", "Test talk",
                      content_hash="hash1", pipeline_version="0.1.0-phase0")

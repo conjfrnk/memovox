@@ -47,6 +47,59 @@ def _make_moment(video_id: str, index: int, segs: List[Segment]) -> Moment:
     )
 
 
+def _overlaps(event, t_start: float, t_end: float) -> bool:
+    return event.t_start_s <= t_end and event.t_end_s >= t_start
+
+
+def _overlapping(events, t_start: float, t_end: float) -> list:
+    return [e for e in events if _overlaps(e, t_start, t_end)]
+
+
+def _join_distinct(values) -> str:
+    seen: List[str] = []
+    for value in values:
+        text = (value or "").strip()
+        if text and text not in seen:
+            seen.append(text)
+    return " ".join(seen)
+
+
+def _attach_visuals(moments: List[Moment], visual_events) -> None:
+    """Bind co-occurring visual events to each Moment (spec §4 stage 4).
+
+    On-screen text and captions for events overlapping a Moment's span become
+    that Moment's ``ocr_text`` / ``visual_caption`` — so a Moment binds speech +
+    slide + speaker, and the on-screen knowledge flows into retrieval.
+    """
+    for moment in moments:
+        overlap = _overlapping(visual_events, moment.t_start_s, moment.t_end_s)
+        if not overlap:
+            continue
+        moment.ocr_text = _join_distinct(e.ocr_text for e in overlap) or None
+        moment.visual_caption = _join_distinct(e.caption for e in overlap) or None
+
+
+def moment_visual_embedding(moment: Moment, visual_events) -> Optional[List[float]]:
+    """Mean visual embedding of the events overlapping ``moment`` (or ``None``)."""
+    vecs = [e.embedding for e in _overlapping(visual_events, moment.t_start_s, moment.t_end_s) if e.embedding]
+    if not vecs:
+        return None
+    # Anchor to the most common dimension so one anomalous vector can't drop the rest.
+    dims = [len(v) for v in vecs]
+    dim = max(set(dims), key=dims.count)
+    acc = [0.0] * dim
+    n = 0
+    for vec in vecs:
+        if len(vec) != dim:
+            continue
+        for i, x in enumerate(vec):
+            acc[i] += x
+        n += 1
+    if n == 0:
+        return None
+    return [x / n for x in acc]
+
+
 def _merge_small(groups: List[List[Segment]], settings: Settings) -> List[List[Segment]]:
     """Fold sub-minimum-duration groups into a neighbor to avoid fragmentation."""
     if len(groups) <= 1:
@@ -68,6 +121,7 @@ def build_moments(
     *,
     embedder: Optional[Embedder] = None,
     settings: Optional[Settings] = None,
+    visual_events=None,
 ) -> List[Moment]:
     settings = settings or Settings()
     speech = [s for s in segments if s.kind == "speech" and s.text.strip()]
@@ -107,4 +161,7 @@ def build_moments(
     groups.append(current)
 
     groups = _merge_small(groups, settings)
-    return [_make_moment(video_id, i, g) for i, g in enumerate(groups)]
+    moments = [_make_moment(video_id, i, g) for i, g in enumerate(groups)]
+    if visual_events:
+        _attach_visuals(moments, visual_events)
+    return moments
