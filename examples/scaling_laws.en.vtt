@@ -1,0 +1,22 @@
+WEBVTT
+
+00:00:02.000 --> 00:00:11.000
+<v Dr. Lee>Welcome everyone. Today we are talking about scaling laws for language models.
+
+00:00:11.000 --> 00:00:20.000
+<v Dr. Lee>The key finding is that loss decreases predictably as a power law in compute.
+
+00:00:20.000 --> 00:00:24.000
+[applause]
+
+00:00:24.000 --> 00:00:34.000
+<v Dr. Lee>For retrieval augmented generation, the recommended chunk size is 512 tokens.
+
+00:00:34.000 --> 00:00:44.000
+<v Dr. Lee>Hybrid retrieval combines dense and sparse search, and it beats either alone.
+
+00:00:44.000 --> 00:00:54.000
+<v Dr. Lee>Um, in my opinion, scaling laws will continue to hold through the next generation.
+
+00:00:54.000 --> 00:01:04.000
+<v Dr. Lee>First, normalize your audio. Then run the transcription. Finally, build the index.
