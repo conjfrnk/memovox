@@ -47,19 +47,14 @@ class LexicalNLI(NLIBackend):
         p_neg = bool(p_set & _NEGATIONS)
         h_neg = bool(set(h_tokens) & _NEGATIONS)
 
-        contradict = 0.0
+        # Strong lexical overlap but opposite polarity => contradiction.
         if overlap >= 0.5 and (p_neg != h_neg):
-            contradict = 0.5 * overlap
-        entail = max(0.0, overlap - contradict)
-        neutral = max(0.0, 1.0 - entail - contradict)
+            return NLIResult("contradiction", round(max(0.0, 1.0 - overlap), 4), 0.0, round(overlap, 4))
 
-        if contradict > entail and contradict > neutral:
-            label = "contradiction"
-        elif entail >= 0.5 and entail >= neutral:
-            label = "entailment"
-        else:
-            label = "neutral"
-        return NLIResult(label, round(entail, 4), round(neutral, 4), round(contradict, 4))
+        entail = round(overlap, 4)
+        neutral = round(1.0 - overlap, 4)
+        label = "entailment" if overlap >= 0.5 else "neutral"
+        return NLIResult(label, entail, neutral, 0.0)
 
 
 class TransformersNLI(NLIBackend):
