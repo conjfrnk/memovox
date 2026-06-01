@@ -17,12 +17,16 @@ from .base import (
     LLMBackend,
     NLIBackend,
     NLIResult,
+    OCRBackend,
     Segment,
+    VLMBackend,
     Word,
 )
 from .embed import HashingEmbedder, SentenceTransformerEmbedder
 from .llm import OllamaLLM
 from .nli import LexicalNLI, TransformersNLI
+from .ocr import NullOCR, TesseractOCR
+from .vlm import NullVLM, OllamaVLM
 
 _EMBEDDERS = {
     "hashing": HashingEmbedder,
@@ -37,6 +41,10 @@ _NLI = {
 _NLI_ALIASES = {"transformers": "deberta-nli", "deberta": "deberta-nli", "nli": "deberta-nli"}
 
 _LLMS = {"ollama": OllamaLLM}
+
+_VLMS = {"none": NullVLM, "ollama": OllamaVLM}
+_OCRS = {"none": NullOCR, "tesseract": TesseractOCR}
+_OCR_ALIASES = {"surya": "tesseract"}  # graceful: Surya not yet wired, use tesseract
 
 
 def get_embedder(name: str = "auto", *, config=None, **options) -> Embedder:
@@ -81,6 +89,37 @@ def get_llm(name: str = "auto", *, config=None, **options) -> Optional[LLMBacken
     return cls(config=config, **options)
 
 
+def get_vlm(name: str = "auto", *, config=None, **options) -> VLMBackend:
+    """Return a vision-language captioner; falls back to the no-op NullVLM."""
+    if name in ("none", "off", "false", ""):
+        return NullVLM(config=config, **options)
+    if name == "auto":
+        return OllamaVLM(config=config, **options) if OllamaVLM.is_available() else NullVLM(config=config)
+    cls = _VLMS.get(name)
+    if cls is None:
+        raise BackendUnavailable(f"Unknown VLM backend {name!r}. Options: {list(_VLMS)}, 'auto', or 'none'.")
+    if not cls.is_available():
+        raise BackendUnavailable(f"VLM backend {name!r} is not reachable (is the local vision model running?).")
+    return cls(config=config, **options)
+
+
+def get_ocr(name: str = "auto", *, config=None, **options) -> OCRBackend:
+    """Return an OCR backend; falls back to the no-op NullOCR."""
+    if name in ("none", "off", "false", ""):
+        return NullOCR(config=config, **options)
+    if name == "auto":
+        return TesseractOCR(config=config, **options) if TesseractOCR.is_available() else NullOCR(config=config)
+    name = _OCR_ALIASES.get(name, name)
+    cls = _OCRS.get(name)
+    if cls is None:
+        raise BackendUnavailable(f"Unknown OCR backend {name!r}. Options: {list(_OCRS)}, 'auto', or 'none'.")
+    if not cls.is_available():
+        raise BackendUnavailable(
+            f"OCR backend {name!r} is not installed. Install the `tesseract` binary."
+        )
+    return cls(config=config, **options)
+
+
 def backend_status() -> dict:
     """Snapshot of which backends are available (for `memovox backends`)."""
     from .asr_whisper import WhisperASR
@@ -102,13 +141,22 @@ def backend_status() -> dict:
         "llm": {
             "ollama": OllamaLLM.is_available(),
         },
+        "vlm": {
+            "ollama": OllamaVLM.is_available(),
+            "none": True,
+        },
+        "ocr": {
+            "tesseract": TesseractOCR.is_available(),
+            "none": True,
+        },
     }
 
 
 __all__ = [
     "Backend", "ASRBackend", "ASRResult", "Segment", "Word",
-    "Embedder", "NLIBackend", "NLIResult", "LLMBackend",
+    "Embedder", "NLIBackend", "NLIResult", "LLMBackend", "VLMBackend", "OCRBackend",
     "HashingEmbedder", "SentenceTransformerEmbedder",
     "LexicalNLI", "TransformersNLI", "OllamaLLM",
-    "get_embedder", "get_nli", "get_llm", "backend_status",
+    "NullVLM", "OllamaVLM", "NullOCR", "TesseractOCR",
+    "get_embedder", "get_nli", "get_llm", "get_vlm", "get_ocr", "backend_status",
 ]

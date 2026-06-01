@@ -114,3 +114,37 @@ class LLMBackend(Backend):
         temperature: float = 0.0,
     ) -> str:
         raise NotImplementedError
+
+
+class VLMBackend(Backend):
+    """Vision-language captioner for keyframes (Tessera, spec §7).
+
+    ``caption()`` produces a dense description of an on-screen frame. The
+    always-available fallback returns ``""`` (no caption); real backends
+    (a local Ollama vision model, hosted VLMs) are optional upgrades.
+    """
+
+    #: Whether this backend actually produces captions (vs. the empty fallback).
+    is_generative: bool = True
+
+    @abstractmethod
+    def caption(
+        self,
+        image_path: Optional[str],
+        *,
+        ocr_text: Optional[str] = None,
+        prompt: Optional[str] = None,
+    ) -> str:
+        raise NotImplementedError
+
+
+class OCRBackend(Backend):
+    """On-screen text extraction for keyframes (Tessera, spec §7).
+
+    Reads slide text, code, and equations that exist nowhere in the audio. The
+    always-available fallback returns ``""``; ``tesseract`` / Surya are optional.
+    """
+
+    @abstractmethod
+    def extract(self, image_path: Optional[str]) -> str:
+        raise NotImplementedError
