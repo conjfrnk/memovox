@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "memovox"
+version = "0.1.0"
+description = "A multimodal video-to-knowledge engine: voice in, queryable, cited memory out. Local-first, no API keys required."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "memovox authors" }]
+keywords = [
+    "video", "knowledge-graph", "rag", "transcription", "whisper",
+    "retrieval", "provenance", "mcp", "local-first", "offline",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Indexing",
+]
+
+# The CORE runs on the Python standard library alone. Every model slot (ASR,
+# embedder, NLI, LLM) ships a deterministic stdlib fallback, so the whole
+# pipeline works end-to-end with no downloads and no API keys. The extras below
+# are *optional quality upgrades*, each swappable behind a common backend
+# interface (spec §7).
+dependencies = []
+
+[project.optional-dependencies]
+acquire = ["yt-dlp>=2024.1.0"]                      # Stentor stage 0: fetch from URLs
+asr = ["faster-whisper>=1.0.0"]                      # Stentor stage 2: offline ASR
+align = ["whisperx>=3.1.0"]                          # word-level timestamps
+diarize = ["pyannote.audio>=3.1.0"]                  # speaker turns + voiceprints
+embed = ["sentence-transformers>=2.7.0"]             # Loom: dense embeddings (BGE-M3)
+nli = ["transformers>=4.40.0", "torch>=2.0.0"]       # Assay: DeBERTa entailment gate
+vision = ["scenedetect>=0.6.4", "imagehash>=4.3.1", "pillow>=10.0.0"]  # Tessera
+vectors = ["lancedb>=0.6.0"]                          # Loom: embedded vector DB
+graph = ["kuzu>=0.4.0"]                               # Loom: embeddable graph DB
+serve = ["fastapi>=0.110.0", "uvicorn>=0.29.0"]      # Augur: REST API
+mcp = ["mcp>=1.0.0"]                                  # Augur: agent-native MCP server
+dev = ["pytest>=7.0", "ruff>=0.4.0"]
+
+[project.scripts]
+memovox = "memovox.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/conjfrnk/memovox"
+Repository = "https://github.com/conjfrnk/memovox"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+ignore = ["E501"]
