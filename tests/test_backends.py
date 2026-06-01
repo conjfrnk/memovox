@@ -1,7 +1,9 @@
 import math
+import pathlib
+import sys
 import unittest
 
-import _bootstrap  # noqa: F401  (puts src/ on sys.path)
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
 
 from memovox.backends import backend_status, get_embedder, get_nli
 from memovox.backends.embed import HashingEmbedder

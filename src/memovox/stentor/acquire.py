@@ -1,0 +1,177 @@
+"""Stentor stage 0 — acquire a source (local file or URL).
+
+Local media/transcript files work with zero dependencies. URL acquisition uses
+``yt-dlp`` when installed (``pip install "memovox[acquire]"``); otherwise a clear
+error explains how to enable it. The acquisition layer is deliberately modular
+so yt-dlp breakage stays isolated (spec §4 stage 0).
+"""
+
+from __future__ import annotations
+
+import json
+import shutil
+import subprocess
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional
+
+from .. import audio
+from ..config import Config
+from ..errors import AcquisitionError
+from ..util import content_hash_file, sha1_hex
+
+TRANSCRIPT_EXTENSIONS = {".vtt", ".srt", ".json", ".txt"}
+
+
+@dataclass
+class SourceMeta:
+    source_url: Optional[str]
+    title: str
+    channel: Optional[str] = None
+    published_at: Optional[str] = None
+    duration: Optional[float] = None
+    lang: Optional[str] = None
+    content_hash: Optional[str] = None
+    media_path: Optional[Path] = None
+    captions_path: Optional[Path] = None
+    is_video: bool = False
+    extra: dict = field(default_factory=dict)
+
+
+def _is_url(source: str) -> bool:
+    return source.startswith(("http://", "https://"))
+
+
+def acquire(
+    config: Config,
+    source: str,
+    *,
+    source_url: Optional[str] = None,
+    title: Optional[str] = None,
+    captions: Optional[str] = None,
+    cookies: Optional[str] = None,
+) -> SourceMeta:
+    config.ensure()
+    if _is_url(source):
+        return _acquire_url(config, source, cookies=cookies, title=title)
+    return _acquire_local(source, source_url=source_url, title=title, captions=captions)
+
+
+def _acquire_local(
+    source: str,
+    *,
+    source_url: Optional[str],
+    title: Optional[str],
+    captions: Optional[str],
+) -> SourceMeta:
+    path = Path(source).expanduser()
+    if not path.exists():
+        raise AcquisitionError(f"No such file: {path}")
+    ext = path.suffix.lower()
+    chash = content_hash_file(path)
+    display_title = title or path.stem
+
+    if ext in TRANSCRIPT_EXTENSIONS and ext not in audio.MEDIA_EXTENSIONS:
+        # Transcript-only ingest — fully free, no media/ffmpeg required.
+        return SourceMeta(
+            source_url=source_url,
+            title=display_title,
+            content_hash=chash,
+            captions_path=path,
+            media_path=None,
+            is_video=False,
+        )
+
+    if ext in audio.MEDIA_EXTENSIONS:
+        info = audio.probe(path)
+        captions_path = Path(captions).expanduser() if captions else _sibling_captions(path)
+        return SourceMeta(
+            source_url=source_url,
+            title=display_title,
+            duration=info.get("duration"),
+            content_hash=chash,
+            media_path=path,
+            captions_path=captions_path,
+            is_video=info.get("has_video", False),
+        )
+
+    raise AcquisitionError(
+        f"Unsupported file type {ext!r}. Provide a media file "
+        f"({', '.join(sorted(audio.MEDIA_EXTENSIONS))}) or a transcript "
+        f"({', '.join(sorted(TRANSCRIPT_EXTENSIONS))})."
+    )
+
+
+def _sibling_captions(media: Path) -> Optional[Path]:
+    for ext in (".vtt", ".srt"):
+        for cand in (media.with_suffix(ext), media.with_suffix(f".en{ext}")):
+            if cand.exists():
+                return cand
+    return None
+
+
+def _acquire_url(
+    config: Config, url: str, *, cookies: Optional[str], title: Optional[str]
+) -> SourceMeta:
+    if not shutil.which("yt-dlp"):
+        raise AcquisitionError(
+            "URL ingestion requires yt-dlp, which was not found.\n"
+            "Install it with: pip install 'memovox[acquire]'  (or `pip install yt-dlp`).\n"
+            "Alternatively, download the file/captions yourself and ingest the local path."
+        )
+    out_tmpl = str(config.media_dir / "%(id)s.%(ext)s")
+    cmd = [
+        "yt-dlp", "-f", "bestaudio/best", "-o", out_tmpl,
+        "--write-info-json", "--write-subs", "--write-auto-subs",
+        "--sub-format", "vtt", "--sub-langs", "en.*,en",
+        "--no-playlist", "--restrict-filenames",
+    ]
+    if cookies:
+        cmd += ["--cookies", cookies]
+    cmd.append(url)
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise AcquisitionError(f"yt-dlp failed: {proc.stderr.strip()[:500]}")
+
+    info_files = sorted(config.media_dir.glob("*.info.json"), key=lambda p: p.stat().st_mtime)
+    meta_json = {}
+    if info_files:
+        try:
+            meta_json = json.loads(info_files[-1].read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            meta_json = {}
+
+    vid = meta_json.get("id", "")
+    media_path = _find_media(config.media_dir, vid)
+    captions_path = _find_captions(config.media_dir, vid)
+    return SourceMeta(
+        source_url=meta_json.get("webpage_url", url),
+        title=title or meta_json.get("title") or (media_path.stem if media_path else url),
+        channel=meta_json.get("channel") or meta_json.get("uploader"),
+        published_at=_format_date(meta_json.get("upload_date")),
+        duration=meta_json.get("duration"),
+        lang=meta_json.get("language"),
+        content_hash=content_hash_file(media_path) if media_path else sha1_hex(url),
+        media_path=media_path,
+        captions_path=captions_path,
+        is_video=True,
+        extra={"description": meta_json.get("description")},
+    )
+
+
+def _find_media(media_dir: Path, vid: str) -> Optional[Path]:
+    for p in sorted(media_dir.glob(f"{vid}.*") if vid else media_dir.glob("*")):
+        if p.suffix.lower() in audio.MEDIA_EXTENSIONS:
+            return p
+    return None
+
+
+def _find_captions(media_dir: Path, vid: str) -> Optional[Path]:
+    cands = sorted(media_dir.glob(f"{vid}*.vtt")) or sorted(media_dir.glob(f"{vid}*.srt"))
+    return cands[0] if cands else None
+
+
+def _format_date(yyyymmdd: Optional[str]) -> Optional[str]:
+    if yyyymmdd and len(yyyymmdd) == 8 and yyyymmdd.isdigit():
+        return f"{yyyymmdd[:4]}-{yyyymmdd[4:6]}-{yyyymmdd[6:]}"
+    return None
