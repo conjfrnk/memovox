@@ -109,7 +109,10 @@ def extract_frame(src: "str | Path", t_seconds: float, dst: "str | Path") -> Opt
         ffmpeg, "-y", "-loglevel", "error", "-ss", f"{max(0.0, t_seconds):.3f}",
         "-i", str(src), "-frames:v", "1", "-q:v", "3", str(dst),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
     if proc.returncode != 0 or not dst.exists():
         return None
     return dst

@@ -32,8 +32,19 @@ class Settings:
     embed_backend: str = "auto"
     nli_backend: str = "auto"
     llm_backend: str = "auto"
+    vlm_backend: str = "auto"
+    ocr_backend: str = "auto"
 
     embed_dim: int = 256  # dimensionality of the hashing fallback embedder
+
+    # Tessera — visual track (spec §4 stage 3)
+    visual_enabled: bool = True
+    frame_sample_fps: float = 1.0       # candidate frames sampled per second
+    frame_side: int = 16                # downscaled signature is frame_side**2 long
+    frame_max: int = 1200               # hard cap on sampled frames per video
+    scene_threshold: float = 0.3        # frame-diff above this => scene/slide cut
+    keyframe_min_gain: float = 0.12     # info-gain floor to keep another keyframe
+    keyframe_per_scene_cap: int = 8     # max keyframes kept per scene
 
     # Escapement — Moment boundaries
     moment_max_sec: float = 90.0

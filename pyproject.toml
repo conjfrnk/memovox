@@ -38,7 +38,11 @@ align = ["whisperx>=3.1.0"]                          # word-level timestamps
 diarize = ["pyannote.audio>=3.1.0"]                  # speaker turns + voiceprints
 embed = ["sentence-transformers>=2.7.0"]             # Loom: dense embeddings (BGE-M3)
 nli = ["transformers>=4.40.0", "torch>=2.0.0"]       # Assay: DeBERTa entailment gate
-vision = ["scenedetect>=0.6.4", "imagehash>=4.3.1", "pillow>=10.0.0"]  # Tessera
+# Tessera runs free on ffmpeg + stdlib (content-diff scenes, info-gain keyframes,
+# intensity-signature visual embedding); OCR upgrades to the `tesseract` binary
+# and captioning to a local Ollama vision model (neither needs a Python package).
+# This extra is for future PySceneDetect / perceptual-hash scene-detection upgrades.
+vision = ["scenedetect>=0.6.4", "imagehash>=4.3.1", "pillow>=10.0.0"]  # Tessera (optional)
 vectors = ["lancedb>=0.6.0"]                          # Loom: embedded vector DB
 graph = ["kuzu>=0.4.0"]                               # Loom: embeddable graph DB
 serve = ["fastapi>=0.110.0", "uvicorn>=0.29.0"]      # Augur: REST API
