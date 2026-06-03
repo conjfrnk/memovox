@@ -39,6 +39,94 @@ _TYPE_CUES = [
 ]
 
 
+# Entity-mention surface-form recognizers (W2.1). Acronyms: a run of >=2
+# uppercase letters/digits, optionally hyphenated (BERT, GPT, RAG, GPT-4), with
+# an optional trailing lowercase ``s`` plural (LLMs, GPUs) captured but stripped
+# so the bare acronym is emitted and unifies with the singular. Title-case runs:
+# one or more consecutive capitalized words (Transformer, Geoffrey Hinton,
+# New York) treated as a single mention.
+_ACRONYM_RE = re.compile(r"\b([A-Z][A-Z0-9]+(?:-[A-Z0-9]+)?)s?\b")
+_TITLECASE_RUN_RE = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b")
+
+# Common sentence-initial / function words: a single Title-case word matching
+# one of these is dropped (catches sentence-initial capitalization). Acronyms
+# are exempt from this stoplist.
+_COMMON_CAPS = {
+    "The", "This", "That", "These", "Those", "A", "An", "It", "We", "You",
+    "They", "He", "She", "I", "First", "Second", "Then", "Next", "Finally",
+    "Also", "However", "Therefore", "In", "On", "At", "For", "And", "Or",
+    "But", "So", "If", "When", "While", "Here", "There", "Now", "Today",
+}
+
+
+def _strip_leading_common(run: str) -> str:
+    """Strip leading stoplisted words from a Title-case run.
+
+    A common word leading a multi-word run (sentence-initial "The Transformer
+    architecture", "In New York", "This Chinchilla model") must not be emitted
+    glued to the real entity, or W2.3's surface-form unification fragments it
+    ("The Transformer" never collapses onto "Transformer"). Iteratively drop
+    leading words in ``_COMMON_CAPS`` and return the remainder; returns "" when
+    nothing is left (or the lone survivor is itself stoplisted), signalling drop.
+    """
+    words = run.split()
+    while words and words[0] in _COMMON_CAPS:
+        words.pop(0)
+    if len(words) == 1 and words[0] in _COMMON_CAPS:
+        return ""
+    return " ".join(words)
+
+
+def extract_mentions(claim: Claim) -> List[str]:
+    """Surface candidate entity mentions from a claim (W2.1).
+
+    Scans ``claim.text`` and the (often-overlapping) ``claim.subject``/
+    ``claim.object`` fields for two kinds of surface form: all-caps acronyms
+    (always kept, even sentence-initial; a trailing plural ``s`` is stripped so
+    "LLMs" emits "LLM") and Title-case runs (a multi-word run is one mention).
+    Common words are dropped via a stoplist -- both a standalone single capital
+    and any leading common word(s) of a run ("The Transformer architecture" ->
+    "Transformer", "In New York" -> "New York"). Returns DISTINCT surface forms
+    in first-seen order; W2.3 canonicalizes them into graph entities.
+
+    Known limits (free heuristic; out of scope here): does NOT capture
+    CamelCase / internal-capital names ("OpenAI", "DeepMind", "iPhone") or
+    accented tails ("Schoelkopf"/"Schölkopf"). These are left for the optional
+    W2.2 Wikidata linker to recover.
+    """
+    seen: set = set()
+    out: List[str] = []
+
+    def _add(surface: str) -> None:
+        if surface and surface not in seen:
+            seen.add(surface)
+            out.append(surface)
+
+    for field_text in (claim.text, claim.subject, claim.object):
+        if not field_text:
+            continue
+        # Acronyms first: emit the bare acronym (group 1 drops any plural "s").
+        acronyms = set()
+        for m in _ACRONYM_RE.finditer(field_text):
+            bare = m.group(1)
+            acronyms.add(bare)
+            _add(bare)
+        for m in _TITLECASE_RUN_RE.finditer(field_text):
+            surface = _strip_leading_common(m.group(0))
+            if not surface:
+                continue
+            # Skip a remaining standalone common-word capital ("The", etc.).
+            if " " not in surface and surface in _COMMON_CAPS:
+                continue
+            # Defensive: never let a title-case match shadow an acronym already
+            # taken from the same field (the patterns are disjoint, but guard).
+            if surface in acronyms:
+                continue
+            _add(surface)
+
+    return out
+
+
 def epistemic_type(sentence: str) -> str:
     low = " " + sentence.lower().strip() + " "
     for label, cues in _TYPE_CUES:

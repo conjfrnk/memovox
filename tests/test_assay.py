@@ -5,7 +5,7 @@ import unittest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
 
 from memovox import assay
-from memovox.assay.claims import epistemic_type, extract_claims
+from memovox.assay.claims import epistemic_type, extract_claims, extract_mentions
 from memovox.assay.verify import verify_claim
 from memovox.backends.base import LLMBackend
 from memovox.backends.nli import LexicalNLI
@@ -53,6 +53,60 @@ class TestExtraction(unittest.TestCase):
         claim = extract_claims(m)[0]
         self.assertIn("chunk size", claim.subject.lower())
         self.assertTrue(claim.object)
+
+
+class TestEntityMentions(unittest.TestCase):
+    def _claim(self, text, subject="", obj=""):
+        return Claim("c1", "m", "v", text=text, subject=subject, object=obj)
+
+    def test_acronym_titlecase_and_proper_nouns(self):
+        c = self._claim("BERT and the Transformer architecture by Vaswani")
+        self.assertEqual(extract_mentions(c), ["BERT", "Transformer", "Vaswani"])
+
+    def test_keeps_hyphenated_acronym(self):
+        c = self._claim("GPT-4 outperforms RAG on this benchmark")
+        self.assertEqual(extract_mentions(c), ["GPT-4", "RAG"])
+
+    def test_multiword_run_kept_whole(self):
+        c = self._claim("Geoffrey Hinton works in New York")
+        self.assertEqual(extract_mentions(c), ["Geoffrey Hinton", "New York"])
+
+    def test_sentence_initial_common_word_dropped(self):
+        c = self._claim("The model uses attention. This improves Recall significantly.")
+        self.assertEqual(extract_mentions(c), ["Recall"])
+
+    def test_purely_lowercase_returns_empty(self):
+        c = self._claim("the model uses attention to weight tokens by relevance")
+        self.assertEqual(extract_mentions(c), [])
+
+    def test_distinct_and_ordered_across_fields(self):
+        c = self._claim(
+            "BERT improves on Transformer models", subject="BERT", obj="Transformer"
+        )
+        # first-seen order preserved, duplicates from subject/object deduped
+        self.assertEqual(extract_mentions(c), ["BERT", "Transformer"])
+
+    def test_strips_leading_common_word_from_run(self):
+        self.assertEqual(
+            extract_mentions(self._claim("The Transformer architecture is fast")),
+            ["Transformer"],
+        )
+        self.assertEqual(
+            extract_mentions(self._claim("This Chinchilla model is compute-optimal")),
+            ["Chinchilla"],
+        )
+        self.assertEqual(
+            extract_mentions(self._claim("In New York the lab opened")),
+            ["New York"],
+        )
+
+    def test_acronym_plurals_emit_singular(self):
+        c = self._claim("LLMs and GPUs use RAG")
+        self.assertEqual(extract_mentions(c), ["LLM", "GPU", "RAG"])
+
+    def test_possessive_drops_clitic(self):
+        c = self._claim("Vaswani's paper introduced attention")
+        self.assertEqual(extract_mentions(c), ["Vaswani"])
 
 
 class TestClaimSourceSpan(unittest.TestCase):
