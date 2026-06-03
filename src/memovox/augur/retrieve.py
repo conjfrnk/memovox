@@ -12,6 +12,7 @@ from typing import List, Optional, Sequence, Tuple
 from ..backends.base import Embedder
 from ..config import Settings
 from ..loom.store import LoomStore
+from .traverse import expand
 
 
 def rrf_fuse(
@@ -33,8 +34,18 @@ def retrieve(
     embedder: Embedder,
     settings: Optional[Settings] = None,
     video_id: Optional[str] = None,
+    use_graph: bool = False,
+    graph_rels: Optional[Sequence[str]] = None,
+    graph_hops: int = 1,
 ) -> List[Tuple[str, float]]:
-    """Return fused (moment_id, rrf_score) for the query."""
+    """Return fused (moment_id, rrf_score) for the query.
+
+    With ``use_graph=True`` a third GRAPH leg is fused in: from the dense+lexical
+    seed moments we follow claim->claim SUPPORTS/CONTRADICTS/ELABORATES edges and
+    surface the linked moments (spec §5). The default is off, so the existing
+    dense+lexical behavior — and every current retrieval/answer test — is
+    unchanged; the planner (W3.3) turns it on for synthesis questions.
+    """
     settings = settings or Settings()
     pool = max(settings.top_k * 3, 12)
     query_vec = embedder.embed_one(query)
@@ -42,4 +53,13 @@ def retrieve(
     lexical = store.lexical_search(query, pool)
     if video_id:
         lexical = [(mid, s) for (mid, s) in lexical if mid.startswith(video_id)]
-    return rrf_fuse([dense, lexical], k=settings.rrf_k, top_k=settings.top_k)
+    legs = [dense, lexical]
+    if use_graph:
+        seeds = [
+            mid
+            for mid, _ in rrf_fuse([dense, lexical], k=settings.rrf_k, top_k=settings.top_k)
+        ]
+        rels = list(graph_rels) if graph_rels else ["SUPPORTS", "CONTRADICTS", "ELABORATES"]
+        graph = expand(store, seeds, rels=rels, hops=graph_hops, video_id=video_id)
+        legs.append(graph)
+    return rrf_fuse(legs, k=settings.rrf_k, top_k=settings.top_k)

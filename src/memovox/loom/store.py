@@ -326,11 +326,16 @@ class LoomStore:
         sql += " ORDER BY t_start_s"
         return [_row_to_claim(r) for r in self.conn.execute(sql, tuple(params)).fetchall()]
 
-    def claims_for_moment(self, moment_id: str) -> List[Claim]:
-        rows = self.conn.execute(
-            "SELECT * FROM claims WHERE moment_id = ? ORDER BY claim_id", (moment_id,)
-        ).fetchall()
-        return [_row_to_claim(r) for r in rows]
+    def claims_for_moment(self, moment_id: str, *, status: Optional[str] = STATUS_COMMITTED) -> List[Claim]:
+        """Committed claims for a moment by default; pass ``status=None`` for all
+        (including unsupported/superseded)."""
+        sql = "SELECT * FROM claims WHERE moment_id = ?"
+        params: List[object] = [moment_id]
+        if status:
+            sql += " AND status = ?"
+            params.append(status)
+        sql += " ORDER BY claim_id"
+        return [_row_to_claim(r) for r in self.conn.execute(sql, tuple(params)).fetchall()]
 
     def supersede_claim(self, old_id: str, new_id: str) -> None:
         """Mark ``old_id`` as superseded by ``new_id`` (versioned, never deleted).
