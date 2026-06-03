@@ -1,10 +1,13 @@
 PY ?= python3
 export PYTHONPATH := src
 
-.PHONY: test lint install dev clean
+.PHONY: test eval lint install dev clean
 
 test:
 	$(PY) -m unittest discover -s tests -t . -p 'test_*.py'
+
+eval:
+	$(PY) -m eval.harness
 
 lint:
 	ruff check src tests || true
