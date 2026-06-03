@@ -9,7 +9,7 @@ from memovox.assay.claims import epistemic_type, extract_claims
 from memovox.assay.verify import verify_claim
 from memovox.backends.nli import LexicalNLI
 from memovox.config import Settings
-from memovox.loom.models import Claim, Moment
+from memovox.loom.models import Claim, Moment, SegmentRef
 
 
 class TestEpistemicTyping(unittest.TestCase):
@@ -52,6 +52,31 @@ class TestExtraction(unittest.TestCase):
         claim = extract_claims(m)[0]
         self.assertIn("chunk size", claim.subject.lower())
         self.assertTrue(claim.object)
+
+
+class TestClaimSourceSpan(unittest.TestCase):
+    def test_claim_bound_to_exact_segment_span(self):
+        seg_a = SegmentRef(0.0, 10.0, "Gradient descent minimizes the loss function.")
+        seg_b = SegmentRef(10.0, 20.0, "The batch size is set to thirty two samples.")
+        seg_c = SegmentRef(20.0, 30.0, "Transformers use multi head self attention layers.")
+        transcript = " ".join(s.text for s in (seg_a, seg_b, seg_c))
+        m = Moment(
+            "yt:x#m0000", "yt:x", 0.0, 30.0, transcript,
+            speaker_id="spk_0", segments=[seg_a, seg_b, seg_c],
+        )
+        claims = extract_claims(m)
+        target = [c for c in claims if "multi head self attention" in c.text.lower()]
+        self.assertEqual(len(target), 1)
+        self.assertEqual((target[0].t_start_s, target[0].t_end_s), (20, 30))
+        # The other claims localize to their own segments, not the whole Moment.
+        gd = [c for c in claims if "gradient descent" in c.text.lower()][0]
+        self.assertEqual((gd.t_start_s, gd.t_end_s), (0, 10))
+
+    def test_falls_back_to_full_span_without_segments(self):
+        m = Moment("yt:x#m0000", "yt:x", 5.0, 45.0,
+                   "Neural networks learn representations from data.")
+        claim = extract_claims(m)[0]
+        self.assertEqual((claim.t_start_s, claim.t_end_s), (5.0, 45.0))
 
 
 class TestVerification(unittest.TestCase):

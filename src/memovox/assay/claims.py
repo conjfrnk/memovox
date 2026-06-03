@@ -15,6 +15,7 @@ from typing import List, Optional
 from ..backends.base import LLMBackend
 from ..loom.models import Claim, Moment
 from ..util import make_claim_id, split_sentences, tokenize
+from .spans import locate_span
 
 # Ordered (subject, keyword) predicate cues for naive S-P-O splitting.
 _PREDICATE_CUES = [
@@ -92,6 +93,10 @@ def _extract_rule_based(moment: Moment, *, min_words: int) -> List[Claim]:
         if len(tokenize(sentence)) < min_words:
             continue
         subject, predicate, obj = _spo(sentence)
+        t0, t1 = locate_span(
+            sentence, moment.segments,
+            default=(moment.t_start_s, moment.t_end_s),
+        )
         claim = Claim(
             claim_id=make_claim_id(moment.moment_id, len(claims)),
             moment_id=moment.moment_id,
@@ -101,8 +106,8 @@ def _extract_rule_based(moment: Moment, *, min_words: int) -> List[Claim]:
             predicate=predicate,
             object=obj,
             claim_type=epistemic_type(sentence),
-            t_start_s=moment.t_start_s,
-            t_end_s=moment.t_end_s,
+            t_start_s=t0,
+            t_end_s=t1,
             speaker_id=moment.speaker_id,
         )
         claim.salience = salience_score(claim)
@@ -127,6 +132,10 @@ def _extract_with_llm(llm: LLMBackend, moment: Moment) -> List[Claim]:
         text = str(item.get("text", "")).strip()
         if not text:
             continue
+        t0, t1 = locate_span(
+            text, moment.segments,
+            default=(moment.t_start_s, moment.t_end_s),
+        )
         claim = Claim(
             claim_id=make_claim_id(moment.moment_id, len(claims)),
             moment_id=moment.moment_id,
@@ -136,8 +145,8 @@ def _extract_with_llm(llm: LLMBackend, moment: Moment) -> List[Claim]:
             predicate=str(item.get("predicate", "")),
             object=str(item.get("object", "")),
             claim_type=str(item.get("type", "FACT")).upper(),
-            t_start_s=moment.t_start_s,
-            t_end_s=moment.t_end_s,
+            t_start_s=t0,
+            t_end_s=t1,
             speaker_id=moment.speaker_id,
         )
         claim.salience = salience_score(claim)
