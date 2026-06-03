@@ -11,11 +11,14 @@ it doesn't claim it.
 > *Jaeger-LeCoultre's Memovox (1950) was the wristwatch that spoke back — an alarm
 > that gave time a voice. This is the memory that speaks back: voice in, knowledge out.*
 
-This repository implements **Phases 0–1** of [`spec.md`](spec.md): the audio
-skeleton ("a genuinely useful tool on its own") plus the **tri-modal visual
-track** — content-aware scene detection, information-gain keyframe selection,
-and fusion of on-screen text/captions into Moments — and lays down the
-architecture for the later knowledge-graph and synthesis phases.
+This repository implements **Phases 0–3** of [`spec.md`](spec.md): the audio
+skeleton ("a genuinely useful tool on its own"), the **tri-modal visual track**
+(content-aware scene detection, information-gain keyframe selection, on-screen
+text/caption fusion), the **verified temporal knowledge graph** (claim extraction
+→ NLI gate → entities/speakers resolved across the corpus → graph retrieval), and
+**cross-corpus synthesis** — topic induction, consensus scoring, claim-evolution
+tracking, and a literature-review synthesis that surfaces what sources agree and
+disagree on.
 
 ## Local-first and free by default
 
@@ -80,8 +83,14 @@ memovox ingest ~/talks/scaling-laws.en.vtt --source-url https://youtu.be/abc123
 # Ask a grounded question — every answer sentence carries a citation:
 memovox ask "what chunk size did they recommend, and who said it?"
 
-# Surface disagreements across the whole library:
+# Cross-corpus synthesis: run the consolidation pass after ingesting, then
+# synthesize what the whole library says about a topic (consensus + disagreements):
+memovox consolidate
+memovox synthesize "scaling laws"
+
+# Surface disagreements, or trace how a position changed over time:
 memovox contradictions --topic "scaling laws"
+memovox evolution --entity "Chinchilla"
 
 # Human-readable per-video digest:
 memovox export --video yt:abc123 --format md
@@ -90,6 +99,10 @@ memovox list            # what's ingested
 memovox backends        # which real backends are installed
 memovox stats           # store summary
 ```
+
+`consolidate` is the cross-corpus background job (spec §4 stage 7): topic
+induction, contradiction/agreement detection, consensus scoring, and dedup. It
+is kept off the per-video ingest path — run it after ingesting new sources.
 
 ### Python SDK (spec §8)
 
@@ -112,7 +125,7 @@ memovox mcp        # speaks MCP over stdio — wire into Claude Code / Desktop
 
 Implemented with the standard library (no `mcp` package required): tools
 `ingest_video`, `search_knowledge`, `get_claim_provenance`, `synthesize_topic`,
-`find_contradictions`.
+`find_contradictions`, `consolidate`.
 
 ## Design principles (non-negotiable, spec §2)
 
@@ -131,13 +144,25 @@ make lint     # ruff, if installed
 
 ## Status
 
-Phase 0 (audio skeleton: ingest → Moments → verified claims → hybrid cited
-retrieval → CLI/SDK/REST/MCP) and Phase 1 (visual track: scene detection →
-information-gain keyframes → VLM-caption/OCR slots → tri-modal Moment fusion)
-are implemented and tested with stdlib fallbacks; the visual track degrades
-gracefully to a no-op when there is no video stream. Phases 2–4 (full knowledge
-graph, cross-corpus synthesis, scale) have scaffolding and extension points in
-place. See [`spec.md`](spec.md) and the roadmap therein.
+Phases 0–3 are implemented and tested with stdlib fallbacks:
+
+- **Phase 0** — audio skeleton: ingest → Moments → verified claims → hybrid cited
+  retrieval → CLI/SDK/REST/MCP.
+- **Phase 1** — visual track: scene detection → information-gain keyframes →
+  VLM-caption/OCR slots → tri-modal Moment fusion (degrades gracefully to a no-op
+  with no video stream).
+- **Phase 2** — verified temporal knowledge graph: claim extraction + a real NLI
+  gate, cross-corpus entity/speaker resolution, `MENTIONS`/`ELABORATES`/`CORRECTS`
+  edges, and a graph-expansion retrieval leg fused into RRF.
+- **Phase 3** — cross-corpus synthesis: topic induction + `ABOUT` edges, claim
+  clustering + consensus scoring, claim-evolution tracking, contradiction/agreement
+  detection, a `consolidate` background job (with the supersede/dedup lifecycle),
+  and a corpus-level `synthesize` literature review.
+
+The whole pipeline runs free/stdlib-only and is gated by a golden-corpus eval
+(`python -m eval.harness --assert-thresholds`). Phase 4 (scale & polish:
+subscriptions/incremental sync, answer-with-video clip stitching, ColPali visual
+retrieval, dashboards, named production backends) is next. See [`spec.md`](spec.md).
 
 ## License
 
