@@ -168,7 +168,8 @@ def synthesize(
         consensus_points.append({
             "text": rep.text, "support_count": cl.support_count,
             "consensus": cl.consensus, "videos": cl.videos,
-            "citation": index_of.get(rep.moment_id), "moment_id": rep.moment_id,
+            "citation": index_of.get(rep.moment_id), "claim_id": rep.claim_id,
+            "moment_id": rep.moment_id,
         })
 
     # Disagreements: cross-video contradictions within the topic (read-only).
@@ -179,13 +180,16 @@ def synthesize(
     contradictions = [p.to_dict() for p in pairs]
 
     # Compose the grounded, every-sentence-cited synthesis (extractive free path).
+    # ``emitted`` tracks claim_ids (NOT moment_ids — they are different namespaces:
+    # claim_id is "<moment_id>.c<n>"), so a claim already cited as a consensus point
+    # is not re-emitted as a disagreement sentence.
     parts: List[str] = []
     emitted: set = set()
     for cp in consensus_points:
         idx = cp["citation"]
         if idx is not None:
             parts.append(_cite(cp["text"], idx))
-            emitted.add(cp["moment_id"])
+            emitted.add(cp["claim_id"])
     for p in pairs:
         for claim in (p.claim_a, p.claim_b):
             idx = index_of.get(claim.moment_id)

@@ -90,6 +90,24 @@ class TestSynthesize(SynthesizeTestBase):
             self.assertTrue(re.search(r"\[\d+\]", sentence),
                             f"uncited synthesis sentence: {sentence!r}")
 
+    def test_no_duplicate_sentence_when_claim_is_consensus_and_contradiction(self):
+        # X (vid:a) and Y (vid:b) are identical -> a non-contradicting consensus
+        # cluster whose representative is X. Z (vid:b) is a SHORT negation that the
+        # NLI flags as contradicting X (directional overlap is high), but whose
+        # symmetric Jaccard with X is below the clustering floor, so Z does NOT
+        # join X's cluster. X is therefore BOTH a consensus rep AND a contradiction
+        # member — its text must appear only ONCE in the synthesis.
+        self._add("va.0", "vid:a", "Alpha beta gamma delta epsilon zeta will hold.",
+                  salience=0.9, idx=0)
+        self._add("vb.0", "vid:b", "Alpha beta gamma delta epsilon zeta will hold.",
+                  salience=0.2, idx=0)
+        self._add("vb.1", "vid:b", "Alpha will not hold.", salience=0.1, idx=1)
+        syn = synthesize(self.store, "alpha", nli=self.nli)
+        self.assertTrue(syn.contradictions)   # X vs Z surfaced
+        self.assertTrue(syn.consensus_points)  # {X, Y} surfaced
+        occurrences = syn.text.lower().count("alpha beta gamma delta epsilon zeta will hold")
+        self.assertEqual(occurrences, 1)
+
     def test_low_evidence_when_topic_absent(self):
         self._corpus()
         syn = synthesize(self.store, "quantum chromodynamics", nli=self.nli)
