@@ -22,6 +22,7 @@ from .base import (
     VLMBackend,
     Word,
 )
+from .diarize_voiceprint import PyannoteVoiceprint
 from .embed import HashingEmbedder, SentenceTransformerEmbedder
 from .entity_link import Canonical, EntityLinker, NullLinker, WikidataLinker
 from .llm import OllamaLLM
@@ -123,6 +124,33 @@ def get_ocr(name: str = "auto", *, config=None, **options) -> OCRBackend:
     return cls(config=config, **options)
 
 
+def get_voiceprint_backend(
+    name: str = "auto", *, config=None, **options
+) -> Optional[PyannoteVoiceprint]:
+    """Return an OPTIONAL voiceprint backend, or ``None`` if none is available/desired.
+
+    Mirrors :func:`get_llm`: ``"none"``/``""`` always yields ``None`` (the free
+    path), and ``"auto"`` returns a :class:`PyannoteVoiceprint` only when
+    ``pyannote.audio`` is installed, else ``None``. A ``None`` return means the
+    voice-based speaker merge is skipped entirely — the free name-based path
+    (W4.1) is unaffected.
+    """
+    if name in ("none", "off", "false", ""):
+        return None
+    if name == "auto":
+        return PyannoteVoiceprint(config=config, **options) if PyannoteVoiceprint.is_available() else None
+    if name in ("pyannote", "voiceprint"):
+        if not PyannoteVoiceprint.is_available():
+            raise BackendUnavailable(
+                "Voiceprint backend 'pyannote' is not installed. "
+                "Try: pip install 'memovox[diarize]'"
+            )
+        return PyannoteVoiceprint(config=config, **options)
+    raise BackendUnavailable(
+        f"Unknown voiceprint backend {name!r}. Options: 'pyannote', 'auto', or 'none'."
+    )
+
+
 def get_entity_linker(name: str = "auto", *, config=None, **options) -> EntityLinker:
     """Return an entity linker; falls back to the slug-based NullLinker."""
     if name in ("none", "off", "false", ""):
@@ -170,6 +198,10 @@ def backend_status() -> dict:
             "wikidata": WikidataLinker.is_available(),
             "none": True,
         },
+        "voiceprint": {
+            "pyannote": PyannoteVoiceprint.is_available(),
+            "none": True,
+        },
     }
 
 
@@ -180,7 +212,7 @@ __all__ = [
     "HashingEmbedder", "SentenceTransformerEmbedder",
     "LexicalNLI", "TransformersNLI", "OllamaLLM",
     "NullVLM", "OllamaVLM", "NullOCR", "TesseractOCR",
-    "NullLinker", "WikidataLinker",
+    "NullLinker", "WikidataLinker", "PyannoteVoiceprint",
     "get_embedder", "get_nli", "get_llm", "get_vlm", "get_ocr",
-    "get_entity_linker", "backend_status",
+    "get_entity_linker", "get_voiceprint_backend", "backend_status",
 ]

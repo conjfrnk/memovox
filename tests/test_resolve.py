@@ -16,12 +16,17 @@ from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
 
-from memovox.backends import get_entity_linker
+from memovox.backends import get_entity_linker, get_voiceprint_backend
+from memovox.backends.diarize_voiceprint import PyannoteVoiceprint
 from memovox.backends.entity_link import Canonical, NullLinker, WikidataLinker
 from memovox.config import Config
 from memovox.loom import Claim, LoomStore, Moment, Speaker, Video
 from memovox.loom.models import STATUS_UNSUPPORTED
-from memovox.loom.resolve import resolve_entities, resolve_speakers
+from memovox.loom.resolve import (
+    cluster_by_voiceprint,
+    resolve_entities,
+    resolve_speakers,
+)
 
 
 class NullLinkerTest(unittest.TestCase):
@@ -483,6 +488,176 @@ class ResolveSpeakersGoldenCorpusTest(unittest.TestCase):
             # The two Dr. Lee per-video speakers span both videos.
             lee_videos = {s.speaker_id.rsplit(":", 1)[0] for s in lee}
             self.assertEqual(len(lee_videos), 2)
+
+
+# --------------------------------------------------------------------------- #
+# W4.2 — OPTIONAL voiceprint clustering for speaker resolution
+#
+# The cosine-clustering logic is a PURE function tested HERMETICALLY with
+# synthetic vectors (NOT skipped) — it is the load-bearing logic. Only the
+# pyannote MODEL (extracting a voiceprint from audio) is gated behind
+# skipUnless(PyannoteVoiceprint.is_available()), so CI never imports pyannote.
+# --------------------------------------------------------------------------- #
+
+
+class ClusterByVoiceprintTest(unittest.TestCase):
+    """Pure cosine clustering — fully hermetic, synthetic vectors only."""
+
+    def test_near_identical_vectors_cluster_far_one_separate(self):
+        voiceprints = {
+            "a": [1.0, 0.0, 0.0],
+            "b": [0.99, 0.01, 0.0],   # cosine(a, b) ~ 1.0 -> same cluster
+            "c": [0.0, 1.0, 0.0],     # orthogonal -> cosine 0.0 -> separate
+        }
+        clusters = cluster_by_voiceprint(voiceprints, threshold=0.75)
+        # a & b together; c alone.
+        member_sets = sorted([sorted(c) for c in clusters])
+        self.assertEqual(member_sets, [["a", "b"], ["c"]])
+
+    def test_threshold_is_inclusive_lower_bound(self):
+        # Two vectors whose cosine sits just below a high threshold do NOT merge,
+        # but DO merge once the threshold drops at/below their similarity.
+        import math
+
+        # cosine of unit vectors at 30 degrees ~ 0.8660.
+        v = [math.cos(math.radians(30)), math.sin(math.radians(30))]
+        voiceprints = {"a": [1.0, 0.0], "b": v}
+        # threshold above the similarity -> separate.
+        high = cluster_by_voiceprint(voiceprints, threshold=0.95)
+        self.assertEqual(sorted([sorted(c) for c in high]), [["a"], ["b"]])
+        # threshold below the similarity -> merge.
+        low = cluster_by_voiceprint(voiceprints, threshold=0.5)
+        self.assertEqual(sorted([sorted(c) for c in low]), [["a", "b"]])
+
+    def test_deterministic_sorted_order(self):
+        # Same input in two dict orders -> identical clustering (sorted ids).
+        a = cluster_by_voiceprint(
+            {"z": [1.0, 0.0], "a": [0.99, 0.0], "m": [0.0, 1.0]}, threshold=0.75
+        )
+        b = cluster_by_voiceprint(
+            {"m": [0.0, 1.0], "a": [0.99, 0.0], "z": [1.0, 0.0]}, threshold=0.75
+        )
+        self.assertEqual(a, b)
+        # The representative (first member) of the a/z cluster is the lowest id.
+        merged = next(c for c in a if len(c) > 1)
+        self.assertEqual(merged[0], "a")
+
+    def test_empty_input(self):
+        self.assertEqual(cluster_by_voiceprint({}, threshold=0.75), [])
+
+    def test_mismatched_dimensions_do_not_merge(self):
+        # cosine() silently compares only the shared prefix for the dot product
+        # (so a longer vector identical on the prefix would score 1.0). The length
+        # guard must treat a dimension mismatch as a non-match.
+        voiceprints = {
+            "a": [1.0, 0.0],
+            "b": [1.0, 0.0, 0.0, 0.0],  # same prefix, different dim -> separate
+        }
+        clusters = cluster_by_voiceprint(voiceprints, threshold=0.75)
+        self.assertEqual(sorted([sorted(c) for c in clusters]), [["a"], ["b"]])
+
+
+class ResolveSpeakersVoiceprintTest(_SpeakerResolveBase):
+    """Injected synthetic voiceprints merge anonymous same-voice speakers.
+
+    Proves the INTEGRATION without pyannote: voiceprints are injected directly.
+    Name resolution leaves anonymous SPEAKER_00 labels unmerged (W4.1); the
+    optional voiceprint pass then merges the two near-identical voices and leaves
+    a far third voice unresolved.
+    """
+
+    def test_anonymous_same_voice_merge_far_one_stays(self):
+        a = self._add_speaker("vid:aaaa", "SPEAKER_00")
+        b = self._add_speaker("vid:bbbb", "SPEAKER_00")
+        c = self._add_speaker("vid:aaaa", "SPEAKER_01")
+        voiceprints = {
+            a: [1.0, 0.0, 0.0],
+            b: [0.98, 0.02, 0.0],   # near-identical to a -> merge
+            c: [0.0, 1.0, 0.0],     # far -> stays unresolved
+        }
+        resolve_speakers(self.store, voiceprints=voiceprints)
+
+        # a & b unify onto ONE canonical (distinct from a name-based spk:<slug>).
+        ca = self.store.canonical_speaker(a)
+        cb = self.store.canonical_speaker(b)
+        self.assertEqual(ca, cb)
+        self.assertTrue(ca.startswith("spk:voice-"))
+
+        # SAME_AS edge from each per-video speaker to the voice canonical.
+        for sid, vid in ((a, "vid:aaaa"), (b, "vid:bbbb")):
+            edges = self.store.neighbors(sid, rel="SAME_AS")
+            self.assertEqual([e["dst"] for e in edges], [ca])
+            self.assertEqual(edges[0]["video_id"], vid)
+
+        # The lone far voice stays unresolved (self-canonical, no SAME_AS edge).
+        self.assertEqual(self.store.canonical_speaker(c), c)
+        self.assertEqual(self.store.neighbors(c, rel="SAME_AS"), [])
+
+    def test_named_speakers_untouched_by_voiceprints(self):
+        # A named speaker keeps its NAME-based canonical even if a voiceprint is
+        # (incorrectly) supplied for it — name resolution wins, voice never
+        # overrides a name-resolved speaker.
+        named = self._add_speaker("vid:aaaa", "Dr. Lee")
+        anon = self._add_speaker("vid:bbbb", "SPEAKER_00")
+        voiceprints = {
+            named: [1.0, 0.0, 0.0],
+            anon: [0.99, 0.0, 0.0],  # near-identical, but `named` is name-resolved
+        }
+        resolve_speakers(self.store, voiceprints=voiceprints)
+        self.assertEqual(self.store.canonical_speaker(named), "spk:dr-lee")
+        # The anonymous speaker is a lone voice cluster now (its only same-voice
+        # peer was name-resolved and excluded), so it stays unresolved.
+        self.assertEqual(self.store.canonical_speaker(anon), anon)
+
+    def test_voiceprints_none_is_w41_no_op(self):
+        # voiceprints=None must reproduce EXACT W4.1 behavior: named resolve by
+        # name, anonymous stay separate.
+        named_a = self._add_speaker("vid:aaaa", "Dr. Lee")
+        named_b = self._add_speaker("vid:bbbb", "Dr. Lee")
+        anon_a = self._add_speaker("vid:aaaa", "SPEAKER_00")
+        anon_b = self._add_speaker("vid:bbbb", "SPEAKER_00")
+        resolve_speakers(self.store, voiceprints=None)
+        self.assertEqual(self.store.canonical_speaker(named_a), "spk:dr-lee")
+        self.assertEqual(self.store.canonical_speaker(named_a),
+                         self.store.canonical_speaker(named_b))
+        self.assertEqual(self.store.canonical_speaker(anon_a), anon_a)
+        self.assertEqual(self.store.canonical_speaker(anon_b), anon_b)
+        self.assertNotEqual(self.store.canonical_speaker(anon_a),
+                            self.store.canonical_speaker(anon_b))
+
+    def test_voiceprint_merge_is_idempotent(self):
+        a = self._add_speaker("vid:aaaa", "SPEAKER_00")
+        b = self._add_speaker("vid:bbbb", "SPEAKER_00")
+        voiceprints = {a: [1.0, 0.0, 0.0], b: [0.98, 0.02, 0.0]}
+        resolve_speakers(self.store, voiceprints=voiceprints)
+        n_speakers = len(self.store.list_speakers())
+        n_edges = len(self.store.edges(rel="SAME_AS"))
+        resolve_speakers(self.store, voiceprints=voiceprints)
+        self.assertEqual(len(self.store.list_speakers()), n_speakers)
+        self.assertEqual(len(self.store.edges(rel="SAME_AS")), n_edges)
+
+
+class VoiceprintBackendTest(unittest.TestCase):
+    def test_auto_returns_none_when_unavailable(self):
+        # On the free/hermetic path pyannote is absent, so "auto" yields None and
+        # the registry status reports it unavailable.
+        if not PyannoteVoiceprint.is_available():
+            self.assertIsNone(get_voiceprint_backend("auto"))
+        self.assertIsNone(get_voiceprint_backend("none"))
+        self.assertIsNone(get_voiceprint_backend(""))
+
+    @unittest.skipUnless(PyannoteVoiceprint.is_available(), "pyannote not installed")
+    def test_embed_returns_vector(self):  # pragma: no cover - needs pyannote + audio
+        backend = get_voiceprint_backend("auto")
+        self.assertIsNotNone(backend)
+        golden = pathlib.Path(__file__).resolve().parent.parent / "eval" / "golden"
+        audio = next(golden.glob("*.wav"), None) or next(golden.glob("*.mp3"), None)
+        if audio is None:
+            self.skipTest("no audio fixture available for voiceprint extraction")
+        vec = backend.embed(str(audio), 0.0, 1.0)
+        self.assertIsInstance(vec, list)
+        self.assertGreater(len(vec), 0)
+        self.assertTrue(all(isinstance(x, float) for x in vec))
 
 
 if __name__ == "__main__":

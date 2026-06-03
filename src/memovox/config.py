@@ -35,6 +35,9 @@ class Settings:
     vlm_backend: str = "auto"
     ocr_backend: str = "auto"
     entity_backend: str = "auto"
+    # OPTIONAL voiceprint backend (W4.2). "auto" uses pyannote ONLY if installed,
+    # else None (free path); "none" disables the voice-based speaker merge.
+    voiceprint_backend: str = "auto"
 
     embed_dim: int = 256  # dimensionality of the hashing fallback embedder
 

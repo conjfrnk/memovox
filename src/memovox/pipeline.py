@@ -11,7 +11,13 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from . import assay, escapement, stentor, tessera
-from .backends import get_embedder, get_entity_linker, get_llm, get_nli
+from .backends import (
+    get_embedder,
+    get_entity_linker,
+    get_llm,
+    get_nli,
+    get_voiceprint_backend,
+)
 from .config import PIPELINE_VERSION, Config, Settings
 from .loom import Claim, LoomStore, Speaker, Video
 from .loom.digest import render_digest
@@ -46,6 +52,39 @@ def _namespace_speaker(video_id: str, speaker: Optional[str]) -> Optional[str]:
         return None
     prefix = f"{video_id}:"
     return speaker if speaker.startswith(prefix) else prefix + speaker
+
+
+def _extract_voiceprints(backend, *, video_id, segments, audio_path) -> Optional[dict]:
+    """Build a ``{namespaced_speaker_id: vector}`` map via the OPTIONAL backend.
+
+    Fully gated (W4.2): returns ``None`` unless a voiceprint backend is present
+    AND a local audio file exists, so the free/captions path (no backend, no
+    media) is always a clean no-op and ``resolve_speakers`` runs name-only. The
+    actual per-speaker embedding runs inside ``backend.embed`` — the only code
+    that imports pyannote — and is skipped entirely when the backend is absent.
+
+    One representative span per speaker (the longest speech segment) is embedded,
+    which is enough to cluster anonymous same-voice speakers across videos.
+    """
+    if backend is None or not audio_path:
+        return None
+    best: dict = {}  # speaker_id -> (duration, t_start, t_end)
+    for seg in segments:
+        if getattr(seg, "kind", "speech") != "speech" or not seg.speaker:
+            continue
+        dur = (seg.end or 0.0) - (seg.start or 0.0)
+        prev = best.get(seg.speaker)
+        if prev is None or dur > prev[0]:
+            best[seg.speaker] = (dur, seg.start, seg.end)
+    voiceprints: dict = {}
+    for speaker, (_dur, t0, t1) in best.items():
+        try:
+            vec = backend.embed(str(audio_path), float(t0 or 0.0), float(t1 or 0.0))
+        except Exception:  # pragma: no cover - backend/model failure must not break ingest
+            continue
+        if vec:
+            voiceprints[_namespace_speaker(video_id, speaker)] = vec
+    return voiceprints or None
 
 
 def ingest(
@@ -165,8 +204,24 @@ def ingest(
         # Unify the SAME named speaker across videos onto one canonical
         # ``spk:<slug>`` identity (per-video rows preserved, linked by SAME_AS).
         # Re-resolves the WHOLE corpus each ingest (idempotent); anonymous
-        # diarization labels are never merged across videos.
-        resolve_speakers(store)
+        # diarization labels are never merged across videos by NAME.
+        #
+        # OPTIONAL voiceprint merge (W4.2, §12): only when a voiceprint backend is
+        # installed AND local audio exists do we extract per-speaker voiceprints
+        # and pass them in, letting anonymous same-voice speakers merge. On the
+        # free/captions path the backend is None and media is absent, so
+        # voiceprints is None and resolve_speakers stays name-only (no pyannote
+        # import, no behavior change). Voiceprints are transient (not persisted).
+        voiceprint_backend = get_voiceprint_backend(
+            getattr(settings, "voiceprint_backend", "auto"), config=config
+        )
+        voiceprints = _extract_voiceprints(
+            voiceprint_backend,
+            video_id=video_id,
+            segments=st.segments,
+            audio_path=meta.media_path,
+        )
+        resolve_speakers(store, voiceprints=voiceprints)
 
         # --- Loom: discourse edges (spec §6) ----------------------------
         # Link claim->claim within the video: ELABORATES (adjacent same-speaker
