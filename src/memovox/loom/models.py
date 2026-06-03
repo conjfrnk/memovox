@@ -118,6 +118,10 @@ class Speaker:
     label: str
     voiceprint_ref: Optional[str] = None
     resolved_name: Optional[str] = None
+    #: Cross-video canonical identity (``spk:<slug>``), set by
+    #: :func:`memovox.loom.resolve.resolve_speakers`. ``None`` for an
+    #: unresolved / self-canonical speaker.
+    canonical_id: Optional[str] = None
 
 
 @dataclass

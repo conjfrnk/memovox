@@ -19,9 +19,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
 from memovox.backends import get_entity_linker
 from memovox.backends.entity_link import Canonical, NullLinker, WikidataLinker
 from memovox.config import Config
-from memovox.loom import Claim, LoomStore, Moment, Video
+from memovox.loom import Claim, LoomStore, Moment, Speaker, Video
 from memovox.loom.models import STATUS_UNSUPPORTED
-from memovox.loom.resolve import resolve_entities
+from memovox.loom.resolve import resolve_entities, resolve_speakers
 
 
 class NullLinkerTest(unittest.TestCase):
@@ -270,6 +270,219 @@ class ResolveGoldenCorpusTest(unittest.TestCase):
         with LoomStore(self.mv.config) as store:
             self.assertEqual(len(store.list_entities()), ents_before)
             self.assertEqual(len(store.edges(rel="MENTIONS")), edges_before)
+
+
+# --------------------------------------------------------------------------- #
+# W4.1 — cross-video speaker resolution (the speaker analog of W2.3)
+# --------------------------------------------------------------------------- #
+
+
+class _SpeakerResolveBase(unittest.TestCase):
+    """A hand-built store with per-video namespaced speakers.
+
+    Mirrors the pipeline's namespacing ``f"{video_id}:{raw}"`` — and the store
+    video ids contain a colon themselves (``vid:hash``), so the per-video
+    speaker id is ``vid:hash:Raw Name``. Resolution must split on the LAST ":".
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.config = Config(store=pathlib.Path(self._tmp.name) / "store").ensure()
+        self.store = LoomStore(self.config)
+        for vid in ("vid:aaaa", "vid:bbbb"):
+            self.store.upsert_video(Video(video_id=vid, source_url=None, title=vid))
+
+    def tearDown(self):
+        self.store.close()
+        self._tmp.cleanup()
+
+    def _add_speaker(self, video_id, raw, resolved=None):
+        sid = f"{video_id}:{raw}"
+        self.store.upsert_speaker(
+            Speaker(speaker_id=sid, label=raw, resolved_name=resolved)
+        )
+        return sid
+
+
+class ResolveSpeakersPositiveTest(_SpeakerResolveBase):
+    def test_same_name_across_videos_one_canonical(self):
+        a = self._add_speaker("vid:aaaa", "Dr. Lee")
+        b = self._add_speaker("vid:bbbb", "Dr. Lee")
+        resolve_speakers(self.store)
+
+        self.assertEqual(self.store.canonical_speaker(a), "spk:dr-lee")
+        self.assertEqual(self.store.canonical_speaker(a),
+                         self.store.canonical_speaker(b))
+
+        # Per-video provenance preserved: original rows still exist.
+        self.assertIsNotNone(self.store.get_speaker(a))
+        self.assertIsNotNone(self.store.get_speaker(b))
+        self.assertEqual(self.store.get_speaker(a).label, "Dr. Lee")
+
+        # A SAME_AS edge from each per-video speaker to the canonical, carrying
+        # the per-video speaker's own video id as provenance.
+        for sid, vid in ((a, "vid:aaaa"), (b, "vid:bbbb")):
+            edges = self.store.neighbors(sid, rel="SAME_AS")
+            self.assertEqual([e["dst"] for e in edges], ["spk:dr-lee"])
+            self.assertEqual(edges[0]["video_id"], vid)
+            self.assertEqual(edges[0]["src_type"], "Speaker")
+            self.assertEqual(edges[0]["dst_type"], "Speaker")
+
+    def test_near_identical_names_merge(self):
+        # "Dr. Lee" and "Dr Lee" (punctuation only) collapse to one canonical.
+        a = self._add_speaker("vid:aaaa", "Dr. Lee")
+        b = self._add_speaker("vid:bbbb", "Dr Lee")
+        resolve_speakers(self.store)
+        self.assertEqual(self.store.canonical_speaker(a),
+                         self.store.canonical_speaker(b))
+
+    def test_resolved_name_used_over_label(self):
+        # A diarization label with a known resolved_name groups by the name.
+        a = self._add_speaker("vid:aaaa", "SPEAKER_00", resolved="Dr. Lee")
+        b = self._add_speaker("vid:bbbb", "Dr. Lee")
+        resolve_speakers(self.store)
+        self.assertEqual(self.store.canonical_speaker(a), "spk:dr-lee")
+        self.assertEqual(self.store.canonical_speaker(a),
+                         self.store.canonical_speaker(b))
+
+
+class ResolveSpeakersNegativeTest(_SpeakerResolveBase):
+    def test_different_names_never_merge(self):
+        a = self._add_speaker("vid:aaaa", "Dr. Lee")
+        b = self._add_speaker("vid:bbbb", "Prof. Kim")
+        resolve_speakers(self.store)
+        self.assertNotEqual(self.store.canonical_speaker(a),
+                            self.store.canonical_speaker(b))
+        self.assertEqual(self.store.canonical_speaker(a), "spk:dr-lee")
+        self.assertEqual(self.store.canonical_speaker(b), "spk:prof-kim")
+
+    def test_anonymous_speakers_never_merge_across_videos(self):
+        a = self._add_speaker("vid:aaaa", "SPEAKER_00")
+        b = self._add_speaker("vid:bbbb", "SPEAKER_00")
+        c = self._add_speaker("vid:aaaa", "spk_1")
+        resolve_speakers(self.store)
+        # Each anonymous speaker stays self-canonical; no cross-video merge.
+        self.assertEqual(self.store.canonical_speaker(a), a)
+        self.assertEqual(self.store.canonical_speaker(b), b)
+        self.assertEqual(self.store.canonical_speaker(c), c)
+        self.assertNotEqual(self.store.canonical_speaker(a),
+                            self.store.canonical_speaker(b))
+        # No SAME_AS edges emitted for anonymous speakers.
+        for sid in (a, b, c):
+            self.assertEqual(self.store.neighbors(sid, rel="SAME_AS"), [])
+
+
+class ResolveSpeakersIdempotencyTest(_SpeakerResolveBase):
+    def test_rerun_is_stable(self):
+        self._add_speaker("vid:aaaa", "Dr. Lee")
+        self._add_speaker("vid:bbbb", "Dr. Lee")
+        self._add_speaker("vid:bbbb", "Prof. Kim")
+        self._add_speaker("vid:aaaa", "SPEAKER_00")
+        resolve_speakers(self.store)
+        n_speakers = len(self.store.list_speakers())
+        n_edges = len(self.store.edges(rel="SAME_AS"))
+        resolve_speakers(self.store)
+        self.assertEqual(len(self.store.list_speakers()), n_speakers)
+        self.assertEqual(len(self.store.edges(rel="SAME_AS")), n_edges)
+
+
+class ResolveSpeakersDeterminismTest(unittest.TestCase):
+    """The canonical identity must be a pure function of the NAMES present,
+    independent of the order speakers were inserted into the store.
+
+    Pins the "deterministic canonical" guarantee against the greedy single-pass
+    clustering: the canonical slug derives from the name-based representative, so
+    it must not be coupled to video-hash / insertion ordering.
+    """
+
+    def _resolve_with_order(self, order):
+        tmp = tempfile.TemporaryDirectory()
+        config = Config(store=pathlib.Path(tmp.name) / "store").ensure()
+        store = LoomStore(config)
+        for vid in ("vid:aaaa", "vid:bbbb"):
+            store.upsert_video(Video(video_id=vid, source_url=None, title=vid))
+        for video_id, raw in order:
+            store.upsert_speaker(
+                Speaker(speaker_id=f"{video_id}:{raw}", label=raw)
+            )
+        resolve_speakers(store)
+        mapping = {
+            s.speaker_id: store.canonical_speaker(s.speaker_id)
+            for s in store.list_speakers()
+            if not s.speaker_id.startswith("spk:")
+        }
+        store.close()
+        tmp.cleanup()
+        return mapping
+
+    def test_canonical_ids_are_order_independent(self):
+        speakers = [
+            ("vid:aaaa", "Dr. Lee"),
+            ("vid:bbbb", "Dr. Lee"),
+            ("vid:bbbb", "Prof. Kim"),
+        ]
+        forward = self._resolve_with_order(speakers)
+        reverse = self._resolve_with_order(list(reversed(speakers)))
+        # Identical canonical_speaker mapping regardless of insertion order, and
+        # the Dr. Lee pair unifies onto the same name-based slug.
+        self.assertEqual(forward, reverse)
+        self.assertEqual(forward["vid:aaaa:Dr. Lee"], "spk:dr-lee")
+        self.assertEqual(forward["vid:aaaa:Dr. Lee"], forward["vid:bbbb:Dr. Lee"])
+        self.assertEqual(forward["vid:bbbb:Prof. Kim"], "spk:prof-kim")
+
+
+class ResolveSpeakersGoldenCorpusTest(unittest.TestCase):
+    """End-to-end through the real pipeline on the golden corpus.
+
+    Dr. Lee speaks in BOTH talks, so the two per-video speakers must unify onto
+    one canonical identity spanning both videos; Prof. Kim (talk_b only) is a
+    distinct canonical.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import os
+
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+        from memovox import Memovox
+
+        cls._tmp = tempfile.TemporaryDirectory(prefix="memovox-spkresolve-")
+        golden = pathlib.Path(__file__).resolve().parent.parent / "eval" / "golden"
+        cls.mv = Memovox(
+            store=cls._tmp.name,
+            embed_backend="hashing", nli_backend="lexical", asr_backend="captions",
+            llm_backend="none", vlm_backend="none", ocr_backend="none",
+            entity_backend="none",
+        )
+        cls.video_ids = []
+        for vtt in sorted(golden.glob("*.en.vtt")):
+            report = cls.mv.ingest(str(vtt))
+            cls.video_ids.append(report.video_id)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def test_dr_lee_unified_kim_distinct(self):
+        with LoomStore(self.mv.config) as store:
+            per_video = [s for s in store.list_speakers()
+                         if not s.speaker_id.startswith("spk:")]
+            lee = [s for s in per_video if (s.resolved_name or s.label) == "Dr. Lee"]
+            kim = [s for s in per_video if (s.resolved_name or s.label) == "Prof. Kim"]
+            self.assertEqual(len(lee), 2)  # one per video
+            self.assertEqual(len(kim), 1)
+
+            lee_canon = {store.canonical_speaker(s.speaker_id) for s in lee}
+            self.assertEqual(lee_canon, {"spk:dr-lee"})  # unified across videos
+
+            kim_canon = store.canonical_speaker(kim[0].speaker_id)
+            self.assertEqual(kim_canon, "spk:prof-kim")
+            self.assertNotIn(kim_canon, lee_canon)
+
+            # The two Dr. Lee per-video speakers span both videos.
+            lee_videos = {s.speaker_id.rsplit(":", 1)[0] for s in lee}
+            self.assertEqual(len(lee_videos), 2)
 
 
 if __name__ == "__main__":

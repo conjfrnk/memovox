@@ -415,10 +415,17 @@ def _speaker_clusters(ing: _Ingested, gold_speakers: dict):
     ``"<logical_video_id>:<raw_label>"``).
 
     Gold: group the ``identities`` map by canonical identity id. Predicted: group
-    the store's per-video speakers by any canonical cross-video resolution. Today
-    there is no cross-video resolution, so each store speaker is its own
-    singleton -> der reflects that honestly (the positive cross-talk merge for
-    Dr. Lee is unrecovered yet).
+    the store's per-video speakers by the canonical identity the pipeline
+    PERSISTED for each (``speakers.canonical_id``, exposed via
+    :meth:`LoomStore.canonical_speaker`). Cross-video speaker resolution (W4.1)
+    unifies the same named speaker across talks onto one ``spk:<slug>`` identity,
+    so the two Dr. Lee per-video speakers group together and ``der`` becomes a
+    real cross-video same-cluster signal.
+
+    Like ``entity_f1``, this READS PERSISTENCE rather than re-deriving resolution:
+    if :func:`resolve_speakers` is broken or a no-op, every per-video speaker is
+    self-canonical, the cross-talk Dr. Lee pair collapses to singletons, and
+    ``der`` DROPS — so the metric is a genuine regression guard, not a tautology.
     """
     from collections import defaultdict
 
@@ -431,12 +438,12 @@ def _speaker_clusters(ing: _Ingested, gold_speakers: dict):
     gold_clusters = [members for members in by_identity.values()]
 
     # Predicted: read store speakers, translate to logical "<logical>:<label>"
-    # keys, and group by any canonical resolution if the store exposes one.
+    # keys, and group by the PERSISTED canonical identity. Catch ONLY the
+    # "no such table/column" absence (sqlite3.OperationalError) and warn; any
+    # other error propagates so a real resolution bug surfaces instead of
+    # silently scoring 0.0.
     pred_groups: Dict[str, Set[str]] = defaultdict(set)
     with LoomStore(ing.mv.config) as store:
-        # Catch ONLY the "no such table/column" absence (sqlite3.OperationalError)
-        # and warn; any other error propagates so a real resolution bug (once
-        # W4.1 lands) surfaces instead of silently scoring 0.0.
         try:
             rows = store.conn.execute(
                 "SELECT speaker_id, label, resolved_name FROM speakers"
@@ -449,15 +456,20 @@ def _speaker_clusters(ing: _Ingested, gold_speakers: dict):
             rows = []
         for r in rows:
             speaker_id = r["speaker_id"]
+            # Skip the canonical identity rows themselves (spk:*) — only the
+            # per-video atoms are scored against the gold per-video keys.
+            if speaker_id.startswith("spk:"):
+                continue
             label = r["label"]
-            # speaker_id is "<store_video_id>:<label>"; translate store id -> logical.
-            store_vid, _, raw = speaker_id.partition(":")
+            # speaker_id is "<store_video_id>:<raw>" and store video ids contain
+            # a colon ("vid:hash"), so split on the LAST ":" to recover the
+            # video id, then translate store id -> logical.
+            store_vid, _, raw = speaker_id.rpartition(":")
             logical = ing.store_to_logical.get(store_vid, store_vid)
             member_key = f"{logical}:{label or raw}"
-            # Group by canonical identity if/when the store provides one; absent a
-            # real cross-video resolution, key by the store speaker_id so each
-            # per-video speaker is its own singleton (no false merges claimed).
-            canonical_key = speaker_id
+            # Group by the PERSISTED canonical identity (falls back to the
+            # per-video speaker_id when unresolved -> own singleton).
+            canonical_key = store.canonical_speaker(speaker_id)
             pred_groups[canonical_key].add(member_key)
     pred_clusters = [members for members in pred_groups.values()]
     return pred_clusters, gold_clusters

@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS videos (
 );
 
 CREATE TABLE IF NOT EXISTS speakers (
-    speaker_id TEXT PRIMARY KEY, label TEXT, resolved_name TEXT, voiceprint_ref TEXT
+    speaker_id TEXT PRIMARY KEY, label TEXT, resolved_name TEXT, voiceprint_ref TEXT,
+    canonical_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS topics (
@@ -149,6 +150,12 @@ class LoomStore:
 
     def _migrate(self) -> None:
         self.conn.executescript(_SCHEMA)
+        # Idempotent column add for stores created before W4.1: executescript's
+        # ``CREATE TABLE IF NOT EXISTS`` won't add a column to an existing table.
+        try:
+            self.conn.execute("ALTER TABLE speakers ADD COLUMN canonical_id TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists (fresh store / already migrated)
         if self.fts:
             self.conn.execute(
                 "CREATE VIRTUAL TABLE IF NOT EXISTS moments_fts "
@@ -364,17 +371,36 @@ class LoomStore:
 
     def upsert_speaker(self, speaker: Speaker) -> None:
         self.conn.execute(
-            "INSERT OR REPLACE INTO speakers (speaker_id, label, resolved_name, voiceprint_ref) "
-            "VALUES (?, ?, ?, ?)",
-            (speaker.speaker_id, speaker.label, speaker.resolved_name, speaker.voiceprint_ref),
+            "INSERT OR REPLACE INTO speakers "
+            "(speaker_id, label, resolved_name, voiceprint_ref, canonical_id) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (speaker.speaker_id, speaker.label, speaker.resolved_name,
+             speaker.voiceprint_ref, speaker.canonical_id),
         )
         self.conn.commit()
 
     def get_speaker(self, speaker_id: str) -> Optional[Speaker]:
         row = self.conn.execute("SELECT * FROM speakers WHERE speaker_id = ?", (speaker_id,)).fetchone()
-        if not row:
-            return None
-        return Speaker(row["speaker_id"], row["label"], row["voiceprint_ref"], row["resolved_name"])
+        return _row_to_speaker(row) if row else None
+
+    def list_speakers(self) -> List[Speaker]:
+        rows = self.conn.execute("SELECT * FROM speakers ORDER BY speaker_id").fetchall()
+        return [_row_to_speaker(r) for r in rows]
+
+    def canonical_speaker(self, speaker_id: str) -> str:
+        """The cross-video canonical id for a speaker.
+
+        Returns the persisted ``canonical_id`` if cross-video speaker resolution
+        (W4.1) has unified this speaker onto a ``spk:<slug>`` identity; otherwise
+        the ``speaker_id`` itself (an unresolved / self-canonical speaker — e.g.
+        an anonymous diarization label, which is never merged across videos).
+        """
+        row = self.conn.execute(
+            "SELECT canonical_id FROM speakers WHERE speaker_id = ?", (speaker_id,)
+        ).fetchone()
+        if row and row["canonical_id"]:
+            return row["canonical_id"]
+        return speaker_id
 
     def upsert_entity(self, entity: Entity) -> None:
         # UPSERT (not INSERT OR REPLACE): re-inserting an entity that already
@@ -578,6 +604,16 @@ def _row_to_claim(r: sqlite3.Row) -> Claim:
         status=r["status"], superseded_by=r["superseded_by"], t_start_s=r["t_start_s"],
         t_end_s=r["t_end_s"], speaker_id=r["speaker_id"],
         qualifiers=json.loads(r["qualifiers"] or "{}"),
+    )
+
+
+def _row_to_speaker(r: sqlite3.Row) -> Speaker:
+    return Speaker(
+        speaker_id=r["speaker_id"],
+        label=r["label"],
+        voiceprint_ref=r["voiceprint_ref"],
+        resolved_name=r["resolved_name"],
+        canonical_id=r["canonical_id"],
     )
 
 

@@ -18,6 +18,7 @@ from eval.harness import (
     _answer_groundedness,
     _check_thresholds,
     _entity_clusters,
+    _speaker_clusters,
     clustering_f1,
     contradiction_pr,
     groundedness,
@@ -266,6 +267,60 @@ class TestEntityF1ReadsPersistence(unittest.TestCase):
             self.assertEqual(f1, 0.0)
 
 
+class TestDERReadsPersistence(unittest.TestCase):
+    """der must score the PERSISTED canonical_id, not re-derive resolution.
+
+    Proves the regression-guard property (the W2.3 entity_f1 lesson applied to
+    speakers): when cross-video speaker resolution did NOT run (per-video
+    speakers persisted with no canonical_id), the two same-named Dr. Lee
+    speakers stay self-canonical singletons and ``der`` is 0.0 — so a
+    broken/no-op ``resolve_speakers`` cannot falsely pass the metric.
+    """
+
+    class _StubIngested:
+        def __init__(self, mv):
+            self.mv = mv
+            self.logical_to_store = {"talk_a": "vid:aaaa", "talk_b": "vid:bbbb"}
+            self.store_to_logical = {"vid:aaaa": "talk_a", "vid:bbbb": "talk_b"}
+
+    def test_unresolved_store_scores_zero(self):
+        import pathlib
+        import sys
+        import tempfile
+
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
+        from memovox.config import Config
+        from memovox.loom import LoomStore, Speaker
+
+        gold_speakers = {
+            "identities": {
+                "talk_a:Dr. Lee": "person:lee",
+                "talk_b:Dr. Lee": "person:lee",
+                "talk_b:Prof. Kim": "person:kim",
+            }
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Config(store=pathlib.Path(tmp) / "store").ensure()
+            with LoomStore(config) as store:
+                # Per-video speakers persisted WITHOUT a canonical_id (resolution
+                # did not run): the cross-talk Dr. Lee pair is not unified.
+                store.upsert_speaker(Speaker("vid:aaaa:Dr. Lee", "Dr. Lee"))
+                store.upsert_speaker(Speaker("vid:bbbb:Dr. Lee", "Dr. Lee"))
+                store.upsert_speaker(Speaker("vid:bbbb:Prof. Kim", "Prof. Kim"))
+
+            class _FakeMv:
+                pass
+
+            mv = _FakeMv()
+            mv.config = config
+            ing = self._StubIngested(mv)
+
+            pred, gold = _speaker_clusters(ing, gold_speakers)
+            # Gold has the cross-talk Dr. Lee pair; pred has only singletons.
+            _, _, der = clustering_f1(pred, gold)
+            self.assertEqual(der, 0.0)
+
+
 class TestThresholdGates(unittest.TestCase):
     def _report(self, hit_rate_v, groundedness_v, contradiction_f1):
         return {
@@ -343,6 +398,13 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         # entity_f1 is now a real cross-video same-cluster signal > 0.
         # Informational only — entity_f1 stays UNGATED in --assert-thresholds.
         self.assertGreater(self.report["entity_f1"], 0.0)
+
+    def test_der_moves_after_speaker_resolution(self):
+        # W4.1: cross-video speaker resolution unifies the same named speaker
+        # ('Dr. Lee', in both talks) onto one canonical identity spanning both
+        # videos, so der is now a real cross-video same-cluster signal > 0.
+        # Informational only — der stays UNGATED in --assert-thresholds.
+        self.assertGreater(self.report["der"], 0.0)
 
 
 if __name__ == "__main__":  # pragma: no cover

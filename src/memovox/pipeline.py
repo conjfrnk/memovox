@@ -16,7 +16,7 @@ from .config import PIPELINE_VERSION, Config, Settings
 from .loom import Claim, LoomStore, Speaker, Video
 from .loom.digest import render_digest
 from .loom.models import STATUS_COMMITTED
-from .loom.resolve import link_claim_relations, resolve_entities
+from .loom.resolve import link_claim_relations, resolve_entities, resolve_speakers
 from .util import make_video_id, slugify
 
 
@@ -160,6 +160,13 @@ def ingest(
         # node. resolve_entities filters to committed claims internally.
         linker = get_entity_linker(settings.entity_backend, config=config)
         resolve_entities(store, all_claims, linker=linker)
+
+        # --- Loom: cross-video speaker resolution (spec §4.6/§12) -------
+        # Unify the SAME named speaker across videos onto one canonical
+        # ``spk:<slug>`` identity (per-video rows preserved, linked by SAME_AS).
+        # Re-resolves the WHOLE corpus each ingest (idempotent); anonymous
+        # diarization labels are never merged across videos.
+        resolve_speakers(store)
 
         # --- Loom: discourse edges (spec §6) ----------------------------
         # Link claim->claim within the video: ELABORATES (adjacent same-speaker
