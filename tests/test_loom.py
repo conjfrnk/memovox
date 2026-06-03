@@ -8,7 +8,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
 from memovox.backends.embed import HashingEmbedder
 from memovox.config import Config
 from memovox.loom import Claim, Entity, LoomStore, Moment, Video
-from memovox.loom.models import STATUS_SUPERSEDED
+from memovox.loom.models import STATUS_SUPERSEDED, STATUS_UNSUPPORTED
+from memovox.loom.resolve import link_claim_relations
 
 
 class LoomTestBase(unittest.TestCase):
@@ -191,6 +192,117 @@ class TestGetClaims(LoomTestBase):
                          ["yt:abc#m0001.c00", "yt:abc#m0000.c00"])
         self.assertEqual(self.store.get_claims([]), [])
         self.assertEqual(self.store.get_claims(["ent:nope"]), [])
+
+
+class TestClaimRelations(LoomTestBase):
+    """W3.1 — ELABORATES (intra-Moment, same-speaker) + CORRECTS (nearest sharer)."""
+
+    def _claim(self, cid, moment_id, text, *, subject="", claim_type="FACT",
+               status="committed", speaker="spk_0", t0=0.0, t1=1.0):
+        c = Claim(
+            claim_id=cid, moment_id=moment_id, video_id="yt:abc", text=text,
+            subject=subject, claim_type=claim_type, status=status,
+            t_start_s=t0, t_end_s=t1, speaker_id=speaker,
+        )
+        self.store.add_claim(c)
+        return c
+
+    def test_elaborates_within_moment_same_speaker(self):
+        a = self._claim("yt:abc#m0000.c00", "yt:abc#m0000", "GPT is a model.", t0=0.0, t1=2.0)
+        b = self._claim("yt:abc#m0000.c01", "yt:abc#m0000", "It uses attention.", t0=2.0, t1=4.0)
+        link_claim_relations(self.store, [a, b])
+        out = self.store.neighbors(a.claim_id, rel="ELABORATES")
+        self.assertEqual([e["dst"] for e in out], [b.claim_id])
+        # Provenance spans a.t_start_s .. b.t_end_s, carries the video id.
+        edge = out[0]
+        self.assertEqual(edge["video_id"], "yt:abc")
+        self.assertEqual(edge["t_start_s"], 0.0)
+        self.assertEqual(edge["t_end_s"], 4.0)
+        self.assertEqual(edge["src_type"], "Claim")
+        self.assertEqual(edge["dst_type"], "Claim")
+
+    def test_no_elaborates_across_moments(self):
+        a = self._claim("yt:abc#m0000.c00", "yt:abc#m0000", "GPT is a model.")
+        b = self._claim("yt:abc#m0001.c00", "yt:abc#m0001", "Pasta is tasty.")
+        link_claim_relations(self.store, [a, b])
+        self.assertEqual(self.store.neighbors(a.claim_id, rel="ELABORATES"), [])
+
+    def test_no_elaborates_across_speaker_boundary(self):
+        a = self._claim("yt:abc#m0000.c00", "yt:abc#m0000", "GPT is a model.", speaker="spk_0")
+        b = self._claim("yt:abc#m0000.c01", "yt:abc#m0000", "It uses attention.", speaker="spk_1")
+        link_claim_relations(self.store, [a, b])
+        self.assertEqual(self.store.neighbors(a.claim_id, rel="ELABORATES"), [])
+
+    def test_elaborates_skips_uncommitted_claims(self):
+        a = self._claim("yt:abc#m0000.c00", "yt:abc#m0000", "GPT is a model.")
+        b = self._claim("yt:abc#m0000.c01", "yt:abc#m0000", "It uses attention.",
+                        status=STATUS_UNSUPPORTED)
+        link_claim_relations(self.store, [a, b])
+        self.assertEqual(self.store.neighbors(a.claim_id, rel="ELABORATES"), [])
+
+    def test_corrects_links_to_nearest_prior_sharer(self):
+        # Two earlier claims share entity "GPT"; the CORRECTION must link the
+        # NEAREST (latest) prior sharer, not the earliest. m0002 is an extra
+        # Moment FK parent beyond the base fixture's m0000/m0001.
+        self.store.add_moment(
+            Moment("yt:abc#m0002", "yt:abc", 60.0, 90.0, "correction span", "spk_0", index=2),
+            self.emb.embed_one("correction span"),
+        )
+        far = self._claim("yt:abc#m0000.c00", "yt:abc#m0000",
+                          "GPT has 100 layers.", subject="GPT", t0=0.0, t1=2.0)
+        near = self._claim("yt:abc#m0001.c00", "yt:abc#m0001",
+                           "GPT was trained in 2020.", subject="GPT", t0=10.0, t1=12.0)
+        corr = self._claim("yt:abc#m0002.c00", "yt:abc#m0002",
+                           "Actually, GPT has 96 layers.", subject="GPT",
+                           claim_type="CORRECTION", t0=20.0, t1=22.0)
+        link_claim_relations(self.store, [far, near, corr])
+        out = self.store.neighbors(corr.claim_id, rel="CORRECTS")
+        self.assertEqual([e["dst"] for e in out], [near.claim_id])
+        self.assertEqual(out[0]["video_id"], "yt:abc")
+        self.assertEqual(out[0]["t_start_s"], 20.0)
+        self.assertEqual(out[0]["t_end_s"], 22.0)
+
+    def test_corrects_via_subject_token_overlap(self):
+        prior = self._claim("yt:abc#m0000.c00", "yt:abc#m0000",
+                            "the learning rate is small.", subject="learning rate",
+                            t0=0.0, t1=2.0)
+        corr = self._claim("yt:abc#m0001.c00", "yt:abc#m0001",
+                           "i misspoke, the learning rate is large.",
+                           subject="learning rate", claim_type="CORRECTION",
+                           t0=10.0, t1=12.0)
+        link_claim_relations(self.store, [prior, corr])
+        out = self.store.neighbors(corr.claim_id, rel="CORRECTS")
+        self.assertEqual([e["dst"] for e in out], [prior.claim_id])
+
+    def test_corrects_ignores_trivial_stopword_subject_overlap(self):
+        # Precision boundary: "the model" (CORRECTION) and "the method" (prior)
+        # share ONLY the stopword "the". A content-word check must NOT link them
+        # (raw-tokenize overlap would emit a spurious CORRECTS). Neither subject
+        # surfaces an entity, so the entity leg also stays silent.
+        prior = self._claim("yt:abc#m0000.c00", "yt:abc#m0000",
+                            "the method is slow.", subject="the method",
+                            t0=0.0, t1=2.0)
+        corr = self._claim("yt:abc#m0001.c00", "yt:abc#m0001",
+                           "actually, the model is fast.", subject="the model",
+                           claim_type="CORRECTION", t0=10.0, t1=12.0)
+        link_claim_relations(self.store, [prior, corr])
+        self.assertEqual(self.store.neighbors(corr.claim_id, rel="CORRECTS"), [])
+
+    def test_corrects_emits_nothing_when_no_sharer(self):
+        prior = self._claim("yt:abc#m0000.c00", "yt:abc#m0000",
+                            "Pasta is tasty.", subject="pasta", t0=0.0, t1=2.0)
+        corr = self._claim("yt:abc#m0001.c00", "yt:abc#m0001",
+                           "Actually, BERT is bidirectional.", subject="BERT",
+                           claim_type="CORRECTION", t0=10.0, t1=12.0)
+        link_claim_relations(self.store, [prior, corr])
+        self.assertEqual(self.store.neighbors(corr.claim_id, rel="CORRECTS"), [])
+
+    def test_relations_idempotent(self):
+        a = self._claim("yt:abc#m0000.c00", "yt:abc#m0000", "GPT is a model.", t0=0.0, t1=2.0)
+        b = self._claim("yt:abc#m0000.c01", "yt:abc#m0000", "It uses attention.", t0=2.0, t1=4.0)
+        link_claim_relations(self.store, [a, b])
+        link_claim_relations(self.store, [a, b])
+        self.assertEqual(len(self.store.neighbors(a.claim_id, rel="ELABORATES")), 1)
 
 
 class TestDeleteCascade(LoomTestBase):

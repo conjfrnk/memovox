@@ -16,7 +16,7 @@ from .config import PIPELINE_VERSION, Config, Settings
 from .loom import Claim, LoomStore, Speaker, Video
 from .loom.digest import render_digest
 from .loom.models import STATUS_COMMITTED
-from .loom.resolve import resolve_entities
+from .loom.resolve import link_claim_relations, resolve_entities
 from .util import make_video_id, slugify
 
 
@@ -160,6 +160,12 @@ def ingest(
         # node. resolve_entities filters to committed claims internally.
         linker = get_entity_linker(settings.entity_backend, config=config)
         resolve_entities(store, all_claims, linker=linker)
+
+        # --- Loom: discourse edges (spec §6) ----------------------------
+        # Link claim->claim within the video: ELABORATES (adjacent same-speaker
+        # claims inside a Moment) and CORRECTS (a CORRECTION -> nearest prior
+        # claim sharing a subject/entity). Committed-only; provenance-stamped.
+        link_claim_relations(store, all_claims)
 
         # --- human-readable digest --------------------------------------
         digest = render_digest(video, moments, all_claims)

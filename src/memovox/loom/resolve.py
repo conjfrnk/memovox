@@ -20,10 +20,11 @@ unchanged corpus is therefore a graph no-op.
 
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Iterable, List
 
 from ..assay.claims import extract_mentions
 from ..backends.entity_link import EntityLinker
+from .consolidate import _content_tokens
 from .models import STATUS_COMMITTED, Claim, Entity
 
 
@@ -57,3 +58,67 @@ def resolve_entities(store, claims: Iterable[Claim], *, linker: EntityLinker) ->
                 src_type="Claim", dst_type="Entity", video_id=claim.video_id,
                 t_start_s=claim.t_start_s, t_end_s=claim.t_end_s,
             )
+
+
+def link_claim_relations(store, claims: Iterable[Claim]) -> None:
+    """Emit claim->claim discourse edges within a video (spec §6, W3.1).
+
+    Two typed edges capture how a speaker's claims relate over time:
+
+    * **ELABORATES** — claim N elaborates the immediately-following claim N+1
+      when they sit in the SAME Moment and share a speaker (claims within a
+      Moment are contiguous and time-ordered, so this links the discourse
+      flow inside a single span). The edge spans ``a.t_start_s .. b.t_end_s``.
+    * **CORRECTS** — a ``CORRECTION``-typed claim supersedes the NEAREST prior
+      claim (scanning backward in pipeline/time order) that shares a subject
+      (CONTENT-word overlap on ``subject`` via :func:`_content_tokens`, which
+      strips stopwords/short tokens so "the model" and "the method" do NOT
+      match on a bare "the") or an entity (overlap of :func:`extract_mentions`).
+      If nothing matches, no edge is emitted — a correction with no antecedent
+      is left dangling rather than forced.
+
+    Operates on COMMITTED claims only (consistent with :func:`resolve_entities`):
+    only trusted facts belong in the graph. Idempotent — every edge is
+    provenance-stamped and guarded by the edges table's
+    ``UNIQUE(src, rel, dst, video_id)`` constraint, so re-linking is a no-op.
+    """
+    committed: List[Claim] = [c for c in claims if c.status == STATUS_COMMITTED]
+
+    # --- ELABORATES: consecutive same-speaker claims inside one Moment -----
+    for a, b in zip(committed, committed[1:]):
+        if a.moment_id != b.moment_id:
+            continue
+        if a.speaker_id != b.speaker_id:
+            continue
+        store.add_edge(
+            a.claim_id, "ELABORATES", b.claim_id,
+            src_type="Claim", dst_type="Claim", video_id=a.video_id,
+            t_start_s=a.t_start_s, t_end_s=b.t_end_s,
+        )
+
+    # --- CORRECTS: a CORRECTION -> nearest prior sharer in the same video --
+    # Precompute each claim's content-subject tokens and entity surface forms
+    # once, so the backward scan below is a set lookup rather than re-tokenizing.
+    subj_tokens = [_content_tokens(c.subject) for c in committed]
+    entities = [set(extract_mentions(c)) for c in committed]
+    for i, c in enumerate(committed):
+        if c.claim_type != "CORRECTION":
+            continue
+        c_subject = subj_tokens[i]
+        c_entities = entities[i]
+        # Scan backward; link the nearest prior claim that shares a CONTENT
+        # subject token or an entity, then stop. Stopword-only overlap ("the")
+        # does NOT count — a spurious CORRECTS can suppress a still-valid claim.
+        for j in range(i - 1, -1, -1):
+            p = committed[j]
+            if p.video_id != c.video_id:
+                continue
+            shares_subject = bool(c_subject & subj_tokens[j])
+            shares_entity = bool(c_entities & entities[j])
+            if shares_subject or shares_entity:
+                store.add_edge(
+                    c.claim_id, "CORRECTS", p.claim_id,
+                    src_type="Claim", dst_type="Claim", video_id=c.video_id,
+                    t_start_s=c.t_start_s, t_end_s=c.t_end_s,
+                )
+                break
