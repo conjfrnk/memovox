@@ -16,7 +16,11 @@ from . import augur, pipeline
 from .backends import backend_status, get_embedder, get_llm, get_nli
 from .config import Config, Settings
 from .loom import LoomStore, Video
-from .loom.consolidate import ContradictionPair, find_contradictions
+from .loom.consolidate import (
+    ContradictionPair,
+    consolidate as run_consolidation,
+    find_contradictions,
+)
 from .loom.digest import build_digest
 from .loom.evolution import claim_evolution
 
@@ -70,6 +74,14 @@ class Memovox:
             return find_contradictions(
                 store, nli=nli, topic=topic, threshold=self.settings.contradiction_threshold
             )
+
+    def consolidate(self) -> dict:
+        """Run the cross-corpus consolidation background job (spec §4 stage 7):
+        topic induction, contradiction/agreement detection, consensus clustering,
+        and dedup. Run after ingesting new videos; returns a counts report."""
+        with LoomStore(self.config) as store:
+            nli = get_nli(self.settings.nli_backend, config=self.config)
+            return run_consolidation(store, nli=nli, settings=self.settings).to_dict()
 
     def synthesize(self, topic: str) -> augur.Synthesis:
         """Corpus-level "literature review" of what the sources say about a topic

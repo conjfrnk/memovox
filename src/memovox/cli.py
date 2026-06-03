@@ -139,6 +139,17 @@ def cmd_evolution(args, mv: Memovox) -> int:
     return 0
 
 
+def cmd_consolidate(args, mv: Memovox) -> int:
+    report = mv.consolidate()
+    print("Consolidation complete:")
+    print(f"  topics induced     : {report['topics']}")
+    print(f"  contradictions     : {report['contradictions']}")
+    print(f"  agreements (supports): {report['supports']}")
+    print(f"  consensus clusters : {report['consensus_clusters']}")
+    print(f"  claims superseded  : {report['superseded']}")
+    return 0
+
+
 def cmd_export(args, mv: Memovox) -> int:
     content = mv.export(args.video, fmt=args.format)
     if args.out:
@@ -265,6 +276,9 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("contradictions", help="surface cross-corpus disagreements.")
     s.add_argument("--topic", help="restrict to a topic.")
     s.set_defaults(func=cmd_contradictions)
+
+    s = sub.add_parser("consolidate", help="run the cross-corpus consolidation job (topics, contradictions, consensus, dedup).")
+    s.set_defaults(func=cmd_consolidate)
 
     s = sub.add_parser("synthesize", help="corpus-level synthesis of a topic (consensus + disagreements).")
     s.add_argument("topic", nargs="+")

@@ -71,6 +71,12 @@ TOOLS = [
             "properties": {"topic": {"type": "string"}},
         },
     },
+    {
+        "name": "consolidate",
+        "description": "Run cross-corpus consolidation (topic induction, contradiction/agreement "
+                       "detection, consensus, dedup). Run after ingesting new videos.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
 ]
 
 
@@ -145,6 +151,9 @@ class McpServer:
     def _tool_find_contradictions(self, args: dict) -> dict:
         pairs = self.mv.contradictions(topic=args.get("topic"))
         return _tool_json([p.to_dict() for p in pairs])
+
+    def _tool_consolidate(self, args: dict) -> dict:
+        return _tool_json(self.mv.consolidate())
 
 
 def _version() -> str:

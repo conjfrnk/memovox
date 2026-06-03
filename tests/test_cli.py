@@ -79,6 +79,13 @@ class TestCLI(unittest.TestCase):
             run(["--store", self.store, "evolution"])
         self.assertEqual(cm.exception.code, 2)
 
+    def test_consolidate_runs(self):
+        self._ingest()
+        code, out = run(["--store", self.store, "--llm", "none", "consolidate"])
+        self.assertEqual(code, 0)
+        self.assertIn("topics induced", out)
+        self.assertIn("claims superseded", out)
+
     def test_synthesize_runs(self):
         self._ingest()
         code, out = run(["--store", self.store, "--llm", "none", "synthesize", "chunk", "size"])

@@ -41,7 +41,8 @@ class TestMcp(unittest.TestCase):
         names = {t["name"] for t in resp["result"]["tools"]}
         self.assertIn("search_knowledge", names)
         self.assertIn("ingest_video", names)
-        self.assertEqual(len(names), 5)
+        self.assertIn("consolidate", names)
+        self.assertEqual(len(names), 6)
 
     def test_tools_call_search(self):
         resp = self.server.handle({
@@ -61,6 +62,15 @@ class TestMcp(unittest.TestCase):
         # Real synthesis payload (not the old ask() shim): structured fields.
         self.assertIn("consensus_points", text)
         self.assertIn("contradictions", text)
+
+    def test_tools_call_consolidate(self):
+        resp = self.server.handle({
+            "jsonrpc": "2.0", "id": 8, "method": "tools/call",
+            "params": {"name": "consolidate", "arguments": {}},
+        })
+        text = resp["result"]["content"][0]["text"]
+        self.assertIn("topics", text)
+        self.assertIn("superseded", text)
 
     def test_unknown_method_errors(self):
         resp = self.server.handle({"jsonrpc": "2.0", "id": 9, "method": "bogus"})
