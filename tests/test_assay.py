@@ -159,6 +159,26 @@ class TestVerification(unittest.TestCase):
         self.assertTrue(all(c.status == "committed" for c in claims))
         self.assertTrue(all(c.entailment_score >= 0.5 for c in claims))
 
+    def test_salience_floor_demotes_low_salience_committed_claim(self):
+        # A short, number-free, proper-noun-free claim has low salience. With a
+        # salience floor above it, an otherwise-entailed claim is NOT committed
+        # (salience drives retrieval priority + summary inclusion, spec §5).
+        nli = LexicalNLI()
+        m = Moment("yt:x#m0000", "yt:x", 0.0, 30.0, "the cats like to sleep here often.")
+        low = assay.run(m, nli=nli, settings=Settings(entailment_threshold=0.5))[0]
+        self.assertEqual(low.status, "committed")  # passes the entailment gate
+        self.assertLess(low.salience, 0.5)
+        gated = assay.run(m, nli=nli,
+                          settings=Settings(entailment_threshold=0.5, salience_floor=0.5))[0]
+        self.assertEqual(gated.status, "unsupported")
+
+    def test_salience_floor_default_is_noop(self):
+        # Default floor (0.0) demotes nothing — existing behaviour preserved.
+        nli = LexicalNLI()
+        m = Moment("yt:x#m0000", "yt:x", 0.0, 30.0, "the cats like to sleep here often.")
+        claims = assay.run(m, nli=nli, settings=Settings(entailment_threshold=0.5))
+        self.assertEqual(claims[0].status, "committed")
+
 
 class _HallucinatingLLM(LLMBackend):
     """Emits one verbatim-from-span claim and one fabricated claim."""

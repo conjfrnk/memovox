@@ -322,13 +322,15 @@ class TestDERReadsPersistence(unittest.TestCase):
 
 
 class TestThresholdGates(unittest.TestCase):
-    def _report(self, hit_rate_v, groundedness_v, contradiction_f1):
+    def _report(self, hit_rate_v, groundedness_v, contradiction_f1, synthesis_g=1.0):
         return {
             "retrieval": {"hit_rate": hit_rate_v, "mrr": 0.0, "ndcg": 0.0, "k": 5},
             "groundedness": groundedness_v,
             "entity_f1": 0.0,
             "der": 0.0,
             "contradiction": {"precision": 0.0, "recall": 0.0, "f1": contradiction_f1},
+            "synthesis": {"groundedness": synthesis_g, "contradiction_surfaced": True,
+                          "consensus_points": 0},
         }
 
     def test_all_pass(self):
@@ -338,6 +340,11 @@ class TestThresholdGates(unittest.TestCase):
         failures = _check_thresholds(self._report(1.0, 1.0, 0.0))
         self.assertEqual(len(failures), 1)
         self.assertIn("contradiction.f1", failures[0])
+
+    def test_synthesis_gate_fails(self):
+        failures = _check_thresholds(self._report(1.0, 1.0, 1.0, synthesis_g=0.0))
+        self.assertEqual(len(failures), 1)
+        self.assertIn("synthesis.groundedness", failures[0])
 
     def test_retrieval_and_groundedness_gates_fail(self):
         failures = _check_thresholds(self._report(0.0, 0.0, 1.0))
@@ -405,6 +412,14 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         # videos, so der is now a real cross-video same-cluster signal > 0.
         # Informational only — der stays UNGATED in --assert-thresholds.
         self.assertGreater(self.report["der"], 0.0)
+
+    def test_synthesis_section_present_and_grounded(self):
+        # Phase 3 / spec §5: corpus-level synthesis is grounded (every sentence
+        # cited from its own span) and surfaces the seeded cross-talk contradiction.
+        syn = self.report["synthesis"]
+        self.assertIn("groundedness", syn)
+        self.assertGreaterEqual(syn["groundedness"], 0.8)  # the gated value
+        self.assertTrue(syn["contradiction_surfaced"])
 
 
 if __name__ == "__main__":  # pragma: no cover

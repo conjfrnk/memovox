@@ -6,7 +6,7 @@ from typing import List, Optional
 
 from ..backends.base import LLMBackend, NLIBackend
 from ..config import Settings
-from ..loom.models import Claim, Moment
+from ..loom.models import STATUS_COMMITTED, STATUS_UNSUPPORTED, Claim, Moment
 from .claims import epistemic_type, extract_claims, salience_score
 from .spans import span_text
 from .verify import verify_claim
@@ -35,6 +35,12 @@ def run(
         # preserving legacy behaviour.
         premise = span_text(moment.segments, claim.t_start_s, claim.t_end_s) or moment.text_for_embedding()
         verify_claim(nli, claim, premise, threshold=settings.entailment_threshold)
+        # Salience floor (spec §5): salience drives retrieval priority + summary
+        # inclusion, so a low-salience claim is not worth committing to the
+        # trusted layer even when entailed. Default floor 0.0 demotes nothing.
+        if (settings.salience_floor > 0.0 and claim.status == STATUS_COMMITTED
+                and claim.salience < settings.salience_floor):
+            claim.status = STATUS_UNSUPPORTED
     return claims
 
 

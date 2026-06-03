@@ -17,6 +17,8 @@ Metrics (all pure stdlib, all crash-safe on empty inputs):
   * ``groundedness`` — fraction of answer sentences entailed by their citations
   * ``clustering_f1`` — pairwise F1, reused for entity resolution and speaker DER
   * ``contradiction_pr`` — precision/recall/F1 over cross-video CONTRADICTS pairs
+  * ``synthesis`` — corpus-level synthesis groundedness + whether the seeded
+    cross-corpus contradiction is surfaced (Phase 3, spec §5)
 
 What clears its gate **today** (W0.3): ``retrieval`` and ``groundedness`` (they
 depend only on existing retrieval + the extractive synthesizer). ``entity_f1``,
@@ -475,6 +477,30 @@ def _speaker_clusters(ing: _Ingested, gold_speakers: dict):
     return pred_clusters, gold_clusters
 
 
+def _synthesis_metrics(ing: _Ingested, nli, *, topic: str, threshold: float) -> dict:
+    """Corpus-level synthesis quality (Phase 3, spec §5).
+
+    Runs ``synthesize(topic)`` over the golden corpus and measures:
+
+      * ``groundedness`` — fraction of synthesis sentences entailed by their own
+        cited span (reuses :func:`_answer_groundedness`; the Synthesis carries the
+        same ``text`` + ``[n]`` citations contract as an Answer);
+      * ``contradiction_surfaced`` — whether the seeded cross-talk disagreement is
+        reported (the marquee cross-corpus signal);
+      * ``consensus_points`` — count of agreement clusters surfaced.
+    """
+    from memovox.loom.store import LoomStore
+
+    syn = ing.mv.synthesize(topic)
+    with LoomStore(ing.mv.config) as store:
+        g = _answer_groundedness(syn, nli, store, threshold=threshold)
+    return {
+        "groundedness": round(g, 6),
+        "contradiction_surfaced": bool(syn.contradictions),
+        "consensus_points": len(syn.consensus_points),
+    }
+
+
 def _contradiction_pairs(ing: _Ingested, gold_contradictions: List[dict]):
     """Found + gold cross-video contradiction pairs as logical-id pairs.
 
@@ -580,6 +606,12 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
     found_pairs, gold_pairs = _contradiction_pairs(ing, gold_contradictions)
     contradiction = contradiction_pr(found_pairs, gold_pairs)
 
+    # Synthesis runs LAST: it reads the graph the steps above persisted and is
+    # itself read-only (synthesize never writes), so it cannot perturb the
+    # metrics computed before it.
+    synthesis = _synthesis_metrics(ing, nli, topic="scaling laws",
+                                   threshold=entail_threshold)
+
     return {
         "retrieval": {
             "hit_rate": round(hit_rate(per_query, k=k), 6),
@@ -595,6 +627,7 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
             "recall": round(contradiction["recall"], 6),
             "f1": round(contradiction["f1"], 6),
         },
+        "synthesis": synthesis,
     }
 
 
@@ -609,6 +642,11 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
 _HIT_RATE_GATE = 0.6
 _GROUNDEDNESS_GATE = 0.8
 _CONTRADICTION_F1_GATE = 0.5
+# Synthesis groundedness is robust (the extractive synthesizer cites every
+# sentence from its own span), so it is gated. topic_f1 is deliberately NOT a
+# golden gate: topic-induction quality over a 2-talk corpus is too small to be a
+# stable signal — it is covered by tests/test_topics.py instead.
+_SYNTHESIS_GROUNDEDNESS_GATE = 0.8
 
 
 def _print_report(report: dict) -> None:
@@ -620,12 +658,15 @@ def _check_thresholds(report: dict) -> List[str]:
     hr = report["retrieval"]["hit_rate"]
     gr = report["groundedness"]
     cf1 = report["contradiction"]["f1"]
+    sg = report.get("synthesis", {}).get("groundedness", 0.0)
     if hr < _HIT_RATE_GATE:
         failures.append(f"retrieval.hit_rate {hr:.3f} < {_HIT_RATE_GATE}")
     if gr < _GROUNDEDNESS_GATE:
         failures.append(f"groundedness {gr:.3f} < {_GROUNDEDNESS_GATE}")
     if cf1 < _CONTRADICTION_F1_GATE:
         failures.append(f"contradiction.f1 {cf1:.3f} < {_CONTRADICTION_F1_GATE}")
+    if sg < _SYNTHESIS_GROUNDEDNESS_GATE:
+        failures.append(f"synthesis.groundedness {sg:.3f} < {_SYNTHESIS_GROUNDEDNESS_GATE}")
     return failures
 
 
@@ -646,8 +687,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     parser.add_argument(
         "--assert-thresholds", action="store_true",
-        help="Exit non-zero if the retrieval.hit_rate, groundedness, or "
-             "contradiction.f1 gate fails.",
+        help="Exit non-zero if the retrieval.hit_rate, groundedness, "
+             "contradiction.f1, or synthesis.groundedness gate fails.",
     )
     args = parser.parse_args(argv)
 
