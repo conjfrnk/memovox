@@ -93,6 +93,25 @@ def cmd_contradictions(args, mv: Memovox) -> int:
     return 0
 
 
+def cmd_evolution(args, mv: Memovox) -> int:
+    steps = mv.evolution(entity=args.entity, topic=args.topic)
+    scope = f"entity {args.entity!r}" if args.entity else f"topic {args.topic!r}"
+    if not steps:
+        print(f"No claims found for {scope}.")
+        return 0
+    print(f"Evolution for {scope} ({len(steps)} step(s)):\n")
+    for s in steps:
+        when = s.get("published_at") or "undated"
+        rel = f"  [{s['relation']}]" if s.get("relation") else ""
+        mark = " (superseded)" if s.get("superseded") else ""
+        print(f"{when}{rel}{mark}")
+        print(f"  {truncate(s['text'], 140)}")
+        if s.get("deep_link"):
+            print(f"  {s['deep_link']}")
+        print()
+    return 0
+
+
 def cmd_export(args, mv: Memovox) -> int:
     content = mv.export(args.video, fmt=args.format)
     if args.out:
@@ -219,6 +238,12 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("contradictions", help="surface cross-corpus disagreements.")
     s.add_argument("--topic", help="restrict to a topic.")
     s.set_defaults(func=cmd_contradictions)
+
+    s = sub.add_parser("evolution", help="trace how a claim/position changed over time.")
+    g = s.add_mutually_exclusive_group(required=True)
+    g.add_argument("--entity", help="entity name or id (ent:<slug>).")
+    g.add_argument("--topic", help="free-text topic.")
+    s.set_defaults(func=cmd_evolution)
 
     s = sub.add_parser("export", help="export a per-video digest.")
     s.add_argument("--video", required=True)

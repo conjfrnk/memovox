@@ -18,6 +18,7 @@ from .config import Config, Settings
 from .loom import LoomStore, Video
 from .loom.consolidate import ContradictionPair, find_contradictions
 from .loom.digest import build_digest
+from .loom.evolution import claim_evolution
 
 
 class Memovox:
@@ -69,6 +70,17 @@ class Memovox:
             return find_contradictions(
                 store, nli=nli, topic=topic, threshold=self.settings.contradiction_threshold
             )
+
+    def evolution(self, *, entity: Optional[str] = None, topic: Optional[str] = None) -> List[dict]:
+        """Trace how a claim/position about an entity or topic changed over time.
+
+        Returns ordered evolution steps (oldest source first), each with its
+        relation to the previous step (CONTRADICTS/CORRECTS/SUPPORTS) and a deep
+        link (spec §5).
+        """
+        with LoomStore(self.config) as store:
+            steps = claim_evolution(store, entity_id=entity, topic=topic)
+            return [s.to_dict() for s in steps]
 
     # -- read / export -----------------------------------------------------
 
