@@ -7,9 +7,22 @@ Plus the Provenance object attached to every retrievable fact — the heart of t
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, NamedTuple, Optional
 
 from ..util import deep_link
+
+
+class SegmentRef(NamedTuple):
+    """A source-segment span a Moment was fused from (W1, spec §6).
+
+    A build-time artifact retained on each Moment so later stages (Assay) can
+    bind a claim to its EXACT source span. Supports both attribute access
+    (``ref.t_start_s``) and positional unpacking (``t0, t1, text = ref``).
+    """
+
+    t_start_s: float
+    t_end_s: float
+    text: str
 
 # Claim epistemic types (spec §5).
 CLAIM_TYPES = (
@@ -50,6 +63,10 @@ class Moment:
     ocr_text: Optional[str] = None
     topic_id: Optional[str] = None
     index: int = 0
+    #: Source-segment spans this Moment was fused from. A build-time artifact
+    #: consumed by Assay in the same pipeline run; NOT persisted to the store
+    #: (Moments reloaded from the store have ``segments == []``).
+    segments: List[SegmentRef] = field(default_factory=list)
 
     @property
     def modality(self) -> str:

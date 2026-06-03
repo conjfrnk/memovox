@@ -13,7 +13,7 @@ from typing import List, Optional
 
 from ..backends.base import Embedder, Segment
 from ..config import Settings
-from ..loom.models import Moment
+from ..loom.models import Moment, SegmentRef
 from ..util import make_moment_id
 from ..vectormath import cosine
 
@@ -44,6 +44,8 @@ def _make_moment(video_id: str, index: int, segs: List[Segment]) -> Moment:
         transcript=transcript,
         speaker_id=_dominant_speaker(segs),
         index=index,
+        segments=[SegmentRef(round(s.start, 3), round(s.end, 3), s.text.strip())
+                  for s in segs if s.text.strip()],
     )
 
 

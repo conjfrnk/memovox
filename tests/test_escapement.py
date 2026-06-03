@@ -81,6 +81,23 @@ class TestFusion(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
         self.assertEqual(ids, sorted(ids))
 
+    def test_moment_retains_segment_offsets(self):
+        # A Moment built from 3 merged segments exposes each source span, in order.
+        segs = [seg(0, 5, "alpha", "spk_a"),
+                seg(5, 10, "beta", "spk_a"),
+                seg(10, 15, "gamma", "spk_a")]
+        moments = build_moments(VID, segs)
+        self.assertEqual(len(moments), 1)
+        m = moments[0]
+        self.assertEqual(
+            [(s.t_start_s, s.t_end_s) for s in m.segments],
+            [(0, 5), (5, 10), (10, 15)],
+        )
+        self.assertEqual([s.text for s in m.segments], ["alpha", "beta", "gamma"])
+        # NamedTuple also supports positional unpacking (consumed by W1.2).
+        t0, t1, text = m.segments[0]
+        self.assertEqual((t0, t1, text), (0, 5, "alpha"))
+
 
 class TestVisualFusion(unittest.TestCase):
     def _one_moment_segs(self):
