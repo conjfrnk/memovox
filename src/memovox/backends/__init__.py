@@ -23,6 +23,7 @@ from .base import (
     Word,
 )
 from .embed import HashingEmbedder, SentenceTransformerEmbedder
+from .entity_link import Canonical, EntityLinker, NullLinker, WikidataLinker
 from .llm import OllamaLLM
 from .nli import LexicalNLI, TransformersNLI
 from .ocr import NullOCR, TesseractOCR
@@ -45,6 +46,8 @@ _LLMS = {"ollama": OllamaLLM}
 _VLMS = {"none": NullVLM, "ollama": OllamaVLM}
 _OCRS = {"none": NullOCR, "tesseract": TesseractOCR}
 _OCR_ALIASES = {"surya": "tesseract"}  # graceful: Surya not yet wired, use tesseract
+
+_LINKERS = {"none": NullLinker, "wikidata": WikidataLinker}
 
 
 def get_embedder(name: str = "auto", *, config=None, **options) -> Embedder:
@@ -120,6 +123,20 @@ def get_ocr(name: str = "auto", *, config=None, **options) -> OCRBackend:
     return cls(config=config, **options)
 
 
+def get_entity_linker(name: str = "auto", *, config=None, **options) -> EntityLinker:
+    """Return an entity linker; falls back to the slug-based NullLinker."""
+    if name in ("none", "off", "false", ""):
+        return NullLinker(config=config, **options)
+    if name == "auto":
+        return WikidataLinker(config=config, **options) if WikidataLinker.is_available() else NullLinker(config=config)
+    cls = _LINKERS.get(name)
+    if cls is None:
+        raise BackendUnavailable(f"Unknown entity linker {name!r}. Options: {list(_LINKERS)}, 'auto', or 'none'.")
+    if not cls.is_available():
+        raise BackendUnavailable(f"Entity linker {name!r} is offline (no network to Wikidata).")
+    return cls(config=config, **options)
+
+
 def backend_status() -> dict:
     """Snapshot of which backends are available (for `memovox backends`)."""
     from .asr_whisper import WhisperASR
@@ -149,14 +166,21 @@ def backend_status() -> dict:
             "tesseract": TesseractOCR.is_available(),
             "none": True,
         },
+        "entity_link": {
+            "wikidata": WikidataLinker.is_available(),
+            "none": True,
+        },
     }
 
 
 __all__ = [
     "Backend", "ASRBackend", "ASRResult", "Segment", "Word",
     "Embedder", "NLIBackend", "NLIResult", "LLMBackend", "VLMBackend", "OCRBackend",
+    "EntityLinker", "Canonical",
     "HashingEmbedder", "SentenceTransformerEmbedder",
     "LexicalNLI", "TransformersNLI", "OllamaLLM",
     "NullVLM", "OllamaVLM", "NullOCR", "TesseractOCR",
-    "get_embedder", "get_nli", "get_llm", "get_vlm", "get_ocr", "backend_status",
+    "NullLinker", "WikidataLinker",
+    "get_embedder", "get_nli", "get_llm", "get_vlm", "get_ocr",
+    "get_entity_linker", "backend_status",
 ]
