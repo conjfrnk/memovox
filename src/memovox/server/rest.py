@@ -122,6 +122,10 @@ def make_handler(mv: Memovox):
                         return self._send({"error": "missing 'query'"}, HTTPStatus.BAD_REQUEST)
                     answer = mv.ask(data["query"], video_id=data.get("video_id"))
                     return self._send(answer.to_dict())
+                if parsed.path == "/synthesize":
+                    if not data.get("topic"):
+                        return self._send({"error": "missing 'topic'"}, HTTPStatus.BAD_REQUEST)
+                    return self._send(mv.synthesize(data["topic"]).to_dict())
                 return self._send({"error": "not found"}, HTTPStatus.NOT_FOUND)
             except Exception as exc:  # pragma: no cover - defensive
                 self._send({"error": str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR)

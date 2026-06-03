@@ -128,27 +128,18 @@ class _UnionFind:
             self.parent[hi] = lo
 
 
-def cluster_claims(
-    store,
-    *,
-    min_shared: int = 2,
-    jaccard: Optional[float] = None,
-    max_claims: int = 600,
-    write_edges: bool = True,
-) -> List[ClaimCluster]:
-    """Partition committed claims into clusters of equivalent claims.
+def partition_claims(
+    claims: List[Claim], *, min_shared: int = 2, jaccard: float = 0.5
+):
+    """Union-find partition of claims into equivalence groups (pure, no store).
 
-    Returns ALL clusters (including singletons), each scored. Two claims are
-    equivalent when they share at least ``min_shared`` content tokens AND their
-    content-token Jaccard is ``>= jaccard`` (defaults to
-    ``settings.consensus_jaccard``). For every CROSS-video equivalent pair a
-    provenanced ``SUPPORTS`` edge is written (``write_edges``); within-video
-    equivalence is left to dedup (W5).
+    Two claims are equivalent when they share at least ``min_shared`` content
+    tokens AND their content-token Jaccard is ``>= jaccard``. Returns
+    ``(groups, cross_video_pairs)`` where ``groups`` is a list of claim lists
+    (each sorted by claim_id, the whole list ordered by representative id) and
+    ``cross_video_pairs`` is the list of equivalent ``(a, b)`` pairs that span two
+    different videos — the agreement edges a caller may persist as ``SUPPORTS``.
     """
-    if jaccard is None:
-        jaccard = getattr(store.config.settings, "consensus_jaccard", 0.5)
-
-    claims = store.list_claims(status="committed")[:max_claims]
     by_id = {c.claim_id: c for c in claims}
     tokens = {c.claim_id: _content_tokens(c.text) for c in claims}
 
@@ -158,7 +149,7 @@ def cluster_claims(
             inverted[t].append(cid)
 
     uf = _UnionFind(by_id.keys())
-    supports: List[tuple] = []  # (a, b) cross-video equivalent pairs
+    cross_video: List[tuple] = []
     seen_pairs = set()
     for cid_a, toks_a in tokens.items():
         candidates = {cid for t in toks_a for cid in inverted[t]}
@@ -177,13 +168,21 @@ def cluster_claims(
             uf.union(cid_a, cid_b)
             a, b = by_id[cid_a], by_id[cid_b]
             if a.video_id != b.video_id:
-                supports.append((a, b))
+                cross_video.append((a, b))
 
-    # Materialize clusters from the union-find partition.
-    groups: Dict[str, List[Claim]] = defaultdict(list)
+    grouped: Dict[str, List[Claim]] = defaultdict(list)
     for cid, claim in by_id.items():
-        groups[uf.find(cid)].append(claim)
+        grouped[uf.find(cid)].append(claim)
+    groups = [sorted(grouped[root], key=lambda c: c.claim_id) for root in sorted(grouped)]
+    return groups, cross_video
 
+
+def clusters_from_groups(store, groups: List[List[Claim]]) -> List[ClaimCluster]:
+    """Score a partition into :class:`ClaimCluster`s, filling per-source dates.
+
+    Recency is measured relative to the newest publish date across ALL groups, so
+    consensus scores are comparable within one run.
+    """
     video_dates: Dict[str, Optional[str]] = {}
 
     def _date(video_id: str) -> Optional[str]:
@@ -192,21 +191,43 @@ def cluster_claims(
             video_dates[video_id] = v.published_at if v else None
         return video_dates[video_id]
 
-    if write_edges:
-        for a, b in supports:
-            store.add_edge(
-                a.claim_id, "SUPPORTS", b.claim_id,
-                src_type="Claim", dst_type="Claim", video_id=a.video_id,
-                t_start_s=a.t_start_s, t_end_s=a.t_end_s,
-            )
-
-    reference_date = max((d for d in (_date(c.video_id) for c in claims) if d), default=None)
-
+    reference_date = max(
+        (d for g in groups for d in (_date(c.video_id) for c in g) if d), default=None
+    )
     clusters: List[ClaimCluster] = []
-    for root in sorted(groups):
-        members = sorted(groups[root], key=lambda c: c.claim_id)
+    for members in groups:
         dates = {c.video_id: _date(c.video_id) for c in members}
         cluster = ClaimCluster(claims=members, dates=dates)
         cluster.consensus = score_consensus(cluster, reference_date=reference_date)
         clusters.append(cluster)
     return clusters
+
+
+def cluster_claims(
+    store,
+    *,
+    min_shared: int = 2,
+    jaccard: Optional[float] = None,
+    max_claims: int = 600,
+    write_edges: bool = True,
+) -> List[ClaimCluster]:
+    """Partition committed claims into scored clusters of equivalent claims.
+
+    Returns ALL clusters (including singletons), each scored. For every
+    CROSS-video equivalent pair a provenanced ``SUPPORTS`` edge is written
+    (``write_edges``); within-video equivalence is left to dedup (W5). ``jaccard``
+    defaults to ``settings.consensus_jaccard``.
+    """
+    if jaccard is None:
+        jaccard = getattr(store.config.settings, "consensus_jaccard", 0.5)
+
+    claims = store.list_claims(status="committed")[:max_claims]
+    groups, cross_video = partition_claims(claims, min_shared=min_shared, jaccard=jaccard)
+    if write_edges:
+        for a, b in cross_video:
+            store.add_edge(
+                a.claim_id, "SUPPORTS", b.claim_id,
+                src_type="Claim", dst_type="Claim", video_id=a.video_id,
+                t_start_s=a.t_start_s, t_end_s=a.t_end_s,
+            )
+    return clusters_from_groups(store, groups)

@@ -139,9 +139,8 @@ class McpServer:
         return _tool_json(prov)
 
     def _tool_synthesize_topic(self, args: dict) -> dict:
-        topic = args["topic"]
-        answer = self.mv.ask(f"Summarize what the sources say about {topic}.")
-        return _tool_json(answer.to_dict())
+        syn = self.mv.synthesize(args["topic"])
+        return _tool_json(syn.to_dict())
 
     def _tool_find_contradictions(self, args: dict) -> dict:
         pairs = self.mv.contradictions(topic=args.get("topic"))

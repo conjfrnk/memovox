@@ -93,6 +93,33 @@ def cmd_contradictions(args, mv: Memovox) -> int:
     return 0
 
 
+def cmd_synthesize(args, mv: Memovox) -> int:
+    syn = mv.synthesize(" ".join(args.topic))
+    if args.json:
+        print(json.dumps(syn.to_dict(), indent=2, ensure_ascii=False))
+        return 0
+    print(syn.text or "(no synthesis)")
+    if syn.low_evidence:
+        print("\n  (low evidence)")
+    if syn.consensus_points:
+        print("\nConsensus:")
+        for cp in syn.consensus_points:
+            print(f"  ({cp['support_count']} sources, consensus {cp['consensus']:.2f}) "
+                  f"{truncate(cp['text'], 120)}")
+    if syn.contradictions:
+        print("\nDisagreements:")
+        for c in syn.contradictions:
+            print(f"  {truncate(c['a']['text'], 70)}  ⟷  {truncate(c['b']['text'], 70)}")
+    if syn.citations:
+        print("\nCitations:")
+        for c in syn.citations:
+            head = f"  [{c.index}] ({seconds_to_hms(c.t_start_s)}) {c.title or c.video_id}"
+            print(head)
+            if c.deep_link:
+                print(f"      {c.deep_link}")
+    return 0
+
+
 def cmd_evolution(args, mv: Memovox) -> int:
     steps = mv.evolution(entity=args.entity, topic=args.topic)
     scope = f"entity {args.entity!r}" if args.entity else f"topic {args.topic!r}"
@@ -238,6 +265,11 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("contradictions", help="surface cross-corpus disagreements.")
     s.add_argument("--topic", help="restrict to a topic.")
     s.set_defaults(func=cmd_contradictions)
+
+    s = sub.add_parser("synthesize", help="corpus-level synthesis of a topic (consensus + disagreements).")
+    s.add_argument("topic", nargs="+")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(func=cmd_synthesize)
 
     s = sub.add_parser("evolution", help="trace how a claim/position changed over time.")
     g = s.add_mutually_exclusive_group(required=True)

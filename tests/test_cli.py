@@ -79,6 +79,14 @@ class TestCLI(unittest.TestCase):
             run(["--store", self.store, "evolution"])
         self.assertEqual(cm.exception.code, 2)
 
+    def test_synthesize_runs(self):
+        self._ingest()
+        code, out = run(["--store", self.store, "--llm", "none", "synthesize", "chunk", "size"])
+        self.assertEqual(code, 0)
+        # Single-source corpus: valid synthesis output, no crash.
+        code, out = run(["--store", self.store, "--llm", "none", "synthesize", "chunk", "--json"])
+        self.assertIn("consensus_points", out)
+
     def test_backends_runs(self):
         code, out = run(["--store", self.store, "backends"])
         self.assertEqual(code, 0)

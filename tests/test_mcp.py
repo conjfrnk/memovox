@@ -52,6 +52,16 @@ class TestMcp(unittest.TestCase):
         self.assertIn("citations", text)
         self.assertIn("abc123", text)
 
+    def test_tools_call_synthesize_topic(self):
+        resp = self.server.handle({
+            "jsonrpc": "2.0", "id": 7, "method": "tools/call",
+            "params": {"name": "synthesize_topic", "arguments": {"topic": "chunk size"}},
+        })
+        text = resp["result"]["content"][0]["text"]
+        # Real synthesis payload (not the old ask() shim): structured fields.
+        self.assertIn("consensus_points", text)
+        self.assertIn("contradictions", text)
+
     def test_unknown_method_errors(self):
         resp = self.server.handle({"jsonrpc": "2.0", "id": 9, "method": "bogus"})
         self.assertEqual(resp["error"]["code"], -32601)

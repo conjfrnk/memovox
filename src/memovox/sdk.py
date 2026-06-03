@@ -71,6 +71,14 @@ class Memovox:
                 store, nli=nli, topic=topic, threshold=self.settings.contradiction_threshold
             )
 
+    def synthesize(self, topic: str) -> augur.Synthesis:
+        """Corpus-level "literature review" of what the sources say about a topic
+        (consensus + disagreements), grounded and cited (spec §5)."""
+        with LoomStore(self.config) as store:
+            nli = get_nli(self.settings.nli_backend, config=self.config)
+            llm = get_llm(self.settings.llm_backend, config=self.config)
+            return augur.synthesize(store, topic, nli=nli, llm=llm, settings=self.settings)
+
     def evolution(self, *, entity: Optional[str] = None, topic: Optional[str] = None) -> List[dict]:
         """Trace how a claim/position about an entity or topic changed over time.
 
