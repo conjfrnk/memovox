@@ -8,6 +8,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
 from memovox.backends.embed import HashingEmbedder
 from memovox.config import Config
 from memovox.loom import Claim, LoomStore, Moment, Video
+from memovox.loom.models import STATUS_SUPERSEDED
 
 
 class LoomTestBase(unittest.TestCase):
@@ -110,6 +111,43 @@ class TestClaimsGraph(LoomTestBase):
         # idempotent: inserting the same edge again does not duplicate
         self.store.add_edge("spk_0", "STATES", "yt:abc#m0000.c00", video_id="yt:abc")
         self.assertEqual(len(self.store.neighbors("spk_0", rel="STATES")), 1)
+
+
+class TestClaimSupersede(LoomTestBase):
+    def test_supersede_versions_old_claim(self):
+        c_old = Claim(
+            claim_id="yt:abc#m0000.c00", moment_id="yt:abc#m0000", video_id="yt:abc",
+            text="the model has 100M parameters", t_start_s=0.0, t_end_s=30.0,
+        )
+        c_new = Claim(
+            claim_id="yt:abc#m0001.c00", moment_id="yt:abc#m0001", video_id="yt:abc",
+            text="the model has 200M parameters", t_start_s=30.0, t_end_s=60.0,
+        )
+        self.store.add_claim(c_old)
+        self.store.add_claim(c_new)
+
+        self.store.supersede_claim("yt:abc#m0000.c00", "yt:abc#m0001.c00")
+
+        # Old claim is versioned: status flipped + superseded_by points to new.
+        got_old = self.store.get_claim("yt:abc#m0000.c00")
+        self.assertIsNotNone(got_old)  # never deleted — still fetchable
+        self.assertEqual(got_old.status, STATUS_SUPERSEDED)
+        self.assertEqual(got_old.status, "superseded")
+        self.assertEqual(got_old.superseded_by, "yt:abc#m0001.c00")
+
+        # Superseded claim drops out of default (committed) queries.
+        vid_ids = [c.claim_id for c in self.store.claims_for_video("yt:abc")]
+        self.assertNotIn("yt:abc#m0000.c00", vid_ids)
+        self.assertIn("yt:abc#m0001.c00", vid_ids)
+
+        list_ids = [c.claim_id for c in self.store.list_claims()]
+        self.assertNotIn("yt:abc#m0000.c00", list_ids)
+        self.assertIn("yt:abc#m0001.c00", list_ids)
+
+        # New claim is untouched.
+        got_new = self.store.get_claim("yt:abc#m0001.c00")
+        self.assertEqual(got_new.status, "committed")
+        self.assertIsNone(got_new.superseded_by)
 
 
 class TestDeleteCascade(LoomTestBase):

@@ -22,6 +22,7 @@ from ..util import now_iso, tokenize
 from ..vectormath import cosine, norm, pack_floats, unpack_floats
 from .models import (
     STATUS_COMMITTED,
+    STATUS_SUPERSEDED,
     Claim,
     Entity,
     Moment,
@@ -320,6 +321,18 @@ class LoomStore:
             "SELECT * FROM claims WHERE moment_id = ? ORDER BY claim_id", (moment_id,)
         ).fetchall()
         return [_row_to_claim(r) for r in rows]
+
+    def supersede_claim(self, old_id: str, new_id: str) -> None:
+        """Mark ``old_id`` as superseded by ``new_id`` (versioned, never deleted).
+
+        The old claim is retained (still fetchable via get_claim) but its status
+        becomes 'superseded', so it drops out of default committed queries.
+        """
+        self.conn.execute(
+            "UPDATE claims SET status = ?, superseded_by = ? WHERE claim_id = ?",
+            (STATUS_SUPERSEDED, new_id, old_id),
+        )
+        self.conn.commit()
 
     def list_claims(self, *, status: Optional[str] = STATUS_COMMITTED, claim_type: Optional[str] = None) -> List[Claim]:
         sql = "SELECT * FROM claims WHERE 1=1"
