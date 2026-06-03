@@ -65,6 +65,11 @@ class Settings:
     top_k: int = 8
     contradiction_threshold: float = 0.55
 
+    # Loom — synthesis (Phase 3, spec §4.7)
+    topic_similarity: float = 0.5   # cosine floor to merge moments into one topic
+    topic_min_size: int = 1         # drop induced topics with fewer members
+    consensus_jaccard: float = 0.5  # content-token Jaccard floor to cluster equivalent claims
+
     @classmethod
     def from_env(cls, base: "Settings | None" = None) -> "Settings":
         data = asdict(base) if base else {}

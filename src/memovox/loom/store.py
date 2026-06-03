@@ -289,6 +289,30 @@ class LoomStore:
         ).fetchall()
         return [_row_to_moment(r) for r in rows]
 
+    def set_moment_topic(self, moment_id: str, topic_id: Optional[str]) -> None:
+        """Assign (or clear) a Moment's topic (topic induction, spec §4.7)."""
+        self.conn.execute(
+            "UPDATE moments SET topic_id = ? WHERE moment_id = ?", (topic_id, moment_id)
+        )
+        self.conn.commit()
+
+    def moments_for_topic(self, topic_id: str) -> List[Moment]:
+        rows = self.conn.execute(
+            "SELECT * FROM moments WHERE topic_id = ? ORDER BY video_id, idx", (topic_id,)
+        ).fetchall()
+        return [_row_to_moment(r) for r in rows]
+
+    def moment_vectors(self) -> List[Tuple[str, List[float]]]:
+        """All (moment_id, text vector) pairs, ordered by moment_id (deterministic).
+
+        The read side of topic induction / clustering — reuses the persisted dense
+        vectors so no re-embedding (or model) is needed on the free path.
+        """
+        rows = self.conn.execute(
+            "SELECT moment_id, vec FROM vectors ORDER BY moment_id"
+        ).fetchall()
+        return [(r["moment_id"], unpack_floats(r["vec"])) for r in rows]
+
     # -- claims ------------------------------------------------------------
 
     def add_claim(self, claim: Claim) -> None:
@@ -456,6 +480,16 @@ class LoomStore:
         )
         self.conn.commit()
 
+    def get_topic(self, topic_id: str) -> Optional[Topic]:
+        row = self.conn.execute(
+            "SELECT * FROM topics WHERE topic_id = ?", (topic_id,)
+        ).fetchone()
+        return _row_to_topic(row) if row else None
+
+    def list_topics(self) -> List[Topic]:
+        rows = self.conn.execute("SELECT * FROM topics ORDER BY topic_id").fetchall()
+        return [_row_to_topic(r) for r in rows]
+
     # -- graph -------------------------------------------------------------
 
     def add_edge(
@@ -614,6 +648,14 @@ def _row_to_speaker(r: sqlite3.Row) -> Speaker:
         voiceprint_ref=r["voiceprint_ref"],
         resolved_name=r["resolved_name"],
         canonical_id=r["canonical_id"],
+    )
+
+
+def _row_to_topic(r: sqlite3.Row) -> Topic:
+    return Topic(
+        topic_id=r["topic_id"],
+        label=r["label"],
+        moment_count=r["moment_count"] or 0,
     )
 
 
