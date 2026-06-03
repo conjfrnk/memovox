@@ -70,7 +70,24 @@ def ask(
 ) -> Answer:
     settings = settings or Settings()
     qp = plan_query(query)
-    fused = retrieve(store, query, embedder=embedder, settings=settings, video_id=video_id)
+    # Consume the plan: the strategy chooses the retrieval mode (and, below, the
+    # citation ordering) — it is NOT decorative. Only the contradiction route
+    # turns on the graph leg today, walking CONTRADICTS/SUPPORTS edges to surface
+    # the OTHER side of a disagreement (a moment that shares no query terms). We
+    # deliberately do NOT follow ELABORATES: it is emitted intra-moment only, so
+    # following it never reaches a new moment. hybrid/procedure/visual keep the
+    # dense+lexical baseline — which is what the (factual) eval queries route to,
+    # so the retrieval gates stay green.
+    use_graph = qp.strategy == "contradiction"
+    # SUPPORTS is included alongside CONTRADICTS on purpose: a contradiction
+    # answer can then surface both the disagreement AND corroborating context.
+    # The extractive synthesizer cites every surfaced moment neutrally (it does
+    # not editorialize the relation), so adding SUPPORTS only widens evidence.
+    graph_rels = ["CONTRADICTS", "SUPPORTS"] if use_graph else None
+    fused = retrieve(
+        store, query, embedder=embedder, settings=settings, video_id=video_id,
+        use_graph=use_graph, graph_rels=graph_rels,
+    )
     if not fused:
         return Answer(text=_LOW_EVIDENCE_MSG, citations=[], strategy=qp.strategy, low_evidence=True)
 
@@ -106,6 +123,20 @@ def ask(
                 score=round(score_by_id.get(moment.moment_id, 0.0), 6),
             )
         )
+
+    if qp.strategy == "temporal":
+        # Multi-hop temporal synthesis: order the cited moments chronologically by
+        # their video's published_at (ascending), missing dates last, then RE-INDEX
+        # so the [n] markers stay aligned with the new order. This must happen
+        # BEFORE synthesis, because the extractive synthesizer emits [c.index] and
+        # iterates citations in list order — both must reflect the temporal order.
+        def _published_at(c: Citation) -> str:
+            video = video_cache.get(c.video_id)
+            return (video.published_at or "") if video else ""
+
+        citations.sort(key=lambda c: (_published_at(c) == "", _published_at(c)))
+        for new_index, c in enumerate(citations, start=1):
+            c.index = new_index
 
     if llm is not None and getattr(llm, "is_generative", False):
         try:

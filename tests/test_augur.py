@@ -10,6 +10,7 @@ from memovox.augur import plan, rrf_fuse
 from memovox.backends.embed import HashingEmbedder
 from memovox.config import Config, Settings
 from memovox.loom import LoomStore, Moment, Video
+from memovox.loom.models import Claim
 
 
 class TestPlanner(unittest.TestCase):
@@ -67,6 +68,139 @@ class TestAsk(unittest.TestCase):
             self.assertTrue(ans.low_evidence)
             self.assertEqual(ans.citations, [])
             store2.close()
+
+
+class TestStrategyDrivenRetrieval(unittest.TestCase):
+    """The planner's strategy must change WHICH moments come back and HOW
+    citations are ordered — not just the decorative ``Answer.strategy`` label."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.config = Config(store=pathlib.Path(self._tmp.name) / "s").ensure()
+        self.store = LoomStore(self.config)
+        self.emb = HashingEmbedder(dim=256)
+
+    def tearDown(self):
+        self.store.close()
+        self._tmp.cleanup()
+
+    def _add_moment(self, mid, vid, t0, t1, text, idx):
+        m = Moment(mid, vid, t0, t1, text, "spk_0", index=idx)
+        self.store.add_moment(m, self.emb.embed_one(m.text_for_embedding()))
+        return m
+
+    def _build_contradiction_corpus(self):
+        """A two-sided contradiction plus enough unrelated distractors that B
+        falls OUTSIDE the dense+lexical baseline's top_k — so B can only re-enter
+        the result set via the graph leg following A's CONTRADICTS edge.
+
+        Moment A shares the query's scaling/compute terms; moment B shares NONE
+        of them (and isn't lexically/densely close enough to beat the
+        distractors); A and B carry claims joined by a CONTRADICTS edge.
+        """
+        self.store.upsert_video(Video("yt:va", "https://youtu.be/va", "Talk A"))
+        self.store.upsert_video(Video("yt:vb", "https://youtu.be/vb", "Talk B"))
+        self.store.upsert_video(Video("yt:vd", "https://youtu.be/vd", "Distractors"))
+        self._add_moment("yt:va#m0000", "yt:va", 10.0, 20.0,
+                         "what do they disagree about scaling laws and compute predictions", 0)
+        self._add_moment("yt:vb#m0000", "yt:vb", 30.0, 40.0,
+                         "totally orthogonal gardening botanical photosynthesis chlorophyll leaves", 0)
+        for i in range(5):
+            self._add_moment(f"yt:vd#m000{i}", "yt:vd", 100.0 + i * 10, 110.0 + i * 10,
+                             f"cooking recipes for soup number {i} unrelated kitchen", i)
+        cA = Claim("yt:va#m0000#c0", "yt:va#m0000", "yt:va",
+                   "Scaling laws hold predictably.", t_start_s=10.0)
+        cB = Claim("yt:vb#m0000#c0", "yt:vb#m0000", "yt:vb",
+                   "Empirical curves bend sharply near the frontier.", t_start_s=30.0)
+        self.store.add_claim(cA)
+        self.store.add_claim(cB)
+        self.store.add_edge(cA.claim_id, "CONTRADICTS", cB.claim_id,
+                            src_type="Claim", dst_type="Claim")
+
+    # -- contradiction routing -------------------------------------------- #
+
+    def test_contradiction_routes_through_graph_and_cites_both_sides(self):
+        self._build_contradiction_corpus()
+        ans = augur.ask(self.store, "what do they disagree about scaling?",
+                        embedder=self.emb, settings=Settings(top_k=5))
+        self.assertEqual(ans.strategy, "contradiction")
+        cited = {c.moment_id for c in ans.citations}
+        # Both sides of the CONTRADICTS edge are cited: A via lexical/dense, B
+        # ONLY reachable through the graph leg (it's outside the baseline top_k).
+        self.assertIn("yt:va#m0000", cited)
+        self.assertIn("yt:vb#m0000", cited)
+
+    def test_graph_leg_is_strategy_gated_not_always_on(self):
+        # SAME store/edge, but a hybrid (non-contradiction) query that retrieves A
+        # must NOT surface B — proving the graph leg is gated on the contradiction
+        # strategy, not always on. The SAME store yields DIFFERENT moments
+        # depending on the planner's strategy.
+        self._build_contradiction_corpus()
+        ans = augur.ask(self.store, "tell me about scaling laws and compute predictions",
+                        embedder=self.emb, settings=Settings(top_k=5))
+        self.assertEqual(ans.strategy, "hybrid")
+        cited = {c.moment_id for c in ans.citations}
+        self.assertIn("yt:va#m0000", cited)
+        self.assertNotIn("yt:vb#m0000", cited)
+
+    # -- temporal ordering ------------------------------------------------ #
+
+    def test_temporal_orders_citations_by_published_at(self):
+        # Three videos with DISTINCT published_at, inserted out of chronological
+        # order so a stable sort can't accidentally produce the right order.
+        chrono = [
+            ("yt:v2020", "2020-01-01", 50.0),
+            ("yt:v2018", "2018-01-01", 50.0),
+            ("yt:v2022", "2022-01-01", 50.0),
+        ]
+        for vid, pub, t0 in chrono:
+            self.store.upsert_video(Video(vid, f"https://youtu.be/{vid[3:]}",
+                                          f"Talk {vid}", published_at=pub))
+            self._add_moment(f"{vid}#m0000", vid, t0, t0 + 10.0,
+                             "The recommended approach changed considerably this year.", 0)
+
+        ans = augur.ask(self.store, "how did the recommended approach change over time?",
+                        embedder=self.emb, settings=Settings(top_k=5))
+        self.assertEqual(ans.strategy, "temporal")
+        # Citations ordered ascending by published_at: 2018, 2020, 2022.
+        order = [c.video_id for c in ans.citations]
+        self.assertEqual(order, ["yt:v2018", "yt:v2020", "yt:v2022"])
+        # Indices are re-assigned 1..n in the temporal order.
+        self.assertEqual([c.index for c in ans.citations], list(range(1, len(order) + 1)))
+        # Synthesis still cites every retrieved citation in the new order.
+        for c in ans.citations:
+            self.assertIn(f"[{c.index}]", ans.text)
+
+    def test_temporal_missing_published_at_sorts_last(self):
+        # Pins the missing-last branch of the sort key (`_published_at(c) == ""`):
+        # a video with published_at=None must sort AFTER all dated videos while the
+        # dated ones stay in ascending order, with c.index 1..n over the full set.
+        dated = [
+            ("yt:v2020", "2020-01-01", 50.0),
+            ("yt:v2018", "2018-01-01", 50.0),
+            ("yt:v2022", "2022-01-01", 50.0),
+        ]
+        for vid, pub, t0 in dated:
+            self.store.upsert_video(Video(vid, f"https://youtu.be/{vid[3:]}",
+                                          f"Talk {vid}", published_at=pub))
+            self._add_moment(f"{vid}#m0000", vid, t0, t0 + 10.0,
+                             "The recommended approach changed considerably this year.", 0)
+        # 4th video with NO publish date.
+        self.store.upsert_video(Video("yt:vnone", "https://youtu.be/vnone",
+                                      "Talk undated", published_at=None))
+        self._add_moment("yt:vnone#m0000", "yt:vnone", 50.0, 60.0,
+                         "The recommended approach changed considerably this year.", 0)
+
+        ans = augur.ask(self.store, "how did the recommended approach change over time?",
+                        embedder=self.emb, settings=Settings(top_k=5))
+        self.assertEqual(ans.strategy, "temporal")
+        order = [c.video_id for c in ans.citations]
+        # All four moments retrieved; dated ones ascending, undated one LAST.
+        self.assertEqual(order, ["yt:v2018", "yt:v2020", "yt:v2022", "yt:vnone"])
+        # Indices re-assigned 1..n across the full set (including the undated one).
+        self.assertEqual([c.index for c in ans.citations], list(range(1, len(order) + 1)))
+        for c in ans.citations:
+            self.assertIn(f"[{c.index}]", ans.text)
 
 
 if __name__ == "__main__":
