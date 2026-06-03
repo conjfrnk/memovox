@@ -1,0 +1,25 @@
+WEBVTT
+
+00:00:01.000 --> 00:00:10.000
+<v Dr. Lee>Welcome back. Today we revisit scaling laws with some new evidence.
+
+00:00:10.000 --> 00:00:19.000
+<v Prof. Kim>I want to push back on the optimism from the earlier talk.
+
+00:00:19.000 --> 00:00:23.000
+[applause]
+
+00:00:23.000 --> 00:00:33.000
+<v Prof. Kim>The Chinchilla recipe is useful, but it does not capture data quality effects.
+
+00:00:33.000 --> 00:00:43.000
+<v Dr. Lee>The Llama family of models reused the Chinchilla token ratio with strong results.
+
+00:00:43.000 --> 00:00:53.000
+<v Prof. Kim>Scaling laws will not hold beyond current compute budgets; they break down.
+
+00:00:53.000 --> 00:01:03.000
+<v Prof. Kim>Past a certain scale, data runs out and the predictable gains simply stop.
+
+00:01:03.000 --> 00:01:13.000
+<v Dr. Lee>Either way, the Llama results show that token ratio still matters a great deal.

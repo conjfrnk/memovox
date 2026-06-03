@@ -1,0 +1,7 @@
+{
+  "identities": {
+    "talk_a:Dr. Lee": "person:lee",
+    "talk_b:Dr. Lee": "person:lee",
+    "talk_b:Prof. Kim": "person:kim"
+  }
+}

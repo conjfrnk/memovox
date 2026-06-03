@@ -1,0 +1,7 @@
+{
+  "canonical": ["Transformer", "Chinchilla", "Llama"],
+  "mentions": {
+    "talk_a": ["Transformer", "Chinchilla"],
+    "talk_b": ["Chinchilla", "Llama"]
+  }
+}

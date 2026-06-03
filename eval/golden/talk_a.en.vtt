@@ -1,0 +1,25 @@
+WEBVTT
+
+00:00:02.000 --> 00:00:11.000
+<v Dr. Lee>Welcome everyone. Today we discuss scaling laws for large language models.
+
+00:00:11.000 --> 00:00:20.000
+<v Dr. Lee>The Transformer architecture remains the foundation of every modern language model.
+
+00:00:20.000 --> 00:00:24.000
+[applause]
+
+00:00:24.000 --> 00:00:34.000
+<v Dr. Lee>The Chinchilla study showed that training tokens and model size should grow together.
+
+00:00:34.000 --> 00:00:44.000
+<v Dr. Lee>Chinchilla was trained on far more tokens than earlier models of the same size.
+
+00:00:44.000 --> 00:00:54.000
+<v Dr. Lee>In our experiments, the optimal context length for retrieval was 512 tokens.
+
+00:00:54.000 --> 00:01:04.000
+<v Dr. Lee>Scaling laws will continue to hold beyond current compute budgets.
+
+00:01:04.000 --> 00:01:14.000
+<v Dr. Lee>So my advice is simple. Keep scaling compute, and the loss will keep falling.

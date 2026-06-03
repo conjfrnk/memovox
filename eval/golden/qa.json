@@ -1,0 +1,27 @@
+[
+  {
+    "q": "What is the foundational architecture for modern language models according to talk_a?",
+    "relevant_moment_substrings": ["The Transformer architecture remains the foundation"],
+    "answer_substrings": ["Transformer architecture remains the foundation of every modern language model"]
+  },
+  {
+    "q": "What did the Chinchilla study show about training tokens and model size?",
+    "relevant_moment_substrings": ["The Chinchilla study showed that training tokens and model size"],
+    "answer_substrings": ["training tokens and model size should grow together"]
+  },
+  {
+    "q": "What was the optimal context length for retrieval in the experiments?",
+    "relevant_moment_substrings": ["the optimal context length for retrieval was 512 tokens"],
+    "answer_substrings": ["the optimal context length for retrieval was 512 tokens"]
+  },
+  {
+    "q": "Which model family reused the Chinchilla token ratio?",
+    "relevant_moment_substrings": ["The Llama family of models reused the Chinchilla token ratio"],
+    "answer_substrings": ["The Llama family of models reused the Chinchilla token ratio with strong results"]
+  },
+  {
+    "q": "Why might scaling laws stop being predictable beyond a certain scale?",
+    "relevant_moment_substrings": ["Past a certain scale, data runs out"],
+    "answer_substrings": ["data runs out and the predictable gains simply stop"]
+  }
+]
