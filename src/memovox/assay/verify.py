@@ -12,7 +12,13 @@ from ..loom.models import STATUS_COMMITTED, STATUS_UNSUPPORTED, Claim
 
 
 def verify_claim(nli: NLIBackend, claim: Claim, source_text: str, *, threshold: float) -> Claim:
-    """Set ``entailment_score`` and ``status`` for one claim against its source."""
+    """Set ``entailment_score`` and ``status`` for one claim against its source.
+
+    ``source_text`` is the premise the claim is entailment-checked against. The
+    caller (``assay.run``) passes the text of the claim's OWN located span (W1.2)
+    so the gate has teeth: a claim whose content tokens are absent from its span
+    scores low containment and is marked ``unsupported`` rather than committed.
+    """
     result = nli.classify(source_text, claim.text)
     claim.entailment_score = round(result.entail, 4)
     if result.label == "contradiction":

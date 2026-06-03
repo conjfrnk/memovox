@@ -40,3 +40,20 @@ def locate_span(sentence, segments, *, default=None) -> Optional[Tuple[float, fl
         if ov > best_ov:
             best, best_ov = (t0, t1), ov
     return best if best_ov >= 0.5 else default
+
+
+def span_text(segments, t_start_s, t_end_s) -> str:
+    """Source text of the segments overlapping ``[t_start_s, t_end_s]``.
+
+    Used by Assay's verification gate to build a claim's premise from *only* its
+    own located span (W1.2) rather than the whole Moment — so a hallucinated
+    claim, whose tokens appear nowhere in its span, is rejected.
+
+    Strict overlap (``s0 < t_end and s1 > t_start``) avoids pulling in a
+    boundary-touching neighbour. Items are unpacked as ``(t0, t1, text)`` so it
+    works for both ``SegmentRef`` and plain 3-tuples. Returns ``""`` when there
+    are no segments (e.g. a store-reloaded Moment), letting callers fall back to
+    the whole-Moment text and preserve legacy behaviour.
+    """
+    parts = [text for (s0, s1, text) in segments if s0 < t_end_s and s1 > t_start_s]
+    return " ".join(p.strip() for p in parts if p and p.strip()).strip()

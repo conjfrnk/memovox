@@ -7,6 +7,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
 from memovox import assay
 from memovox.assay.claims import epistemic_type, extract_claims
 from memovox.assay.verify import verify_claim
+from memovox.backends.base import LLMBackend
 from memovox.backends.nli import LexicalNLI
 from memovox.config import Settings
 from memovox.loom.models import Claim, Moment, SegmentRef
@@ -103,6 +104,58 @@ class TestVerification(unittest.TestCase):
         self.assertTrue(claims)
         self.assertTrue(all(c.status == "committed" for c in claims))
         self.assertTrue(all(c.entailment_score >= 0.5 for c in claims))
+
+
+class _HallucinatingLLM(LLMBackend):
+    """Emits one verbatim-from-span claim and one fabricated claim."""
+
+    is_generative = True
+
+    def complete(self, prompt, **kw):
+        return ('[{"text":"The chain rule is central.","type":"FACT"},'
+                ' {"text":"Quantum tunneling powers the optimizer.","type":"FACT"}]')
+
+
+class _ScatterLLM(LLMBackend):
+    """Emits a verbatim claim from segment A, plus a fabricated claim that splices
+    segment A's subject onto segment B's predicate — every token exists in the
+    Moment but the splice is false within either span."""
+
+    is_generative = True
+
+    def complete(self, prompt, **kw):
+        return ('[{"text":"The chain rule is central to backprop.","type":"FACT"},'
+                ' {"text":"The chain rule exhibits quantum tunneling.","type":"FACT"}]')
+
+
+class TestGateRejectsHallucination(unittest.TestCase):
+    def test_gate_rejects_unsupported_llm_claim(self):
+        m = Moment("v#m0", "v", 0, 12, "The chain rule is central.",
+                   segments=[SegmentRef(0, 12, "The chain rule is central.")])
+        claims = assay.run(m, nli=LexicalNLI(), llm=_HallucinatingLLM())
+        by_text = {c.text: c.status for c in claims}
+        self.assertEqual(by_text["The chain rule is central."], "committed")
+        self.assertEqual(by_text["Quantum tunneling powers the optimizer."], "unsupported")
+
+    def test_gate_rejects_hallucination_when_tokens_scatter_across_other_spans(self):
+        # The fix's teeth: the whole-Moment text scatters tokens of a fabricated
+        # claim across OTHER segments, so the LEGACY whole-Moment premise overlaps
+        # ~1.0 and wrongly COMMITS it. The real claim localizes (W1.2) to a
+        # segment that does NOT contain the fabricated claim's discriminating
+        # tokens, so verifying against that own span rejects it. This test FAILS
+        # under the old whole-Moment premise and PASSES under per-span verify.
+        segs = [
+            SegmentRef(0, 4, "The chain rule is central to backprop."),
+            SegmentRef(4, 8, "Photons exhibit quantum tunneling in barriers."),
+        ]
+        transcript = " ".join(s.text for s in segs)
+        m = Moment("v#m1", "v", 0, 8, transcript, segments=segs)
+        claims = assay.run(m, nli=LexicalNLI(), llm=_ScatterLLM())
+        by_text = {c.text: c.status for c in claims}
+        self.assertEqual(by_text["The chain rule is central to backprop."], "committed")
+        self.assertEqual(
+            by_text["The chain rule exhibits quantum tunneling."], "unsupported"
+        )
 
 
 if __name__ == "__main__":

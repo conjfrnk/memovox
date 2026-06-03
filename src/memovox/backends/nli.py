@@ -4,7 +4,10 @@ Default: a dependency-free **lexical entailment** estimator — measures how muc
 of the hypothesis's content is contained in the premise, with a negation-flip
 heuristic for contradiction. Because Assay extracts claims *from* their source
 span, genuine claims score high containment and pass the gate, while
-hallucinated content would not. Optional upgrade: a transformers DeBERTa-NLI model.
+hallucinated content would not. Limitation: it scores token-set overlap, so a
+high-overlap RECOMBINATION (a hypothesis reusing ≥50% of its span's content
+tokens in a false arrangement) can still pass the gate; the optional DeBERTa-NLI
+backend below tightens this. Optional upgrade: a transformers DeBERTa-NLI model.
 """
 
 from __future__ import annotations
