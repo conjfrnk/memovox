@@ -1,0 +1,48 @@
+name: CI
+
+# Hermetic gate: tests + eval thresholds must pass. Installing only `.[dev]`
+# (no asr/embed/nli/vision extras) means the backend factories resolve to the
+# FREE stdlib fallbacks, so the suite and the harness run offline with no
+# network and no API keys. Both commands run from the repo root (default
+# working-directory) so they find `src/` and `eval/`.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    name: tests + eval (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Check both ends of the supported range: the requires-python>=3.9
+        # floor and a current release. Two versions keeps it lightweight while
+        # guarding against accidental use of newer-than-3.9 syntax.
+        python-version: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install (dev extras only — keeps the backends on free fallbacks)
+        run: pip install -e '.[dev]'
+
+      # Non-blocking lint, matching the repo's `make lint` convention.
+      - name: Lint (non-blocking)
+        run: ruff check . || true
+
+      - name: Run hermetic test suite
+        run: pytest -q
+
+      - name: Assert eval thresholds
+        run: python -m eval.harness --assert-thresholds
