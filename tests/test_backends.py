@@ -66,13 +66,26 @@ class TestLexicalNLI(unittest.TestCase):
 
 
 class TestRegistry(unittest.TestCase):
-    def test_auto_embedder_is_available(self):
+    def test_auto_embedder_resolves_to_available_backend(self):
+        # "auto" resolves by is_available() (package presence); reading .name
+        # checks the chosen backend without loading/downloading a model.
         emb = get_embedder("auto")
-        self.assertTrue(emb.embed(["a", "b"]))
+        self.assertIn(emb.name, {"hashing", "sentence-transformers"})
+        # The free fallback is importable and usable offline at the real dim.
+        free = get_embedder("hashing")
+        self.assertEqual(free.name, "hashing")
+        self.assertEqual(len(free.embed_one("x")), 256)
 
-    def test_auto_nli_is_available(self):
+    def test_auto_nli_resolves_to_available_backend(self):
+        # "auto" resolves by is_available() (package presence); reading .name
+        # checks the chosen backend without loading/downloading a model.
         nli = get_nli("auto")
-        self.assertIsNotNone(nli.classify("a b c", "a b"))
+        self.assertIn(nli.name, {"lexical", "deberta-nli"})
+        # The free fallback is importable and produces a valid label offline.
+        free = get_nli("lexical")
+        self.assertEqual(free.name, "lexical")
+        res = free.classify("a b c", "a b")
+        self.assertIn(res.label, {"entailment", "neutral", "contradiction"})
 
     def test_status_shape(self):
         status = backend_status()
