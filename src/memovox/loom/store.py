@@ -307,6 +307,16 @@ class LoomStore:
         row = self.conn.execute("SELECT * FROM claims WHERE claim_id = ?", (claim_id,)).fetchone()
         return _row_to_claim(row) if row else None
 
+    def get_claims(self, claim_ids: Sequence[str]) -> List[Claim]:
+        if not claim_ids:
+            return []
+        placeholders = ",".join("?" for _ in claim_ids)
+        rows = self.conn.execute(
+            f"SELECT * FROM claims WHERE claim_id IN ({placeholders})", tuple(claim_ids)
+        ).fetchall()
+        by_id = {r["claim_id"]: _row_to_claim(r) for r in rows}
+        return [by_id[c] for c in claim_ids if c in by_id]
+
     def claims_for_video(self, video_id: str, *, status: Optional[str] = STATUS_COMMITTED) -> List[Claim]:
         sql = "SELECT * FROM claims WHERE video_id = ?"
         params: List[object] = [video_id]
@@ -362,13 +372,44 @@ class LoomStore:
         return Speaker(row["speaker_id"], row["label"], row["voiceprint_ref"], row["resolved_name"])
 
     def upsert_entity(self, entity: Entity) -> None:
-        self.conn.execute(
-            "INSERT OR REPLACE INTO entities (entity_id, canonical_name, type, wikidata_qid, aliases) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (entity.entity_id, entity.canonical_name, entity.type, entity.wikidata_qid,
-             json.dumps(entity.aliases or [])),
-        )
+        # UPSERT (not INSERT OR REPLACE): re-inserting an entity that already
+        # exists must UPDATE the row IN PLACE. INSERT OR REPLACE would DELETE the
+        # old row first, and the mentions table's ``entity_id ... ON DELETE
+        # CASCADE`` FK would then wipe every mention already linked to it — so the
+        # second video to mention a shared entity would orphan the first video's
+        # link. Merge aliases so the surface-form list accumulates across videos.
+        existing = self.get_entity(entity.entity_id)
+        if existing is not None:
+            merged = list(existing.aliases)
+            for alias in entity.aliases or []:
+                if alias not in merged:
+                    merged.append(alias)
+            canonical = existing.canonical_name or entity.canonical_name
+            etype = entity.type or existing.type
+            qid = entity.wikidata_qid or existing.wikidata_qid
+            self.conn.execute(
+                "UPDATE entities SET canonical_name = ?, type = ?, wikidata_qid = ?, "
+                "aliases = ? WHERE entity_id = ?",
+                (canonical, etype, qid, json.dumps(merged), entity.entity_id),
+            )
+        else:
+            self.conn.execute(
+                "INSERT INTO entities (entity_id, canonical_name, type, wikidata_qid, aliases) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (entity.entity_id, entity.canonical_name, entity.type, entity.wikidata_qid,
+                 json.dumps(entity.aliases or [])),
+            )
         self.conn.commit()
+
+    def get_entity(self, entity_id: str) -> Optional[Entity]:
+        row = self.conn.execute(
+            "SELECT * FROM entities WHERE entity_id = ?", (entity_id,)
+        ).fetchone()
+        return _row_to_entity(row) if row else None
+
+    def list_entities(self) -> List[Entity]:
+        rows = self.conn.execute("SELECT * FROM entities ORDER BY entity_id").fetchall()
+        return [_row_to_entity(r) for r in rows]
 
     def link_mention(self, claim_id: str, entity_id: str) -> None:
         self.conn.execute(
@@ -532,6 +573,16 @@ def _row_to_claim(r: sqlite3.Row) -> Claim:
         status=r["status"], superseded_by=r["superseded_by"], t_start_s=r["t_start_s"],
         t_end_s=r["t_end_s"], speaker_id=r["speaker_id"],
         qualifiers=json.loads(r["qualifiers"] or "{}"),
+    )
+
+
+def _row_to_entity(r: sqlite3.Row) -> Entity:
+    return Entity(
+        entity_id=r["entity_id"],
+        canonical_name=r["canonical_name"],
+        type=r["type"] or "concept",
+        wikidata_qid=r["wikidata_qid"],
+        aliases=json.loads(r["aliases"] or "[]"),
     )
 
 

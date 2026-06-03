@@ -17,6 +17,7 @@ import unittest
 from eval.harness import (
     _answer_groundedness,
     _check_thresholds,
+    _entity_clusters,
     clustering_f1,
     contradiction_pr,
     groundedness,
@@ -216,6 +217,55 @@ class TestAnswerGroundedness(unittest.TestCase):
         self.assertEqual(_answer_groundedness(ans, _StubNLI(), store=None, threshold=0.5), 0.0)
 
 
+class TestEntityF1ReadsPersistence(unittest.TestCase):
+    """entity_f1 must score the PERSISTED graph, not re-derive it.
+
+    Proves the regression-guard property: when entity resolution did NOT run
+    (no entities/mentions persisted), every gold atom collapses to a singleton
+    and ``entity_f1`` is 0.0 — so a broken/no-op ``resolve_entities`` cannot
+    falsely pass the metric.
+    """
+
+    class _StubIngested:
+        def __init__(self, mv):
+            self.mv = mv
+            self.logical_to_store = {"talk_a": "yt:a", "talk_b": "yt:b"}
+            self.store_to_logical = {"yt:a": "talk_a", "yt:b": "talk_b"}
+
+    def test_unresolved_store_scores_zero(self):
+        import pathlib
+        import sys
+        import tempfile
+
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
+        from memovox.config import Config
+        from memovox.loom import LoomStore
+
+        gold_entities = {
+            "canonical": ["Transformer", "Chinchilla", "Llama"],
+            "mentions": {
+                "talk_a": ["Transformer", "Chinchilla"],
+                "talk_b": ["Chinchilla", "Llama"],
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Config(store=pathlib.Path(tmp) / "store").ensure()
+            # Create the schema (empty store: no entities, no mentions) then close.
+            LoomStore(config).close()
+
+            class _FakeMv:
+                pass
+
+            mv = _FakeMv()
+            mv.config = config
+            ing = self._StubIngested(mv)
+
+            pred, gold = _entity_clusters(ing, gold_entities)
+            # Gold has the cross-talk Chinchilla pair; pred has only singletons.
+            _, _, f1 = clustering_f1(pred, gold)
+            self.assertEqual(f1, 0.0)
+
+
 class TestThresholdGates(unittest.TestCase):
     def _report(self, hit_rate_v, groundedness_v, contradiction_f1):
         return {
@@ -286,6 +336,13 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         self.assertIsInstance(self.report["entity_f1"], float)
         self.assertIsInstance(self.report["der"], float)
         self.assertIsInstance(self.report["contradiction"]["f1"], float)
+
+    def test_entity_f1_moves_after_resolution(self):
+        # W2.3: cross-corpus entity resolution unifies the shared golden entity
+        # ('Chinchilla', in both talks) into one node spanning both videos, so
+        # entity_f1 is now a real cross-video same-cluster signal > 0.
+        # Informational only — entity_f1 stays UNGATED in --assert-thresholds.
+        self.assertGreater(self.report["entity_f1"], 0.0)
 
 
 if __name__ == "__main__":  # pragma: no cover

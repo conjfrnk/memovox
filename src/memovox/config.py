@@ -34,6 +34,7 @@ class Settings:
     llm_backend: str = "auto"
     vlm_backend: str = "auto"
     ocr_backend: str = "auto"
+    entity_backend: str = "auto"
 
     embed_dim: int = 256  # dimensionality of the hashing fallback embedder
 

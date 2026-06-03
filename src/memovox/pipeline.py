@@ -11,11 +11,12 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from . import assay, escapement, stentor, tessera
-from .backends import get_embedder, get_llm, get_nli
+from .backends import get_embedder, get_entity_linker, get_llm, get_nli
 from .config import PIPELINE_VERSION, Config, Settings
 from .loom import Claim, LoomStore, Speaker, Video
 from .loom.digest import render_digest
 from .loom.models import STATUS_COMMITTED
+from .loom.resolve import resolve_entities
 from .util import make_video_id, slugify
 
 
@@ -152,6 +153,13 @@ def ingest(
                                        src_type="Claim", dst_type="Speaker", video_id=video_id)
                 else:
                     unsupported += 1
+
+        # --- Loom: cross-corpus entity resolution (spec §4.6) -----------
+        # Canonicalize each committed claim's mentions into Entity nodes +
+        # provenanced MENTIONS edges, so the SAME entity across videos is ONE
+        # node. resolve_entities filters to committed claims internally.
+        linker = get_entity_linker(settings.entity_backend, config=config)
+        resolve_entities(store, all_claims, linker=linker)
 
         # --- human-readable digest --------------------------------------
         digest = render_digest(video, moments, all_claims)

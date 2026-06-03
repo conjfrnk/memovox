@@ -64,6 +64,7 @@ _FREE_BACKENDS = dict(
     llm_backend="none",
     vlm_backend="none",
     ocr_backend="none",
+    entity_backend="none",
 )
 
 # Default retrieval cutoff for hit_rate / nDCG.
@@ -339,59 +340,72 @@ def _retrieval_and_groundedness(ing: _Ingested, qa: List[dict], nli, *,
 
 
 def _entity_clusters(ing: _Ingested, gold_entities: dict):
-    """Gold + predicted entity clusters (members are per-video mention keys
-    ``"<logical_video_id>:<surface_form>"``).
+    """Gold + predicted entity clusters over a SHARED atom universe.
 
+    Each atom is a per-video mention key ``"<logical_video_id>:<surface_form>"``.
     Keying mentions per video — parallel to speaker identities — is what makes
     this metric actually move: the gold groups each canonical entity's mentions
     *across* talks, so the shared entity ``Chinchilla`` (in both talks) forms a
     real cross-video same-cluster pair that cross-corpus entity resolution
     (W2.3) must recover, while ``Transformer``/``Llama`` (one talk each) stay
-    singletons. Predicted clusters come from the store's resolved entity ->
-    mention links if present; today the entities table is empty -> 0.0.
+    singletons.
+
+    For the pairwise F1 to be meaningful, GOLD and PRED must score the SAME atom
+    set. We therefore (a) build the gold clusters from ``entities.json`` and
+    (b) derive the prediction BY READING THE PERSISTED GRAPH — never by
+    re-running resolution. This is what makes the metric a real regression guard:
+    if :func:`resolve_entities` is broken or a no-op (or the cascade-delete bug
+    re-appears and orphans a mention), the lookups below FAIL and the affected
+    atoms collapse to singletons, so ``entity_f1`` drops.
+
+    For each gold atom ``"<logical>:<surface>"`` we compute the expected
+    deterministic id ``"ent:"+slugify(surface)`` (the offline NullLinker the free
+    stack pins) and then VERIFY it against persistence: the atom maps to that
+    ``entity_id`` only if ``get_entity`` finds the node AND ``entity_mentions``
+    lists a claim whose ``video_id`` is the store id for that logical video.
+    Otherwise the atom gets a UNIQUE singleton label so it cannot share a cluster.
+    Atoms outside the gold universe never enter either side.
     """
     from collections import defaultdict
 
     from memovox.loom.store import LoomStore
+    from memovox.util import slugify
 
-    # Gold: group per-video mention keys by canonical name.
+    # Gold: group per-video mention keys by canonical surface form.
     mentions = gold_entities.get("mentions", {})  # {logical_id: [surface, ...]}
     by_canonical: Dict[str, Set[str]] = defaultdict(set)
+    gold_atoms: List[Tuple[str, str, str]] = []  # (atom, logical_id, surface)
     for logical_id, surfaces in mentions.items():
         for surface in surfaces:
-            by_canonical[surface].add(f"{logical_id}:{surface}")
+            atom = f"{logical_id}:{surface}"
+            by_canonical[surface].add(atom)
+            gold_atoms.append((atom, logical_id, surface))
     gold_clusters = [members for members in by_canonical.values()]
 
-    # Predicted: from the store's resolved entities + their claim mentions,
-    # translated to the same per-video mention-key space (best-effort).
-    #
-    # We catch ONLY sqlite3.OperationalError — the genuine "no such table/column"
-    # signal that the entity-resolution schema isn't present yet — and emit a
-    # warning so a legitimately-absent feature (-> 0.0) is VISIBLE and distinct
-    # from a "0 rows" result. Every other error (e.g. a real resolution bug once
-    # W2.3 lands) propagates so the eval can't falsely pass.
+    # Predicted: label each gold atom by the entity the pipeline PERSISTED for it.
+    # Read-only — we never call resolve_entities/extract_mentions here. Catch only
+    # sqlite3.OperationalError (a genuinely-absent schema -> 0.0); real errors
+    # surface so a resolution bug can't falsely pass.
     pred_groups: Dict[str, Set[str]] = defaultdict(set)
     with LoomStore(ing.mv.config) as store:
         try:
-            ent_rows = store.conn.execute(
-                "SELECT entity_id, canonical_name FROM entities"
-            ).fetchall()
+            store.conn.execute("SELECT entity_id FROM entities LIMIT 1").fetchone()
         except sqlite3.OperationalError as exc:
             warnings.warn(
                 f"entity_f1: entities table unavailable ({exc}); scoring 0.0",
                 stacklevel=2,
             )
-            ent_rows = []
-        for er in ent_rows:
-            entity_id = er["entity_id"]
-            surface = er["canonical_name"]
-            claim_ids = store.entity_mentions(entity_id)
-            for cid in claim_ids:
-                claim = store.get_claim(cid)
-                if not claim:
-                    continue
-                logical = ing.store_to_logical.get(claim.video_id, claim.video_id)
-                pred_groups[entity_id].add(f"{logical}:{surface}")
+            return [], gold_clusters
+        for atom, logical_id, surface in gold_atoms:
+            expected_id = f"ent:{slugify(surface)}"
+            store_vid = ing.logical_to_store.get(logical_id)
+            label = f"__unresolved__:{atom}"  # singleton unless persistence agrees
+            if store_vid is not None and store.get_entity(expected_id) is not None:
+                claim_ids = store.entity_mentions(expected_id)
+                claims = store.get_claims(claim_ids)
+                if any(c.video_id == store_vid for c in claims):
+                    label = expected_id
+            pred_groups[label].add(atom)
     pred_clusters = [members for members in pred_groups.values() if members]
     return pred_clusters, gold_clusters
 

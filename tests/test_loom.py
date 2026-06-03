@@ -7,7 +7,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
 
 from memovox.backends.embed import HashingEmbedder
 from memovox.config import Config
-from memovox.loom import Claim, LoomStore, Moment, Video
+from memovox.loom import Claim, Entity, LoomStore, Moment, Video
 from memovox.loom.models import STATUS_SUPERSEDED
 
 
@@ -148,6 +148,49 @@ class TestClaimSupersede(LoomTestBase):
         got_new = self.store.get_claim("yt:abc#m0001.c00")
         self.assertEqual(got_new.status, "committed")
         self.assertIsNone(got_new.superseded_by)
+
+
+class TestEntities(LoomTestBase):
+    def test_entity_roundtrip(self):
+        ent = Entity(entity_id="ent:transformer", canonical_name="Transformer",
+                     type="concept", wikidata_qid="Q1", aliases=["Transformer"])
+        self.store.upsert_entity(ent)
+        got = self.store.get_entity("ent:transformer")
+        self.assertEqual(got.canonical_name, "Transformer")
+        self.assertEqual(got.type, "concept")
+        self.assertEqual(got.wikidata_qid, "Q1")
+        self.assertEqual(got.aliases, ["Transformer"])
+        self.assertIsNone(self.store.get_entity("ent:missing"))
+
+    def test_list_entities(self):
+        self.store.upsert_entity(Entity("ent:b", "Beta"))
+        self.store.upsert_entity(Entity("ent:a", "Alpha"))
+        ids = [e.entity_id for e in self.store.list_entities()]
+        self.assertEqual(ids, ["ent:a", "ent:b"])  # ORDER BY entity_id
+
+    def test_upsert_entity_merges_aliases_and_preserves_mentions(self):
+        # Re-upserting a shared entity must NOT cascade-delete existing mentions
+        # (the W2.3 cross-video unification bug) and SHOULD accumulate aliases.
+        self.store.add_claim(Claim("yt:abc#m0000.c00", "yt:abc#m0000", "yt:abc", "x"))
+        self.store.upsert_entity(Entity("ent:x", "X", aliases=["X"]))
+        self.store.link_mention("yt:abc#m0000.c00", "ent:x")
+        self.store.upsert_entity(Entity("ent:x", "X", aliases=["Xs"]))
+        self.assertEqual(self.store.entity_mentions("ent:x"), ["yt:abc#m0000.c00"])
+        self.assertEqual(self.store.get_entity("ent:x").aliases, ["X", "Xs"])
+
+
+class TestGetClaims(LoomTestBase):
+    def test_get_claims_batch_roundtrip(self):
+        c0 = Claim("yt:abc#m0000.c00", "yt:abc#m0000", "yt:abc", "first claim")
+        c1 = Claim("yt:abc#m0001.c00", "yt:abc#m0001", "yt:abc", "second claim")
+        self.store.add_claim(c0)
+        self.store.add_claim(c1)
+        got = self.store.get_claims(["yt:abc#m0001.c00", "yt:abc#m0000.c00"])
+        # Order follows the requested id order; missing ids are skipped.
+        self.assertEqual([c.claim_id for c in got],
+                         ["yt:abc#m0001.c00", "yt:abc#m0000.c00"])
+        self.assertEqual(self.store.get_claims([]), [])
+        self.assertEqual(self.store.get_claims(["ent:nope"]), [])
 
 
 class TestDeleteCascade(LoomTestBase):
