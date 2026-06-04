@@ -21,7 +21,24 @@ from eval.harness import (
 
 
 class InjectionByteIdentityTest(unittest.TestCase):
+    def test_injection_reconstructs_free_backends_settings(self):
+        # The REAL byte-identity proof: the new injection path
+        # (_FREE_NON_BACKEND + FREE_CONFIG.backend_kwargs()) must produce Settings
+        # IDENTICAL to the pre-refactor Memovox(**_FREE_BACKENDS) path.
+        import dataclasses
+        import tempfile
+
+        from eval.harness import _FREE_BACKENDS, _FREE_NON_BACKEND
+        from memovox import Memovox
+        with tempfile.TemporaryDirectory() as o, tempfile.TemporaryDirectory() as n:
+            old = Memovox(store=o, **_FREE_BACKENDS).settings
+            new = Memovox(store=n, **_FREE_NON_BACKEND, **FREE_CONFIG.backend_kwargs()).settings
+        self.assertEqual(dataclasses.asdict(old), dataclasses.asdict(new))
+
     def test_run_eval_default_equals_explicit_free_config(self):
+        # run_eval() defaults to FREE_CONFIG, so this is a determinism-across-runs
+        # check (each run uses its own temp store); the config-reconstruction proof
+        # above is what guarantees the refactor is byte-identical to the old path.
         import json
 
         from eval.harness import run_eval

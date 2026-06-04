@@ -182,7 +182,8 @@ _DEFAULT_OFF_FLAGS = dict(
 # not toggle a feature on/off. A NEW flag must be pinned above or added here with a
 # reason — the reflection completeness meta-test (tests/test_eval.py) enforces it.
 _INTENTIONALLY_UNPINNED = frozenset({
-    # backend selectors (pinned by name in _FREE_BACKENDS)
+    # backend selectors (pinned by name in _FREE_BACKENDS / FREE_CONFIG — M3.4;
+    # voiceprint_backend lives only in FREE_CONFIG, the others in both)
     "asr_backend", "embed_backend", "nli_backend", "llm_backend", "vlm_backend",
     "ocr_backend", "entity_backend", "voiceprint_backend", "visual_embed_backend",
     # numeric tuning knobs (not feature toggles)
@@ -1748,7 +1749,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         else:
             _print_benchmark_table(results)
         if args.assert_no_regression:
-            free = dict(results)["free"]
+            free = dict(results).get("free")
+            if free is None:  # available_configs always prepends FREE; defensive
+                print("\nNo FREE row to gate.", file=sys.stderr)
+                return 1
             failures = _check_thresholds(free)
             if failures:
                 print("\nFREE-ROW REGRESSION:", file=sys.stderr)
