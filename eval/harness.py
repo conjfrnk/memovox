@@ -104,6 +104,7 @@ _INTENTIONALLY_UNPINNED = frozenset({
     "moment_gap_sec", "boundary_similarity", "entailment_threshold", "rrf_k", "top_k",
     "contradiction_threshold", "topic_similarity", "topic_min_size", "consensus_jaccard",
     "visual_workers",  # M1.1: pool size (1=serial); not a feature toggle
+    "rerank_backend",  # M2.1: backend selector (pinned to 'none' in _FREE_BACKENDS)
 })
 
 # Frozen FULL Settings snapshot (M1.2 W8) — beyond _DEFAULT_OFF_FLAGS, this pins
@@ -118,7 +119,8 @@ EVAL_SETTINGS_SNAPSHOT = {
     "entity_backend": "auto", "frame_max": 1200, "frame_sample_fps": 1.0, "frame_side": 16,
     "keyframe_min_gain": 0.12, "keyframe_per_scene_cap": 8, "llm_backend": "auto",
     "moment_gap_sec": 2.5, "moment_max_sec": 90.0, "moment_min_sec": 8.0,
-    "nli_backend": "auto", "ocr_backend": "auto", "otel_enabled": False, "rrf_k": 60,
+    "nli_backend": "auto", "ocr_backend": "auto", "otel_enabled": False,
+    "rerank_backend": "auto", "rrf_k": 60,
     "salience_floor": 0.0, "scene_threshold": 0.3, "top_k": 8, "topic_min_size": 1,
     "topic_similarity": 0.5, "vector_prefilter_fts": False, "visual_embed_backend": "signature",
     "visual_enabled": True, "visual_retrieval": False, "visual_workers": 1,

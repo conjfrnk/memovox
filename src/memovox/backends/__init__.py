@@ -18,6 +18,7 @@ from .base import (
     NLIBackend,
     NLIResult,
     OCRBackend,
+    Reranker,
     Segment,
     VisualEmbedder,
     VLMBackend,
@@ -29,6 +30,7 @@ from .entity_link import Canonical, EntityLinker, NullLinker, WikidataLinker
 from .llm import OllamaLLM
 from .nli import LexicalNLI, TransformersNLI
 from .ocr import NullOCR, SuryaOCR, TesseractOCR
+from .rerank import CrossEncoderReranker, IdentityReranker
 from .visual_embed import ColPaliVisualEmbedder, SignatureVisualEmbedder
 from .vlm import NullVLM, OllamaVLM, Qwen25VL
 
@@ -49,6 +51,8 @@ _LLMS = {"ollama": OllamaLLM}
 _VLMS = {"none": NullVLM, "ollama": OllamaVLM, "qwen2.5-vl": Qwen25VL}
 _OCRS = {"none": NullOCR, "tesseract": TesseractOCR, "surya": SuryaOCR}
 _VISUAL_EMBEDDERS = {"signature": SignatureVisualEmbedder, "colpali": ColPaliVisualEmbedder}
+_RERANKERS = {"identity": IdentityReranker, "cross-encoder": CrossEncoderReranker}
+_RERANK_ALIASES = {"ce": "cross-encoder", "none": "identity", "": "identity"}
 _OCR_ALIASES = {}  # M1.1: the surya->tesseract placeholder is replaced by a real SuryaOCR
 
 _LINKERS = {"none": NullLinker, "wikidata": WikidataLinker}
@@ -123,6 +127,24 @@ def get_ocr(name: str = "auto", *, config=None, **options) -> OCRBackend:
     if not cls.is_available():
         raise BackendUnavailable(
             f"OCR backend {name!r} is not installed. Install the `tesseract` binary."
+        )
+    return cls(config=config, **options)
+
+
+def get_reranker(name: str = "auto", *, config=None, **options) -> Reranker:
+    """Return a reranker; ``auto`` is the free IdentityReranker unless a cross-encoder
+    is installed. ``none``/``""``/``identity`` -> IdentityReranker (spec §5)."""
+    if name == "auto":
+        name = "cross-encoder" if CrossEncoderReranker.is_available() else "identity"
+    name = _RERANK_ALIASES.get(name, name)
+    cls = _RERANKERS.get(name)
+    if cls is None:
+        raise BackendUnavailable(
+            f"Unknown reranker {name!r}. Options: {list(_RERANKERS)}, 'auto', or 'none'."
+        )
+    if not cls.is_available():
+        raise BackendUnavailable(
+            f"Reranker {name!r} is not installed (try the [rerank] extra)."
         )
     return cls(config=config, **options)
 
@@ -219,6 +241,10 @@ def backend_status() -> dict:
             "signature": True,
             "colpali": ColPaliVisualEmbedder.is_available(),
         },
+        "rerank": {
+            "identity": True,
+            "cross-encoder": CrossEncoderReranker.is_available(),
+        },
         "entity_link": {
             "wikidata": WikidataLinker.is_available(),
             "none": True,
@@ -233,11 +259,14 @@ def backend_status() -> dict:
 __all__ = [
     "Backend", "ASRBackend", "ASRResult", "Segment", "Word",
     "Embedder", "NLIBackend", "NLIResult", "LLMBackend", "VLMBackend", "OCRBackend",
+    "VisualEmbedder", "Reranker",
     "EntityLinker", "Canonical",
     "HashingEmbedder", "SentenceTransformerEmbedder",
     "LexicalNLI", "TransformersNLI", "OllamaLLM",
     "NullVLM", "OllamaVLM", "NullOCR", "TesseractOCR",
+    "IdentityReranker", "CrossEncoderReranker",
     "NullLinker", "WikidataLinker", "PyannoteVoiceprint",
     "get_embedder", "get_nli", "get_llm", "get_vlm", "get_ocr",
+    "get_visual_embedder", "get_reranker",
     "get_entity_linker", "get_voiceprint_backend", "backend_status",
 ]

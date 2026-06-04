@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 
 # --------------------------------------------------------------------------- #
@@ -165,4 +165,23 @@ class OCRBackend(Backend):
 
     @abstractmethod
     def extract(self, image_path: Optional[str]) -> str:
+        raise NotImplementedError
+
+
+class Reranker(Backend):
+    """Reorder the RRF-fused candidate set by query↔candidate relevance (spec §5).
+
+    Sits between fused retrieval and answer synthesis. The free fallback is
+    IDENTITY (returns the candidates untouched — byte-identical to today); an
+    optional cross-encoder is an is_available-gated upgrade. ``rerank`` must return
+    the SAME ``(moment_id, score)`` set with no additions or removals — only a
+    reorder. ``needs_text`` tells the caller whether to supply candidate texts.
+    """
+
+    #: Whether ``rerank`` needs a ``texts`` map (False for the free identity path).
+    needs_text: bool = False
+
+    @abstractmethod
+    def rerank(self, query: str, candidates: List[Tuple[str, float]], *,
+               texts: Optional[dict] = None) -> List[Tuple[str, float]]:
         raise NotImplementedError
