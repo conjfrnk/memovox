@@ -1,6 +1,6 @@
 # M3.1 — Decay & versioning
 
-> **Wave:** 3 · **Effort:** M · **Status:** not started
+> **Wave:** 3 · **Effort:** M · **Status:** ✅ done (branch `phase4-decay`, 5/5 + review fix; 433 pass / 2 skip; 12 gates). decay default-OFF byte-identical; shared recency model; claim_history lineage; published_at sidecar; REST/MCP timeline; decay block GATED (exact, synthetic dated fixture).
 > **Depends on:** M0.3 (coordinate the `published_at` part of the `pipeline.ingest` signature) · **Owns (single-owner concerns):** none · **Blocks:** none
 > **Spec:** §4.7 (Stage 7 — "Consensus scoring" / "Dedup & decay"), §2 (idempotent + versioned, "Nothing is ever silently deleted")
 
