@@ -57,5 +57,37 @@ class BackendConfigTest(unittest.TestCase):
         self.assertEqual(kw["llm_backend"], "none")  # unmentioned slots stay free
 
 
+class AvailableConfigsTest(unittest.TestCase):
+    def test_bare_machine_shrinks_to_free_only(self):
+        from unittest import mock
+
+        from eval import harness
+        # every optional backend unavailable -> exactly [FREE] (the CI path)
+        with mock.patch("memovox.backends.backend_status", return_value={}):
+            configs = harness.available_configs()
+        self.assertEqual([c.name for c in configs], ["free"])
+
+    def test_upgrade_appears_when_available(self):
+        from unittest import mock
+
+        from eval import harness
+        status = {"rerank": {"cross-encoder": True}, "embed": {"sentence-transformers": True},
+                  "nli": {"deberta-nli": True}}
+        with mock.patch("memovox.backends.backend_status", return_value=status):
+            names = [c.name for c in harness.available_configs()]
+        self.assertEqual(names[0], "free")
+        self.assertIn("free+cross-encoder", names)
+        self.assertIn("st+deberta", names)
+        self.assertEqual(names[1:], sorted(names[1:]))  # deterministic name order
+
+    def test_visual_configs_declared_unrankable(self):
+        from eval import harness
+        rows = harness.unrankable_configs()
+        self.assertTrue(rows)
+        for name, reason in rows:
+            self.assertIsInstance(reason, str)
+            self.assertTrue(reason)  # explicit reason, never silently dropped
+
+
 if __name__ == "__main__":
     unittest.main()

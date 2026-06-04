@@ -102,6 +102,59 @@ class BackendConfig:
 
 FREE_CONFIG = BackendConfig(name="free")
 
+#: Slot -> backend_status() category, for availability probing.
+_SLOT_CATEGORY = {
+    "asr_backend": "asr", "embed_backend": "embed", "nli_backend": "nli",
+    "llm_backend": "llm", "vlm_backend": "vlm", "ocr_backend": "ocr",
+    "visual_embed_backend": "visual_embed", "rerank_backend": "rerank",
+    "entity_backend": "entity_link", "voiceprint_backend": "voiceprint",
+}
+
+#: Upgrade configs that move a TEXT-corpus metric (embed/nli drive groundedness &
+#: contradiction; rerank drives mrr/ndcg). Ranked when their deps are installed.
+_UPGRADE_CANDIDATES = [
+    BackendConfig(name="free+cross-encoder", rerank_backend="cross-encoder"),
+    BackendConfig(name="st+deberta", embed_backend="sentence-transformers",
+                  nli_backend="deberta-nli"),
+]
+
+#: Visual upgrade configs — NOT rankable by the text-corpus benchmark table (they
+#: move only the ungated `multimodal` block, not the ranked text metrics).
+_VISUAL_CANDIDATES = [
+    BackendConfig(name="colpali+surya+qwen", visual_embed_backend="colpali",
+                  ocr_backend="surya", vlm_backend="qwen2.5-vl"),
+]
+
+
+def _config_available(config: "BackendConfig", status: dict) -> bool:
+    """True iff every slot the config lifts above FREE reports is_available."""
+    free = FREE_CONFIG.backend_kwargs()
+    for slot, value in config.backend_kwargs().items():
+        if value != free[slot] and not status.get(_SLOT_CATEGORY[slot], {}).get(value, False):
+            return False
+    return True
+
+
+def available_configs(golden_dir=GOLDEN_DIR):
+    """The benchmark configs runnable here: ALWAYS [FREE], plus each text-rankable
+    upgrade whose every lifted slot is installed (deterministic, name-sorted). On a
+    bare/CI machine this auto-shrinks to exactly [FREE_CONFIG]."""
+    from memovox.backends import backend_status
+
+    status = backend_status()
+    upgrades = [c for c in _UPGRADE_CANDIDATES if _config_available(c, status)]
+    return [FREE_CONFIG] + sorted(upgrades, key=lambda c: c.name)
+
+
+def unrankable_configs(golden_dir=GOLDEN_DIR):
+    """Visual configs declared UNRANKABLE on the text-metric benchmark (reported
+    with an explicit reason, never silently scored 0.0). They light up only once
+    the benchmark table scores visual-specific metrics over the visual subset."""
+    has_visual = (Path(golden_dir) / "visual.json").exists()
+    reason = ("visual metrics are not in the text-corpus ranking table"
+              if has_visual else "no visual subset present")
+    return [(c.name, reason) for c in _VISUAL_CANDIDATES]
+
 # Frozen eval-settings snapshot (M0.1 W8 / review discipline (b)): the default-OFF
 # flags whose values the gates implicitly depend on. Pinned so a future default
 # flip — or a leaked MEMOVOX_* env var — fails loudly instead of silently moving a
