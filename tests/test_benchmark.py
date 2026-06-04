@@ -89,5 +89,34 @@ class AvailableConfigsTest(unittest.TestCase):
             self.assertTrue(reason)  # explicit reason, never silently dropped
 
 
+class RunBenchmarkTest(unittest.TestCase):
+    def test_free_row_metric_identical_to_run_eval(self):
+        import json
+
+        from eval.harness import run_benchmark, run_eval
+        results = run_benchmark()
+        names = [n for n, _ in results]
+        self.assertEqual(names[0], "free")  # FREE first
+        free_report = dict(results)["free"]
+        self.assertEqual(json.dumps(free_report, sort_keys=True),
+                         json.dumps(run_eval(), sort_keys=True))
+
+    def test_two_runs_identical(self):
+        from eval.harness import _benchmark_json, run_benchmark
+        self.assertEqual(_benchmark_json(run_benchmark()), _benchmark_json(run_benchmark()))
+
+    def test_cli_benchmark_json_exits_zero(self):
+        from eval.harness import main
+        self.assertEqual(main(["--benchmark", "--json"]), 0)
+
+    def test_cli_assert_no_regression_gates_free_row(self):
+        from eval.harness import _check_thresholds, main
+        self.assertEqual(main(["--benchmark", "--assert-no-regression"]), 0)
+        # the gate runs _check_thresholds on the FREE row — a sub-threshold report fails
+        bad = {"retrieval": {"hit_rate": 0.0}, "groundedness": 0.0,
+               "contradiction": {"f1": 0.0}, "synthesis": {"groundedness": 0.0}}
+        self.assertTrue(_check_thresholds(bad))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1634,6 +1634,55 @@ def _check_thresholds(report: dict) -> List[str]:
     return failures
 
 
+#: The metrics the benchmark ranks across configs (name -> extractor).
+_RANK_METRICS = [
+    ("hit_rate", lambda r: r["retrieval"]["hit_rate"]),
+    ("mrr", lambda r: r["retrieval"]["mrr"]),
+    ("ndcg", lambda r: r["retrieval"]["ndcg"]),
+    ("groundedness", lambda r: r["groundedness"]),
+    ("contradiction.f1", lambda r: r["contradiction"]["f1"]),
+    ("synthesis.groundedness", lambda r: r["synthesis"]["groundedness"]),
+]
+
+
+def run_benchmark(golden_dir=GOLDEN_DIR, configs=None, k: int = DEFAULT_K):
+    """Run the SAME run_eval() metric path once per available config (each in its own
+    fresh temp store), returning an ordered ``[(config_name, report), ...]`` (FREE
+    first). The FREE row's report is metric-identical to bare run_eval(). M3.4."""
+    configs = configs if configs is not None else available_configs(golden_dir)
+    return [(c.name, run_eval(golden_dir, config=c, k=k)) for c in configs]
+
+
+def _benchmark_rows(results) -> dict:
+    return {name: {m: getter(rep) for m, getter in _RANK_METRICS} for name, rep in results}
+
+
+def _benchmark_json(results) -> str:
+    return json.dumps({"configs": [name for name, _ in results],
+                       "metrics": _benchmark_rows(results)},
+                      sort_keys=True, indent=2, ensure_ascii=False)
+
+
+def _print_benchmark_table(results) -> None:
+    rows = _benchmark_rows(results)
+    names = [name for name, _ in results]
+    # Per-metric best: highest value, deterministic tie-break by the FIRST config in
+    # the (free-first, name-sorted) order.
+    best = {m: max(names, key=lambda n: rows[n][m]) for m, _ in _RANK_METRICS}
+    width = max((len(n) for n in names), default=4) + 1
+    header = "config".ljust(width) + "".join(f"{m:>22}" for m, _ in _RANK_METRICS)
+    print(header)
+    print("-" * len(header))
+    for name in names:
+        line = name.ljust(width)
+        for m, _ in _RANK_METRICS:
+            mark = "*" if best[m] == name else " "
+            line += f"{rows[name][m]:>21.4f}{mark}"
+        print(line)
+    for cfg_name, reason in unrankable_configs():
+        print(f"  (unrankable: {cfg_name} — {reason})")
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     import argparse
 
@@ -1664,6 +1713,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="(maintenance) re-record eval/golden/span_baseline.json from the CURRENT "
              "free-path claim spans, then exit. Use only after a reviewed change.",
     )
+    parser.add_argument(
+        "--benchmark", action="store_true",
+        help="A/B-rank the available BackendConfigs (auto-shrinks to FREE on a bare "
+             "machine). Prints a deterministic ranking table; add --json for JSON.",
+    )
+    parser.add_argument(
+        "--json", action="store_true",
+        help="With --benchmark: emit the ranking table as machine-readable JSON.",
+    )
+    parser.add_argument(
+        "--assert-no-regression", action="store_true",
+        help="With --benchmark: exit non-zero if the FREE row fails the existing "
+             "thresholds (the benchmark-mode equivalent of --assert-thresholds).",
+    )
     args = parser.parse_args(argv)
 
     if args.record_parity:
@@ -1677,6 +1740,24 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
 
     _assert_default_off_flags()
+
+    if args.benchmark:
+        results = run_benchmark(args.golden_dir, k=args.k)
+        if args.json:
+            print(_benchmark_json(results))
+        else:
+            _print_benchmark_table(results)
+        if args.assert_no_regression:
+            free = dict(results)["free"]
+            failures = _check_thresholds(free)
+            if failures:
+                print("\nFREE-ROW REGRESSION:", file=sys.stderr)
+                for f in failures:
+                    print(f"  - {f}", file=sys.stderr)
+                return 1
+            print("\nFREE row clears all thresholds.", file=sys.stderr)
+        return 0
+
     report = run_eval(args.golden_dir, k=args.k)
     _print_report(report)
 
