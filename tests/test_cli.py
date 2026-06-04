@@ -64,6 +64,21 @@ class TestCLI(unittest.TestCase):
         code, out = run(["--store", self.store, "export", "--video", "yt:abc123", "--format", "md"])
         self.assertIn("youtu.be/abc123", out)
 
+    def test_metrics_command(self):
+        self._ingest()
+        code, out = run(["--store", self.store, "metrics"])
+        self.assertEqual(code, 0)
+        self.assertNotIn("Traceback", out)
+        self.assertIn("ledger", out.lower())          # cumulative ledger surfaced
+        self.assertIn("claims", out.lower())           # a per-video stage row
+        self.assertIn("yt:abc123", out)                # per-video table keyed by id
+
+    def test_stats_includes_metrics_summary(self):
+        self._ingest()
+        code, out = run(["--store", self.store, "stats"])
+        self.assertEqual(code, 0)
+        self.assertIn("ledger", out.lower())           # new metrics summary line
+
     def test_evolution_by_entity(self):
         self.vtt.write_text(VTT_ENTITY, encoding="utf-8")
         self._ingest()

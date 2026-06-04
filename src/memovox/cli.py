@@ -205,6 +205,34 @@ def cmd_stats(args, mv: Memovox) -> int:
     print(f"{'fts5':<20}: {s.get('fts5')}")
     print(f"{'embedder':<20}: {s.get('embed_meta')}")
     print(f"{'store':<20}: {s.get('store')}")
+    ledger = mv.metrics()["ledger"]
+    summary = "  ".join(f"{k}={int(v)}" for k, v in sorted(ledger.items())) or "(none yet)"
+    print(f"{'metrics ledger':<20}: {summary}")
+    return 0
+
+
+def cmd_metrics(args, mv: Memovox) -> int:
+    data = mv.metrics(video_id=getattr(args, "video", None))
+    ledger = data["ledger"]
+    print("cumulative ledger:")
+    if ledger:
+        for k, v in sorted(ledger.items()):
+            print(f"  {k:<18}: {int(v)}")
+    else:
+        print("  (no ingests recorded yet)")
+    print("\nper-video stage metrics:")
+    if not any(data["stage_metrics"].values()):
+        print("  (none)")
+    for vid, rows in data["stage_metrics"].items():
+        if not rows:
+            continue
+        print(vid)
+        for r in rows:
+            counters = " ".join(f"{k}={int(v)}" for k, v in sorted(r["counters"].items()))
+            caps = "".join(
+                f" cap:{c['name']}(drop={c['dropped']})" for c in r["caps"] if c["dropped"]
+            )
+            print(f"  {r['stage']:<14} {r['wall_ms']:8.2f}ms  {counters}{caps}")
     return 0
 
 
@@ -307,6 +335,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("stats", help="store statistics.")
     s.set_defaults(func=cmd_stats)
+
+    s = sub.add_parser("metrics", help="per-stage observability metrics + cumulative ledger.")
+    s.add_argument("--video", help="restrict to one video_id.")
+    s.set_defaults(func=cmd_metrics)
 
     s = sub.add_parser("backends", help="list backend availability.")
     s.set_defaults(func=cmd_backends)

@@ -151,5 +151,15 @@ class Memovox:
         with LoomStore(self.config) as store:
             return store.stats()
 
+    def metrics(self, *, video_id: Optional[str] = None) -> dict:
+        """Per-video stage metrics + the cumulative ledger (M0.1 observability)."""
+        with LoomStore(self.config) as store:
+            ledger = store.metrics_ledger()
+            if video_id:
+                stage = {video_id: store.stage_metrics(video_id)}
+            else:
+                stage = {v.video_id: store.stage_metrics(v.video_id) for v in store.list_videos()}
+            return {"ledger": ledger, "stage_metrics": stage}
+
     def backends(self) -> dict:
         return backend_status()
