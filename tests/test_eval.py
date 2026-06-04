@@ -360,6 +360,15 @@ class TestThresholdGates(unittest.TestCase):
         self.assertTrue(any("entity_f1" in f for f in fails))
         self.assertTrue(any("der" in f for f in fails))
 
+    def test_clip_coverage_gate_enforced(self):
+        # M2.3 W7: a low-coverage clip block trips the gate; absent block is ignored.
+        rpt = self._report(1.0, 1.0, 1.0)
+        self.assertEqual(_check_thresholds(rpt), [])  # no clip block -> no failure
+        rpt["clip"] = {"coverage": 0.1}
+        self.assertTrue(any("clip.coverage" in f for f in _check_thresholds(rpt)))
+        rpt["clip"] = {"coverage": 0.5}
+        self.assertFalse(any("clip.coverage" in f for f in _check_thresholds(rpt)))
+
 
 class TestRunEvalGoldenCorpus(unittest.TestCase):
     @classmethod
@@ -563,7 +572,7 @@ class TestThinFixtureDiscipline(unittest.TestCase):
         all_failing = {
             "retrieval": {"hit_rate": 0.0}, "groundedness": 0.0,
             "contradiction": {"f1": 0.0}, "synthesis": {"groundedness": 0.0},
-            "entity_f1": 0.0, "der": 0.0,
+            "entity_f1": 0.0, "der": 0.0, "clip": {"coverage": 0.0},
             "parity": {"score": 0.0}, "incremental_equivalence": 0.0,
             "span_unchanged": {"score": 0.0},
         }

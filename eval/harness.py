@@ -1257,6 +1257,10 @@ _SYNTHESIS_GROUNDEDNESS_GATE = 0.8
 # (matching contradiction.f1) is non-flaky and catches a resolution regression.
 _ENTITY_F1_GATE = 0.5
 _DER_GATE = 0.5
+# M2.3 W7: stitched-clip coverage gated now that >= 3 stable golden clips exist
+# (5 items; deterministic mean ~0.37). A non-regression floor — stitching may
+# tighten coverage, never drop it below 0.3.
+_CLIP_COVERAGE_GATE = 0.3
 
 
 def _print_report(report: dict) -> None:
@@ -1298,6 +1302,8 @@ _GATE_DECLARATIONS = {
     "entity_f1": {"kind": "statistical", "fixture": "entities.json",
                   "grandfathered_thin": True},
     "der": {"kind": "statistical", "fixture": "speakers.json", "grandfathered_thin": True},
+    # M2.3 W7: genuinely eligible — clips.json has 5 stable items (>= 3); gated at 0.3.
+    "clip.coverage": {"kind": "statistical", "fixture": "clips.json"},
     "parity": {"kind": "exact"},
     "incremental_equivalence": {"kind": "exact"},
     "span_unchanged": {"kind": "exact"},
@@ -1309,7 +1315,11 @@ def _fixture_count(name: str) -> int:
     if not path.exists():
         return 0
     data = _load_json(path)
-    return len(data) if isinstance(data, list) else 0
+    if isinstance(data, list):
+        return len(data)
+    if isinstance(data, dict) and isinstance(data.get("items"), list):
+        return len(data["items"])  # {"items": [...]} fixtures (e.g. clips.json)
+    return 0
 
 
 def _gate_eligible(decl: dict) -> bool:
@@ -1342,6 +1352,10 @@ def _check_thresholds(report: dict) -> List[str]:
     der = report.get("der", 1.0)
     if der < _DER_GATE:
         failures.append(f"der {der:.3f} < {_DER_GATE}")
+    # M2.3 W7: stitched-clip coverage (only when the block is present).
+    clip_cov = (report.get("clip") or {}).get("coverage")
+    if clip_cov is not None and clip_cov < _CLIP_COVERAGE_GATE:
+        failures.append(f"clip.coverage {clip_cov:.3f} < {_CLIP_COVERAGE_GATE}")
     # M0.2 exact-equivalence invariants — gated at 1.0 (correctness, not statistics).
     pscore = report.get("parity", {}).get("score", 1.0)
     if pscore < 1.0:
