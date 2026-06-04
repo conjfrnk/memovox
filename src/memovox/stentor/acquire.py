@@ -57,6 +57,21 @@ def acquire(
     return _acquire_local(source, source_url=source_url, title=title, captions=captions)
 
 
+def _sidecar_published_at(path: Path) -> Optional[str]:
+    """A local file's publish date from a ``<stem>.meta.json`` sidecar (M3.1), so
+    local sources (and the dated golden variant) can carry a date without a network
+    fetch. Reads ``published_at`` (ISO) or a yt-dlp-style ``upload_date``."""
+    for cand in (path.with_name(path.name + ".meta.json"),
+                 path.with_name(path.name.split(".")[0] + ".meta.json")):
+        if cand.is_file():
+            try:
+                data = json.loads(cand.read_text(encoding="utf-8"))
+            except (ValueError, OSError):
+                continue
+            return data.get("published_at") or _format_date(data.get("upload_date"))
+    return None
+
+
 def _acquire_local(
     source: str,
     *,
@@ -70,6 +85,7 @@ def _acquire_local(
     ext = path.suffix.lower()
     chash = content_hash_file(path)
     display_title = title or path.stem
+    published_at = _sidecar_published_at(path)
 
     if ext in TRANSCRIPT_EXTENSIONS and ext not in audio.MEDIA_EXTENSIONS:
         # Transcript-only ingest — fully free, no media/ffmpeg required.
@@ -80,6 +96,7 @@ def _acquire_local(
             captions_path=path,
             media_path=None,
             is_video=False,
+            published_at=published_at,
         )
 
     if ext in audio.MEDIA_EXTENSIONS:
@@ -93,6 +110,7 @@ def _acquire_local(
             media_path=path,
             captions_path=captions_path,
             is_video=info.get("has_video", False),
+            published_at=published_at,
         )
 
     raise AcquisitionError(

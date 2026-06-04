@@ -117,5 +117,35 @@ class DecayTest(unittest.TestCase):
         self.assertIn(keep, on)
 
 
+class PublishedAtInjectionTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = pathlib.Path(self._tmp.name)
+        from memovox import Memovox
+        self.mv = Memovox(store=self.dir / "store", llm_backend="none")
+        self.vtt = self.dir / "talk.en.vtt"
+        self.vtt.write_text("WEBVTT\n\n00:00:01.000 --> 00:00:09.000\nHello world.\n",
+                            encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_explicit_published_at_threads_to_video(self):
+        rep = self.mv.ingest(str(self.vtt), source_url="https://x/a", published_at="2026-01-01")
+        with LoomStore(self.mv.config) as store:
+            self.assertEqual(store.get_video(rep.video_id).published_at, "2026-01-01")
+
+    def test_default_published_at_is_none(self):
+        rep = self.mv.ingest(str(self.vtt), source_url="https://x/a")
+        with LoomStore(self.mv.config) as store:
+            self.assertIsNone(store.get_video(rep.video_id).published_at)
+
+    def test_sidecar_meta_json_supplies_date(self):
+        (self.dir / "talk.meta.json").write_text('{"published_at": "2025-05-05"}', encoding="utf-8")
+        rep = self.mv.ingest(str(self.vtt), source_url="https://x/a")
+        with LoomStore(self.mv.config) as store:
+            self.assertEqual(store.get_video(rep.video_id).published_at, "2025-05-05")
+
+
 if __name__ == "__main__":
     unittest.main()
