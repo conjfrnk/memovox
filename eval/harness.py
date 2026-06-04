@@ -94,7 +94,7 @@ _DEFAULT_OFF_FLAGS = dict(
 _INTENTIONALLY_UNPINNED = frozenset({
     # backend selectors (pinned by name in _FREE_BACKENDS)
     "asr_backend", "embed_backend", "nli_backend", "llm_backend", "vlm_backend",
-    "ocr_backend", "entity_backend", "voiceprint_backend",
+    "ocr_backend", "entity_backend", "voiceprint_backend", "visual_embed_backend",
     # numeric tuning knobs (not feature toggles)
     "embed_dim", "frame_sample_fps", "frame_side", "frame_max", "scene_threshold",
     "keyframe_min_gain", "keyframe_per_scene_cap", "moment_max_sec", "moment_min_sec",

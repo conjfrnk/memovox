@@ -55,6 +55,7 @@ class Settings:
     scene_threshold: float = 0.3        # frame-diff above this => scene/slide cut
     keyframe_min_gain: float = 0.12     # info-gain floor to keep another keyframe
     keyframe_per_scene_cap: int = 8     # max keyframes kept per scene
+    visual_embed_backend: str = "signature"  # M1.1: visual embedder (signature/colpali)
 
     # Escapement — Moment boundaries
     moment_max_sec: float = 90.0

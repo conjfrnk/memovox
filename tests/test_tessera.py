@@ -10,6 +10,20 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
 from memovox.backends import get_ocr, get_vlm
 from memovox.backends.base import OCRBackend, VLMBackend
 from memovox.config import Settings
+from memovox.tessera.classify import classify_frame
+
+
+class TestFrameTypeClassifier(unittest.TestCase):
+    def test_dense_ocr_text_is_slide_or_document(self):
+        self.assertIn(classify_frame([0.5] * 256, "word " * 10), ("slide", "document"))
+        self.assertEqual(classify_frame([0.5] * 256, "word " * 40), "document")
+
+    def test_high_variance_no_text_is_diagram(self):
+        diagram = [0.0, 1.0] * 128  # alternating -> high variance, structure
+        self.assertEqual(classify_frame(diagram, ""), "diagram")
+
+    def test_low_variance_no_text_is_talking_head(self):
+        self.assertEqual(classify_frame([0.5] * 256, ""), "talking_head")
 from memovox.tessera import VisualEvent, VisualResult, run
 from memovox.tessera.frames import FrameSig, bytes_to_signature
 from memovox.tessera.keyframes import select_keyframes

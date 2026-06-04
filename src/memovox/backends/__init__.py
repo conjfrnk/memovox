@@ -19,6 +19,7 @@ from .base import (
     NLIResult,
     OCRBackend,
     Segment,
+    VisualEmbedder,
     VLMBackend,
     Word,
 )
@@ -28,6 +29,7 @@ from .entity_link import Canonical, EntityLinker, NullLinker, WikidataLinker
 from .llm import OllamaLLM
 from .nli import LexicalNLI, TransformersNLI
 from .ocr import NullOCR, TesseractOCR
+from .visual_embed import ColPaliVisualEmbedder, SignatureVisualEmbedder
 from .vlm import NullVLM, OllamaVLM
 
 _EMBEDDERS = {
@@ -46,6 +48,7 @@ _LLMS = {"ollama": OllamaLLM}
 
 _VLMS = {"none": NullVLM, "ollama": OllamaVLM}
 _OCRS = {"none": NullOCR, "tesseract": TesseractOCR}
+_VISUAL_EMBEDDERS = {"signature": SignatureVisualEmbedder, "colpali": ColPaliVisualEmbedder}
 _OCR_ALIASES = {"surya": "tesseract"}  # graceful: Surya not yet wired, use tesseract
 
 _LINKERS = {"none": NullLinker, "wikidata": WikidataLinker}
@@ -124,6 +127,22 @@ def get_ocr(name: str = "auto", *, config=None, **options) -> OCRBackend:
     return cls(config=config, **options)
 
 
+def get_visual_embedder(name: str = "auto", *, config=None, **options) -> VisualEmbedder:
+    """Return a visual embedder; ``auto`` is the free signature embedder (M1.1)."""
+    if name in ("auto", "signature", ""):
+        return SignatureVisualEmbedder(config=config, **options)
+    cls = _VISUAL_EMBEDDERS.get(name)
+    if cls is None:
+        raise BackendUnavailable(
+            f"Unknown visual embedder {name!r}. Options: {list(_VISUAL_EMBEDDERS)} or 'auto'."
+        )
+    if not cls.is_available():
+        raise BackendUnavailable(
+            f"Visual embedder {name!r} is not installed (try the [visual] extra)."
+        )
+    return cls(config=config, **options)
+
+
 def get_voiceprint_backend(
     name: str = "auto", *, config=None, **options
 ) -> Optional[PyannoteVoiceprint]:
@@ -193,6 +212,10 @@ def backend_status() -> dict:
         "ocr": {
             "tesseract": TesseractOCR.is_available(),
             "none": True,
+        },
+        "visual_embed": {
+            "signature": True,
+            "colpali": ColPaliVisualEmbedder.is_available(),
         },
         "entity_link": {
             "wikidata": WikidataLinker.is_available(),

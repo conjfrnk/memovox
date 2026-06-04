@@ -138,6 +138,24 @@ class VLMBackend(Backend):
         raise NotImplementedError
 
 
+class VisualEmbedder(Backend):
+    """Embed a keyframe into a retrievable VISUAL vector (Tessera, spec §4.3).
+
+    The free fallback (:class:`SignatureVisualEmbedder`) is the grayscale
+    signature already produced at ingest. The interface ALLOWS multi-vector
+    late-interaction embedders (ColPali/MaxSim) as an opt-in upgrade, but this
+    track materializes only the single-vector signature path. Every embedded
+    vector carries a ``space`` tag so it can never be cosined against a text vector.
+    """
+
+    dim: int = 0
+    space: str = "visual_sig"
+
+    @abstractmethod
+    def embed_image(self, image) -> List[float]:
+        raise NotImplementedError
+
+
 class OCRBackend(Backend):
     """On-screen text extraction for keyframes (Tessera, spec §7).
 
