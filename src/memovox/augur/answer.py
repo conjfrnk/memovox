@@ -69,10 +69,17 @@ def ask(
     settings: Optional[Settings] = None,
     video_id: Optional[str] = None,
     tracer: Optional[Tracer] = None,
+    modality: str = "any",
+    visual_query_vec: Optional[List[float]] = None,
 ) -> Answer:
     settings = settings or Settings()
     tracer = tracer or Tracer("ask", otel_enabled=settings.otel_enabled)
     qp = plan_query(query)
+    # The VISUAL leg (M1.1) turns on when the plan routes to visual OR the caller
+    # explicitly asks for modality="visual"; it only fires if a visual query vector
+    # is supplied (e.g. an image query), so a plain text ask is byte-identical.
+    use_visual = (qp.modality == "visual" or qp.strategy == "visual"
+                  or modality == "visual")
     # Consume the plan: the strategy chooses the retrieval mode (and, below, the
     # citation ordering) — it is NOT decorative. Only the contradiction route
     # turns on the graph leg today, walking CONTRADICTS/SUPPORTS edges to surface
@@ -91,6 +98,7 @@ def ask(
         fused = retrieve(
             store, query, embedder=embedder, settings=settings, video_id=video_id,
             use_graph=use_graph, graph_rels=graph_rels, span=_sp,
+            use_visual=use_visual, visual_query_vec=visual_query_vec,
         )
         _sp.add_counter("results", len(fused))
     if not fused:

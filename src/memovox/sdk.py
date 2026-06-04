@@ -60,12 +60,14 @@ class Memovox:
 
     # -- query -------------------------------------------------------------
 
-    def ask(self, query: str, *, video_id: Optional[str] = None) -> augur.Answer:
+    def ask(self, query: str, *, video_id: Optional[str] = None,
+            modality: str = "any") -> augur.Answer:
         with LoomStore(self.config) as store:
             embedder = get_embedder(self.settings.embed_backend, config=self.config)
             llm = get_llm(self.settings.llm_backend, config=self.config)
             return augur.ask(
-                store, query, embedder=embedder, llm=llm, settings=self.settings, video_id=video_id
+                store, query, embedder=embedder, llm=llm, settings=self.settings,
+                video_id=video_id, modality=modality,
             )
 
     def contradictions(self, topic: Optional[str] = None) -> List[ContradictionPair]:

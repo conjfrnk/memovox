@@ -70,6 +70,60 @@ class TestAsk(unittest.TestCase):
             store2.close()
 
 
+class TestVisualLeg(unittest.TestCase):
+    QUERY = "the loss curve diagram"
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.config = Config(store=pathlib.Path(self._tmp.name) / "s").ensure()
+        self.store = LoomStore(self.config)
+        self.emb = HashingEmbedder(dim=256)
+        self.settings = Settings(top_k=8)
+        self.store.upsert_video(Video("v", "https://x/v", "talk"))
+        # text decoys that match the query lexically (the text legs).
+        for i in range(1, 4):
+            mid = f"v#m{i:04d}"
+            text = f"discussion {i} of the loss curve diagram and training dynamics"
+            m = Moment(mid, "v", float(i), float(i) + 1, text, "spk_0", index=i)
+            self.store.add_moment(m, self.emb.embed_one(m.text_for_embedding()))
+        # the slide is VISUAL-ONLY: no text vector (embedding=None) and unrelated
+        # text, so neither the dense nor lexical leg can ever surface it — only the
+        # visual signature can. This is "knowledge that exists nowhere in the audio".
+        slide = Moment("v#m0000", "v", 0.0, 1.0, "completely unrelated chatter xyz",
+                       "spk_0", index=0)
+        self.store.add_moment(slide, None, visual_embedding=[1.0, 0.0, 0.0, 0.0])
+        self.vsig = [0.96, 0.04, 0.0, 0.0]  # image query close to the slide's signature
+
+    def tearDown(self):
+        self.store.close()
+        self._tmp.cleanup()
+
+    def test_visual_leg_off_by_default_byte_identical(self):
+        from memovox.augur.retrieve import retrieve
+        base = retrieve(self.store, self.QUERY, embedder=self.emb, settings=self.settings)
+        off = retrieve(self.store, self.QUERY, embedder=self.emb, settings=self.settings,
+                       use_visual=False, visual_query_vec=self.vsig)
+        self.assertEqual(base, off)  # default OFF == passing use_visual=False
+
+    def test_visual_query_fuses_visual_leg(self):
+        from memovox.augur.retrieve import retrieve
+        off = [m for m, _ in retrieve(self.store, self.QUERY, embedder=self.emb,
+                                      settings=self.settings)]
+        on = [m for m, _ in retrieve(self.store, self.QUERY, embedder=self.emb,
+                                     settings=self.settings, use_visual=True,
+                                     visual_query_vec=self.vsig)]
+        # without the visual leg the slide is below the text top-k; the leg pulls it in.
+        self.assertNotIn("v#m0000", off)
+        self.assertIn("v#m0000", on)
+
+    def test_empty_visual_query_skips_leg_gracefully(self):
+        from memovox.augur.retrieve import retrieve
+        base = retrieve(self.store, self.QUERY, embedder=self.emb, settings=self.settings)
+        on = retrieve(self.store, self.QUERY, embedder=self.emb, settings=self.settings,
+                      use_visual=True, visual_query_vec=None)  # no image query
+        self.assertEqual(base, on)  # leg skipped when no visual query vector
+
+
 class TestStrategyDrivenRetrieval(unittest.TestCase):
     """The planner's strategy must change WHICH moments come back and HOW
     citations are ordered — not just the decorative ``Answer.strategy`` label."""

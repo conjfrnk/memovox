@@ -135,7 +135,8 @@ class McpServer:
         return _tool_json(report.to_dict())
 
     def _tool_search_knowledge(self, args: dict) -> dict:
-        answer = self.mv.ask(args["query"], video_id=args.get("video_id"))
+        answer = self.mv.ask(args["query"], video_id=args.get("video_id"),
+                             modality=args.get("modality", "any"))
         return _tool_json(answer.to_dict())
 
     def _tool_get_claim_provenance(self, args: dict) -> dict:

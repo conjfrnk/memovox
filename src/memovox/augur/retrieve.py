@@ -45,6 +45,8 @@ def retrieve(
     graph_rels: Optional[Sequence[str]] = None,
     graph_hops: int = 1,
     span: Optional[Span] = None,
+    use_visual: bool = False,
+    visual_query_vec: Optional[Sequence[float]] = None,
 ) -> List[Tuple[str, float]]:
     """Return fused (moment_id, rrf_score) for the query.
 
@@ -76,5 +78,14 @@ def retrieve(
         rels = list(graph_rels) if graph_rels else ["SUPPORTS", "CONTRADICTS", "ELABORATES"]
         graph = expand(store, seeds, rels=rels, hops=graph_hops, video_id=video_id)
         legs.append(graph)
+    # 4th VISUAL leg (M1.1), DEFAULT OFF. Fires only when the plan routes to visual
+    # AND a visual query vector exists (e.g. an image query); a text query with no
+    # visual representation skips it gracefully, like the empty-graph case.
+    if use_visual and visual_query_vec:
+        visual = store.visual_search(visual_query_vec, pool, video_id=video_id)
+        if span is not None:
+            span.add_counter("visual_candidates", len(visual))
+        if visual:
+            legs.append(visual)
     # span passed only to the final fuse (the user-visible top_k cut), not the seed fuse
     return rrf_fuse(legs, k=settings.rrf_k, top_k=settings.top_k, span=span)

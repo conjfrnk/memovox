@@ -53,6 +53,24 @@ class TestMcp(unittest.TestCase):
         self.assertIn("citations", text)
         self.assertIn("abc123", text)
 
+    def test_search_knowledge_threads_modality(self):
+        from unittest import mock
+
+        captured = {}
+        real_ask = self.mv.ask
+
+        def _spy(query, **kwargs):
+            captured.update(kwargs)
+            return real_ask(query, **kwargs)
+
+        with mock.patch.object(self.mv, "ask", side_effect=_spy):
+            self.server.handle({
+                "jsonrpc": "2.0", "id": 9, "method": "tools/call",
+                "params": {"name": "search_knowledge",
+                           "arguments": {"query": "the slide", "modality": "visual"}},
+            })
+        self.assertEqual(captured.get("modality"), "visual")  # threaded, not dropped
+
     def test_tools_call_synthesize_topic(self):
         resp = self.server.handle({
             "jsonrpc": "2.0", "id": 7, "method": "tools/call",
