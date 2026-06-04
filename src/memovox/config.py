@@ -74,6 +74,7 @@ class Settings:
     contradiction_threshold: float = 0.55
     rerank_backend: str = "auto"  # M2.1: "auto" -> cross-encoder iff installed, else identity
     planner_agentic: bool = False  # M2.2: use the LLM query decomposer (opt-in; deterministic default)
+    clip_merge_gap_s: float = 2.5  # M2.3: merge cited spans <= this gap into one stitched clip
     vector_prefilter_fts: bool = False  # M0.2: restrict vector candidates to FTS hits (opt-in)
     visual_retrieval: bool = False      # M1.1: master switch for the VISUAL retrieval leg in ask()
 

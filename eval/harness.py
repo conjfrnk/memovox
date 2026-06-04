@@ -107,6 +107,7 @@ _INTENTIONALLY_UNPINNED = frozenset({
     "contradiction_threshold", "topic_similarity", "topic_min_size", "consensus_jaccard",
     "visual_workers",  # M1.1: pool size (1=serial); not a feature toggle
     "rerank_backend",  # M2.1: backend selector (pinned to 'none' in _FREE_BACKENDS)
+    "clip_merge_gap_s",  # M2.3: clip stitch gap tuning knob
 })
 
 # Frozen FULL Settings snapshot (M1.2 W8) — beyond _DEFAULT_OFF_FLAGS, this pins
@@ -116,7 +117,8 @@ _INTENTIONALLY_UNPINNED = frozenset({
 EVAL_SETTINGS_SNAPSHOT = {
     "asr_allow_cpu": False, "asr_backend": "auto", "asr_compute_type": "default",
     "asr_device": "auto", "boundary_similarity": 0.45, "budget_mode": "soft",
-    "captions_as_prior": True, "consensus_jaccard": 0.5, "contradiction_threshold": 0.55,
+    "captions_as_prior": True, "clip_merge_gap_s": 2.5,
+    "consensus_jaccard": 0.5, "contradiction_threshold": 0.55,
     "embed_backend": "auto", "embed_dim": 256, "entailment_threshold": 0.5,
     "entity_backend": "auto", "frame_max": 1200, "frame_sample_fps": 1.0, "frame_side": 16,
     "keyframe_min_gain": 0.12, "keyframe_per_scene_cap": 8, "llm_backend": "auto",

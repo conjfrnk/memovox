@@ -18,6 +18,7 @@ from ..observe import Tracer
 from ..util import split_sentences, tokenize, truncate
 from .planner import decompose, llm_decompose
 from .retrieve import retrieve
+from .stitch import stitch_clips
 from .types import Answer, Citation
 
 _LOW_EVIDENCE_MSG = (
@@ -237,5 +238,11 @@ def ask(
         if low_evidence:
             text = _LOW_EVIDENCE_MSG
         _sp.add_counter("citations", len(citations))
+    # M2.3 clip stitching (spec §5/§8): a strictly ADDITIVE final step reading the
+    # finalized citations — it widens cited spans into deep-linked watch windows and
+    # never mutates text/citations, so the gates stay byte-identical.
+    clips = stitch_clips(citations, videos=video_cache,
+                         merge_gap_s=settings.clip_merge_gap_s)
     return Answer(text=text, citations=citations, strategy=qp.strategy,
-                  low_evidence=low_evidence, metrics=tracer.to_dict(), plan=plan_dicts)
+                  low_evidence=low_evidence, metrics=tracer.to_dict(), plan=plan_dicts,
+                  clips=clips)

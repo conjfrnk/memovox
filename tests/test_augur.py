@@ -173,6 +173,17 @@ class TestAgenticAsk(unittest.TestCase):
         self.store.close()
         self._tmp.cleanup()
 
+    def test_ask_returns_stitched_clips(self):
+        from memovox.config import Settings
+        ans = augur.ask(self.store, "optimal context length retrieval tokens",
+                        embedder=self.emb, settings=Settings(top_k=5))
+        self.assertTrue(ans.clips)
+        cited = {c.index for c in ans.citations}
+        for clip in ans.clips:
+            self.assertLessEqual(clip.t_start_s, clip.t_end_s)
+            self.assertTrue(clip.deep_link)
+            self.assertTrue(set(clip.citation_indices) <= cited)  # additive, real refs
+
     def test_answer_to_dict_carries_plan(self):
         from memovox.config import Settings
         q = ("What was the optimal context length for retrieval, and which model "
