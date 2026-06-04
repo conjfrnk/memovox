@@ -67,5 +67,43 @@ class WordPrecisionFreePathTest(unittest.TestCase):
                             f"expected a word-narrowed span; got {[(c.t_start_s, c.t_end_s) for c in claims]}")
 
 
+class ParseJsonRobustnessTest(unittest.TestCase):
+    def test_null_word_timestamps_do_not_crash(self):
+        from memovox.stentor.transcript import parse_json
+
+        data = {"segments": [{
+            "start": 0.0, "end": 5.0, "text": "uh the model",
+            "words": [
+                {"word": "uh", "start": None, "end": None},   # undeterminable boundary
+                {"word": "the", "start": 0.5, "end": 0.7},
+                {"word": "model"},                              # missing start/end entirely
+            ],
+        }]}
+        segs = parse_json(data)
+        self.assertEqual(len(segs), 1)
+        self.assertEqual(len(segs[0].words), 3)
+        self.assertEqual(segs[0].words[0].start, 0.0)  # null coerced to 0.0, no crash
+
+
+class PublishedAtOverrideTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = pathlib.Path(self._tmp.name)
+        self.config = Config(store=self.dir / "store", settings=Settings(**_FREE)).ensure()
+        self.vtt = self.dir / "talk.en.vtt"
+        self.vtt.write_text(VTT, encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_explicit_empty_string_overrides_source_date(self):
+        # published_at="" is an explicit blank override, NOT a fall-through to meta.
+        report = pipeline.ingest(self.config, str(self.vtt),
+                                 source_url="https://youtu.be/abc123", published_at="")
+        with LoomStore(self.config) as store:
+            # the VTT carries no date anyway, but the contract is: "" != None.
+            self.assertEqual(store.get_video(report.video_id).published_at, "")
+
+
 if __name__ == "__main__":
     unittest.main()

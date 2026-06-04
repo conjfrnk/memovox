@@ -89,8 +89,8 @@ def parse_json(data) -> List[Segment]:
         # Optional per-word timings (M0.3): a free-path fixture can carry word
         # precision via a "words": [{"word","start","end"}, ...] array per cue.
         words = [
-            Word(word=str(w.get("word", "")), start=float(w.get("start", 0.0)),
-                 end=float(w.get("end", 0.0)))
+            Word(word=str(w.get("word", "")), start=float(w.get("start") or 0.0),
+                 end=float(w.get("end") or 0.0))  # `or 0.0` tolerates null/absent timings
             for w in (item.get("words") or [])
             if w.get("word")
         ]

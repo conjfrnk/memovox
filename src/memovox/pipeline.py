@@ -135,7 +135,8 @@ def ingest(
         source_url=meta.source_url,
         title=meta.title,
         channel=meta.channel,
-        published_at=published_at or meta.published_at,  # explicit override (M0.3)
+        # None -> use the source's date; an explicit "" is a real blank override (M0.3).
+        published_at=published_at if published_at is not None else meta.published_at,
         duration_s=st.duration,
         lang=st.language,
         content_hash=meta.content_hash,

@@ -126,6 +126,10 @@ def resolve_asr_backend(meta: SourceMeta, requested: str = "auto", *,
     if can_whisper:
         ok, reason = asr_readiness(meta)
         if not ok:
+            # Captions are a PRIORITY lever, not whisper-only: if whisper can't run
+            # (no audio) but captions exist, use them rather than hard-failing.
+            if has_captions:
+                return "captions"
             raise DemuxError(f"ASR not ready: {reason}")
         return "whisper"
     if has_captions:

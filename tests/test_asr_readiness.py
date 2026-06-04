@@ -56,6 +56,16 @@ class CaptionsAsPriorTest(unittest.TestCase):
             self.assertEqual(
                 resolve_asr_backend(meta, "auto", captions_as_prior=False), "captions")
 
+    def test_prior_disabled_falls_back_to_captions_when_no_audio(self):
+        # whisper installed + media present but NO audio stream: prefer the
+        # available captions rather than crashing (captions_as_prior is a PRIORITY
+        # lever, not a whisper-only switch).
+        meta = _meta(media="clip.mp4", captions="clip.vtt")
+        with mock.patch.object(asr_mod.WhisperASR, "is_available", return_value=True), \
+             mock.patch.object(asr_mod.audio, "has_audio_stream", return_value=False):
+            self.assertEqual(
+                resolve_asr_backend(meta, "auto", captions_as_prior=False), "captions")
+
 
 if __name__ == "__main__":
     unittest.main()
