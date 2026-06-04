@@ -387,6 +387,28 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
             self.assertGreaterEqual(v, 0.0)
             self.assertLessEqual(v, 1.0)
 
+    def test_observability_block_structural_invariants(self):
+        # M0.1 W8: ungated block, but the corpus-size-INDEPENDENT structural facts
+        # are hard invariants (not magnitude thresholds, which would flake CI).
+        obs = self.report["observability"]
+        for stage in ("asr", "visual", "moments", "embed", "claims", "resolve", "digest"):
+            self.assertIn(stage, obs["stages_present"])
+        self.assertTrue(obs["all_status_ok"])
+        self.assertTrue(obs["wall_ms_nonneg"])
+        self.assertTrue(obs["counters_reconcile"])     # committed+unsupported == claims
+        self.assertIn("retrieve", obs["ask_stages"])
+        self.assertIn("synthesize", obs["ask_stages"])
+        self.assertGreater(obs["forced_cap_dropped"], 0)  # forced-small cap fires
+        self.assertTrue(obs["ok"])
+
+    def test_observability_is_ungated(self):
+        # discipline (a): observability never participates in --assert-thresholds.
+        failures = _check_thresholds(self.report)
+        bad = dict(self.report)
+        bad["observability"] = dict(self.report["observability"], ok=False)
+        self.assertEqual(_check_thresholds(bad), failures)
+        self.assertFalse(any("observability" in f for f in failures))
+
     def test_gates_today(self):
         # The only gates meaningful at W0.3.
         self.assertGreaterEqual(self.report["retrieval"]["hit_rate"], 0.6)
@@ -420,6 +442,20 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         self.assertIn("groundedness", syn)
         self.assertGreaterEqual(syn["groundedness"], 0.8)  # the gated value
         self.assertTrue(syn["contradiction_surfaced"])
+
+
+class TestFrozenSettingsSnapshot(unittest.TestCase):
+    """M0.1 W8 / discipline (b): the harness pins the default-OFF flags so a future
+    default flip fails loudly instead of silently moving a gate number."""
+
+    def test_default_off_flags_match_current_settings(self):
+        from eval.harness import _DEFAULT_OFF_FLAGS
+        from memovox.config import Settings
+
+        s = Settings()
+        for flag, expected in _DEFAULT_OFF_FLAGS.items():
+            self.assertEqual(getattr(s, flag), expected,
+                             f"default-OFF flag {flag!r} drifted from the frozen snapshot")
 
 
 if __name__ == "__main__":  # pragma: no cover

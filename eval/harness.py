@@ -69,6 +69,17 @@ _FREE_BACKENDS = dict(
     entity_backend="none",
 )
 
+# Frozen eval-settings snapshot (M0.1 W8 / review discipline (b)): the default-OFF
+# flags whose values the gates implicitly depend on. Pinned so a future default
+# flip — or a leaked MEMOVOX_* env var — fails loudly instead of silently moving a
+# gate number. (metrics are always-on with zero output change, so there is no
+# metrics_enabled flag to pin.) When a later track adds a default-OFF flag, add it
+# here in the same commit.
+_DEFAULT_OFF_FLAGS = dict(
+    budget_mode="soft",
+    otel_enabled=False,
+)
+
 # Default retrieval cutoff for hit_rate / nDCG.
 DEFAULT_K = 5
 
@@ -584,6 +595,72 @@ def run_eval(golden_dir=GOLDEN_DIR, *, store: Optional[_Ingested] = None,
                                gold_contradictions, k=k)
 
 
+def _observability_metrics(ing: _Ingested) -> dict:
+    """Collect the corpus-size-INDEPENDENT structural facts the M0.1 spine emits.
+
+    Re-ingests one golden video under the pinned free stack with an explicit
+    Tracer (so every stage span is inspectable), runs an ask + a forced-small
+    cap, and returns booleans/counts only — never wall-clock magnitudes (those
+    are machine-dependent and must never be thresholded). The block is UNGATED
+    (discipline (a)); only these structural invariants are asserted in tests.
+    """
+    from memovox import Memovox, augur, pipeline
+    from memovox.backends import get_embedder, get_nli
+    from memovox.loom.consolidate import find_contradictions
+    from memovox.loom.store import LoomStore
+    from memovox.observe import Span, Tracer
+
+    golden = sorted(GOLDEN_DIR.glob("*.en.vtt"))
+    expected = ("asr", "visual", "moments", "embed", "claims", "resolve", "digest")
+    if not golden:
+        return {"stages_present": [], "all_status_ok": False, "wall_ms_nonneg": False,
+                "counters_reconcile": False, "ask_stages": [], "forced_cap_dropped": 0,
+                "ok": False}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        mv = Memovox(store=str(Path(tmp) / "store"), **_FREE_BACKENDS)
+        tracer = Tracer("ingest")
+        pipeline.ingest(mv.config, str(golden[0]), settings=mv.settings, tracer=tracer)
+        spans = {s.stage: s for s in tracer.spans}
+        all_ok = all(s.status == "ok" for s in tracer.spans)
+        wall_nonneg = all(s.wall_ms >= 0.0 for s in tracer.spans)
+        claims = spans.get("claims")
+        reconciles = bool(claims) and (
+            claims.counters.get("committed", 0) + claims.counters.get("unsupported", 0)
+            == claims.counters.get("claims", 0)
+        )
+
+        ask_tracer = Tracer("ask")
+        forced = None
+        with LoomStore(mv.config) as store:
+            emb = get_embedder("hashing", config=mv.config)
+            augur.ask(store, "scaling laws", embedder=emb, settings=mv.settings,
+                      tracer=ask_tracer)
+            # force the consolidation cap small so a drop is guaranteed to surface
+            sp = Span(stage="contradictions")
+            find_contradictions(store, nli=get_nli("lexical", config=mv.config),
+                                max_claims=1, write_edges=False, span=sp)
+            forced = next((c for c in sp.caps if c["name"] == "max_claims"), None)
+
+    ask_stages = sorted({s.stage for s in ask_tracer.spans})
+    forced_dropped = int((forced or {}).get("dropped", 0))
+    ok = bool(
+        all(stage in spans for stage in expected)
+        and all_ok and wall_nonneg and reconciles
+        and "retrieve" in ask_stages and "synthesize" in ask_stages
+        and forced_dropped > 0
+    )
+    return {
+        "stages_present": sorted(spans),
+        "all_status_ok": all_ok,
+        "wall_ms_nonneg": wall_nonneg,
+        "counters_reconcile": reconciles,
+        "ask_stages": ask_stages,
+        "forced_cap_dropped": forced_dropped,
+        "ok": ok,
+    }
+
+
 def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
                     gold_contradictions, *, k: int) -> dict:
     from memovox.backends import get_nli
@@ -612,6 +689,11 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
     synthesis = _synthesis_metrics(ing, nli, topic="scaling laws",
                                    threshold=entail_threshold)
 
+    # Observability is collected LAST and is read-only w.r.t. the scored store
+    # (its ingest runs in an isolated temp store; its cap probe uses
+    # write_edges=False), so it cannot perturb any metric computed above.
+    observability = _observability_metrics(ing)
+
     return {
         "retrieval": {
             "hit_rate": round(hit_rate(per_query, k=k), 6),
@@ -628,6 +710,7 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
             "f1": round(contradiction["f1"], 6),
         },
         "synthesis": synthesis,
+        "observability": observability,  # UNGATED (discipline (a)); structural only
     }
 
 
@@ -651,6 +734,19 @@ _SYNTHESIS_GROUNDEDNESS_GATE = 0.8
 
 def _print_report(report: dict) -> None:
     print(json.dumps(report, indent=2, ensure_ascii=False))
+
+
+def _assert_default_off_flags() -> None:
+    """Fail loudly if a pinned default-OFF flag drifted (review discipline (b))."""
+    from memovox.config import Settings
+
+    s = Settings()
+    drift = {k: getattr(s, k) for k, v in _DEFAULT_OFF_FLAGS.items() if getattr(s, k) != v}
+    if drift:
+        raise SystemExit(
+            f"eval-settings snapshot drift: default-OFF flags changed {drift}; "
+            "update _DEFAULT_OFF_FLAGS deliberately and re-baseline the gates."
+        )
 
 
 def _check_thresholds(report: dict) -> List[str]:
@@ -692,6 +788,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    _assert_default_off_flags()
     report = run_eval(args.golden_dir, k=args.k)
     _print_report(report)
 
