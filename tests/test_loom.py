@@ -118,6 +118,22 @@ class TestSearch(LoomTestBase):
         with self.assertRaises(VectorSpaceError):
             self.store.vector_search(q, 5, space="visual_sig")
 
+    def test_visual_search_ranks_by_visual_signature(self):
+        # three moments with distinct visual signatures; a query close to one ranks it first
+        sigs = {
+            "yt:abc#m0010": [1.0, 0.0, 0.0, 0.0],
+            "yt:abc#m0011": [0.0, 1.0, 0.0, 0.0],
+            "yt:abc#m0012": [0.0, 0.0, 1.0, 0.0],
+        }
+        for i, (mid, sig) in enumerate(sigs.items()):
+            m = Moment(mid, "yt:abc", 200.0 + i, 205.0 + i, f"frame {i}", "spk_0", index=10 + i)
+            self.store.add_moment(m, self.emb.embed_one(f"frame {i}"), visual_embedding=sig)
+        ranked = self.store.visual_search([0.9, 0.1, 0.0, 0.0], top_k=3)
+        self.assertEqual(ranked[0][0], "yt:abc#m0010")   # closest signature first
+        # visual_search must never return a text-space row (different dim/space)
+        ids = {mid for mid, _ in ranked}
+        self.assertNotIn("yt:abc#m0000", ids)
+
     def test_visual_vector_stored_raw_not_normalized(self):
         # space tagging must NOT normalize visual signatures (they live in their
         # own space and are scored by cosine, which is scale-invariant).
