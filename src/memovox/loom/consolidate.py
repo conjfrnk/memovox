@@ -65,10 +65,12 @@ def find_contradictions(
     write_edges: bool = True,
     include_supports: bool = False,
     span: Optional[Span] = None,
+    scope: Optional[set] = None,
 ) -> List[ContradictionPair]:
     all_committed = store.list_claims(status="committed")
     claims = all_committed[:max_claims]
     if span is not None:
+        span.add_counter("candidates", len(all_committed))
         span.add_cap("max_claims", limit=max_claims,
                      dropped=max(0, len(all_committed) - max_claims))
     if topic:
@@ -101,6 +103,12 @@ def find_contradictions(
         for cid_a in candidates:
             for cid_b in candidates:
                 if cid_a >= cid_b:
+                    continue
+                # Incremental scope (M0.2): when scanning only NEW claims, skip any
+                # pair where neither side is new — that pair was already scored in
+                # an earlier pass. The candidate UNIVERSE stays all-committed, so a
+                # new claim is still paired against every prior claim (new-vs-ALL).
+                if scope is not None and cid_a not in scope and cid_b not in scope:
                     continue
                 a, b = by_id[cid_a], by_id[cid_b]
                 if a.video_id == b.video_id:
@@ -206,29 +214,50 @@ class ConsolidationReport:
     supports: int = 0
     consensus_clusters: int = 0
     superseded: int = 0
+    claims_scanned: int = 0    # M0.2: candidate claims kept after the cap
+    claims_skipped: int = 0    # M0.2: candidate claims dropped by the cap (reported, not silent)
+    capped: bool = False       # M0.2: True iff the max_claims cap engaged
     metrics: dict = field(default_factory=dict)  # M0.1 per-stage trace (volatile wall_ms)
 
     def to_dict(self) -> dict:
         return dict(self.__dict__)
 
 
+_WATERMARK_KEY = "consolidation_watermark"
+
+
 def consolidate(
     store: LoomStore, *, nli: NLIBackend, settings: Optional[Settings] = None,
-    tracer: Optional[Tracer] = None,
+    tracer: Optional[Tracer] = None, since_watermark: Optional[int] = None,
+    max_claims: int = 600,
 ) -> ConsolidationReport:
-    """Run the full cross-corpus consolidation pass (spec §4 stage 7).
+    """Run cross-corpus consolidation (spec §4 stage 7), incrementally (M0.2 W5).
 
     Topic induction → NLI-verified contradiction/agreement detection (CONTRADICTS
-    + SUPPORTS edges) → consensus clustering → dedup. Intended to run as a
-    background job after ingest, NOT on the per-video ingest path. Idempotent:
-    every leg is deterministic and its writes are ``UNIQUE``-guarded or
-    status-gated.
+    + SUPPORTS edges) → consensus clustering → dedup. Intended as a background job
+    after ingest, NOT on the per-video ingest path. Idempotent: every leg is
+    deterministic and its writes are ``UNIQUE``-guarded or status-gated.
+
+    **Incremental:** only NEW claims (rowid past ``consolidation_watermark``) are
+    scanned for contradictions, each against the FULL committed set (never
+    new-vs-new) — so the cumulative graph is identical to a single full pass while
+    the expensive NLI runs only on new-involving pairs. Pass ``since_watermark=0``
+    to force a full pass. The ``max_claims`` cap is now *reported*
+    (``claims_scanned``/``claims_skipped``/``capped``), never silent. This is the
+    single owner of incremental consolidation — M3.2/M3.3 call it, never reimplement.
     """
     settings = settings or store.config.settings
     tracer = tracer or Tracer("consolidate", otel_enabled=settings.otel_enabled)
     # Local imports to avoid a circular import (topics/consensus import this module).
     from .consensus import cluster_claims
     from .topics import induce_topics
+
+    watermark = (
+        since_watermark if since_watermark is not None
+        else int(store.get_meta(_WATERMARK_KEY, "0") or 0)
+    )
+    scope = store.committed_claim_ids_since(watermark)
+    new_high_water = store.max_claim_rowid()
 
     with tracer.span("topics") as _sp:
         topics = induce_topics(store, settings=settings)
@@ -241,14 +270,21 @@ def consolidate(
         pairs = find_contradictions(
             store, nli=nli, threshold=settings.contradiction_threshold,
             include_supports=True, write_edges=True, span=_sp,
+            scope=scope, max_claims=max_claims,
         )
         contradictions = sum(1 for p in pairs if p.relation == "CONTRADICTS")
         supports = sum(1 for p in pairs if p.relation == "SUPPORTS")
         _sp.add_counter("contradictions", contradictions)
         _sp.add_counter("supports", supports)
+        # Reported paging derived from the cap event (M0.1) on this span.
+        candidates_total = int(_sp.counters.get("candidates", 0))
+        cap = next((c for c in _sp.caps if c["name"] == "max_claims"), None)
+        claims_skipped = int(cap["dropped"]) if cap else 0
+        claims_scanned = candidates_total - claims_skipped
+        capped = claims_skipped > 0
 
     with tracer.span("consensus") as _sp:
-        clusters = cluster_claims(store, write_edges=False)
+        clusters = cluster_claims(store, write_edges=False, max_claims=max_claims)
         consensus_clusters = sum(1 for c in clusters if c.support_count >= 2)
         _sp.add_counter("clusters", consensus_clusters)
 
@@ -256,8 +292,12 @@ def consolidate(
         superseded = dedup_claims(store)
         _sp.add_counter("superseded", superseded)
 
+    # Advance the watermark only forward (never below an explicitly cold pass).
+    store.set_meta(_WATERMARK_KEY, str(new_high_water))
+
     return ConsolidationReport(
         topics=len(topics), contradictions=contradictions, supports=supports,
         consensus_clusters=consensus_clusters, superseded=superseded,
+        claims_scanned=claims_scanned, claims_skipped=claims_skipped, capped=capped,
         metrics=tracer.to_dict(),
     )

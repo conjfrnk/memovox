@@ -458,7 +458,25 @@ class LoomStore:
         if claim_type:
             sql += " AND claim_type = ?"
             params.append(claim_type)
+        # Explicit, stable insertion order (rowid) — the deterministic ordering the
+        # consolidation cap + watermark (M0.2) rely on; identical to the prior
+        # implicit table-scan order, so no result moves.
+        sql += " ORDER BY rowid"
         return [_row_to_claim(r) for r in self.conn.execute(sql, tuple(params)).fetchall()]
+
+    def max_claim_rowid(self) -> int:
+        """High-water cursor for incremental consolidation (M0.2): the max claims
+        rowid (monotonic with insertion; replace re-inserts at higher rowids)."""
+        row = self.conn.execute("SELECT COALESCE(MAX(rowid), 0) FROM claims").fetchone()
+        return int(row[0])
+
+    def committed_claim_ids_since(self, rowid: int) -> set:
+        """Committed claim ids inserted after ``rowid`` (the NEW claims to scan)."""
+        rows = self.conn.execute(
+            "SELECT claim_id FROM claims WHERE rowid > ? AND status = ?",
+            (rowid, STATUS_COMMITTED),
+        ).fetchall()
+        return {r["claim_id"] for r in rows}
 
     # -- speakers / entities / topics -------------------------------------
 
