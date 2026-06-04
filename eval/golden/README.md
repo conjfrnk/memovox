@@ -87,3 +87,18 @@ are stripped from the knowledge text.
   is the union so `hit_rate` still credits the item. The agentic planner
   decomposes the question, retrieves each clause, and merges — `plan.subquery_recall`
   (ungated) is the fraction of clauses covered in the single composed answer.
+
+## M3.4 — backend A/B benchmark
+
+`python -m eval.harness --benchmark` (or `make benchmark`) ranks the available
+`BackendConfig`s over the golden text metrics (`hit_rate`, `mrr`, `ndcg`,
+`groundedness`, `contradiction.f1`, `synthesis.groundedness`). It **auto-shrinks to
+the single FREE row** on a bare machine (the only row CI gates); upgrade rows
+(`free+cross-encoder`, `st+deberta`) appear only when their optional deps are
+installed. `--benchmark --json` emits machine-readable output; `--benchmark
+--assert-no-regression` gates the FREE row on the existing thresholds.
+
+**Scope caveat:** visual/OCR/VLM configs (e.g. `colpali+surya+qwen`) are declared
+**unrankable** on this text corpus — they move only the ungated `multimodal` block,
+not the ranked text metrics. They are reported with an explicit reason, never
+silently scored 0.0.
