@@ -12,8 +12,10 @@ from pathlib import Path
 from typing import List, Optional
 
 from .. import audio
+from ..backends.asr_align import WhisperXAlign
 from ..backends.asr_whisper import WhisperASR
 from ..backends.base import ASRBackend, ASRResult, Segment
+from ..backends.diarize_turns import PyannoteTurns
 from ..config import Config
 from ..errors import BackendUnavailable, DemuxError
 from .acquire import SourceMeta
@@ -57,6 +59,34 @@ class CaptionsASR(ASRBackend):
 
 
 _REGISTRY = {"whisper": WhisperASR, "captions": CaptionsASR, "fake": FakeASR}
+
+# Opt-in trailing upgrades (M0.3 W7): is_available-gated, never on the free path.
+_ALIGNERS = {"whisperx": WhisperXAlign}
+_TURN_DIARIZERS = {"pyannote-turns": PyannoteTurns}
+
+
+def get_aligner(name: str = "whisperx", *, config: Optional[Config] = None, **options):
+    """Resolve an opt-in forced-alignment backend, or raise BackendUnavailable."""
+    cls = _ALIGNERS.get(name)
+    if cls is None:
+        raise BackendUnavailable(f"Unknown aligner {name!r}. Options: {list(_ALIGNERS)}.")
+    if not cls.is_available():
+        raise BackendUnavailable(
+            f"Aligner {name!r} is not installed (try: pip install 'memovox[align]')."
+        )
+    return cls(config=config, **options)
+
+
+def get_diarizer_turns(name: str = "pyannote-turns", *, config: Optional[Config] = None, **options):
+    """Resolve an opt-in diarization-turns backend, or raise BackendUnavailable."""
+    cls = _TURN_DIARIZERS.get(name)
+    if cls is None:
+        raise BackendUnavailable(f"Unknown diarizer {name!r}. Options: {list(_TURN_DIARIZERS)}.")
+    if not cls.is_available():
+        raise BackendUnavailable(
+            f"Diarizer {name!r} is not installed (try: pip install 'memovox[diarize]')."
+        )
+    return cls(config=config, **options)
 
 
 def get_asr(name: str, *, config: Optional[Config] = None, **options) -> ASRBackend:
