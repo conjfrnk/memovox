@@ -72,6 +72,7 @@ class Settings:
 
     # Observability (M0.1, spec §7/§9) — all default to the free, no-output-change path
     budget_mode: str = "soft"       # "soft" records overage; "hard" raises BudgetExceeded
+    otel_enabled: bool = False      # mirror spans to OpenTelemetry (opt-in [otel] extra)
 
     @classmethod
     def from_env(cls, base: "Settings | None" = None) -> "Settings":

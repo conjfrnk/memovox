@@ -13,7 +13,15 @@ from unittest import mock
 
 from memovox.config import Settings
 from memovox.errors import MemovoxError
-from memovox.observe import Budget, BudgetExceeded, Span, Tracer, get_logger
+from memovox.observe import (
+    Budget,
+    BudgetExceeded,
+    Span,
+    Tracer,
+    _NullOtelSpan,
+    get_logger,
+    otel_available,
+)
 
 
 class TracerSpanTest(unittest.TestCase):
@@ -115,6 +123,42 @@ class BudgetTest(unittest.TestCase):
         budget.charge(10_000)  # never raises, never exceeded
         self.assertFalse(budget.exceeded)
         self.assertEqual(budget.overage, 0)
+
+
+class OtelTest(unittest.TestCase):
+    def test_null_otel_span_methods_are_callable_noops(self):
+        with _NullOtelSpan() as entered:
+            entered.set_attribute("k", "v")
+            entered.end()  # harmless no-ops, no exception
+
+    def test_tracer_stdlib_path_when_otel_disabled(self):
+        tracer = Tracer(otel_enabled=False)
+        with tracer.span("asr") as sp:
+            sp.add_counter("x", 1)
+        self.assertEqual(sp.status, "ok")
+        self.assertGreaterEqual(sp.wall_ms, 0.0)
+
+    def test_otel_enabled_without_package_degrades_gracefully(self):
+        import memovox.observe as obs
+
+        obs._otel_warned = False  # reset the one-time warning guard
+        logger = get_logger("memovox.oteltest")
+        handler = next(h for h in logger.handlers if isinstance(h, logging.StreamHandler))
+        buf = io.StringIO()
+        saved = handler.stream
+        handler.stream = buf
+        try:
+            tracer = Tracer(otel_enabled=True, logger=logger)
+            with tracer.span("asr") as sp:  # must NOT raise though otel is absent
+                pass
+        finally:
+            handler.stream = saved
+        self.assertEqual(sp.status, "ok")
+        if not otel_available():
+            self.assertIn("opentelemetry", buf.getvalue().lower())
+
+    def test_settings_otel_enabled_default_false(self):
+        self.assertFalse(Settings().otel_enabled)
 
 
 class SettingsBudgetTest(unittest.TestCase):

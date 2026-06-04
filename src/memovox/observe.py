@@ -26,12 +26,44 @@ from typing import Dict, Iterator, List, Optional
 
 from .errors import BudgetExceeded
 
+# Optional OpenTelemetry bridge ([otel] extra). Absent by default → a clean no-op
+# with the same method surface (mirrors the backend-registry auto→free fallback).
+try:  # pragma: no cover - real branch only with [otel] installed (never in CI)
+    from opentelemetry import trace as _otel_trace
+    _OTEL_AVAILABLE = True
+except ImportError:
+    _otel_trace = None
+    _OTEL_AVAILABLE = False
+
+_otel_warned = False  # one-time guard for the "enabled but not installed" warning
+
 # status vocabulary for a span
 STATUS_OK = "ok"
 STATUS_ERROR = "error"
 STATUS_DEGRADED = "degraded"
 
 _CONFIGURED_FLAG = "_memovox_json_configured"
+
+
+def otel_available() -> bool:
+    """True iff the optional ``[otel]`` extra (opentelemetry) is importable."""
+    return _OTEL_AVAILABLE
+
+
+class _NullOtelSpan:
+    """A no-op span mirroring the OTel span surface used as the free-path default."""
+
+    def set_attribute(self, *_args, **_kwargs) -> None:
+        return None
+
+    def end(self) -> None:
+        return None
+
+    def __enter__(self) -> "_NullOtelSpan":
+        return self
+
+    def __exit__(self, *_exc) -> bool:
+        return False
 
 
 @dataclass
@@ -130,26 +162,52 @@ class Tracer:
     swallowed). Each completed span is logged as one JSON line to stderr.
     """
 
-    def __init__(self, name: str = "memovox", *, logger: Optional[logging.Logger] = None) -> None:
+    def __init__(
+        self,
+        name: str = "memovox",
+        *,
+        logger: Optional[logging.Logger] = None,
+        otel_enabled: bool = False,
+    ) -> None:
         self.name = name
         self.spans: List[Span] = []
+        self.otel_enabled = otel_enabled
         self._logger = logger if logger is not None else get_logger("memovox.trace")
+
+    def _otel_span(self, stage: str):
+        """Return an OTel span CM when enabled+available, else a harmless no-op.
+
+        When enabled but the package is missing, warn once to stderr and fall back
+        — never raise (free-path purity: OTel is an optional upgrade, not a dep).
+        """
+        if self.otel_enabled and _OTEL_AVAILABLE:  # pragma: no cover - needs [otel]
+            return _otel_trace.get_tracer("memovox").start_as_current_span(stage)
+        if self.otel_enabled and not _OTEL_AVAILABLE:
+            global _otel_warned
+            if not _otel_warned:
+                self._logger.warning(
+                    "otel_enabled is set but opentelemetry is not installed; "
+                    "install the [otel] extra. Using the stdlib no-op tracer."
+                )
+                _otel_warned = True
+        return _NullOtelSpan()
 
     @contextmanager
     def span(self, stage: str) -> Iterator[Span]:
         sp = Span(stage=stage)
         self.spans.append(sp)
         t0 = time.perf_counter()
-        try:
-            yield sp
-        except BaseException:
-            sp.status = STATUS_ERROR
-            sp.wall_ms = (time.perf_counter() - t0) * 1000.0
-            self._log_span(sp)
-            raise
-        else:
-            sp.wall_ms = (time.perf_counter() - t0) * 1000.0
-            self._log_span(sp)
+        with self._otel_span(stage):
+            try:
+                yield sp
+            except BaseException:
+                sp.status = STATUS_ERROR
+                sp.wall_ms = (time.perf_counter() - t0) * 1000.0
+                self._log_span(sp)
+                raise
+            else:
+                sp.wall_ms = (time.perf_counter() - t0) * 1000.0
+                self._log_span(sp)
 
     def _log_span(self, sp: Span) -> None:
         self._logger.info("span", extra={"span": sp.to_dict()})

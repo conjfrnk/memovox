@@ -71,7 +71,7 @@ def ask(
     tracer: Optional[Tracer] = None,
 ) -> Answer:
     settings = settings or Settings()
-    tracer = tracer or Tracer("ask")
+    tracer = tracer or Tracer("ask", otel_enabled=settings.otel_enabled)
     qp = plan_query(query)
     # Consume the plan: the strategy chooses the retrieval mode (and, below, the
     # citation ordering) — it is NOT decorative. Only the contradiction route

@@ -225,7 +225,7 @@ def consolidate(
     status-gated.
     """
     settings = settings or store.config.settings
-    tracer = tracer or Tracer("consolidate")
+    tracer = tracer or Tracer("consolidate", otel_enabled=settings.otel_enabled)
     # Local imports to avoid a circular import (topics/consensus import this module).
     from .consensus import cluster_claims
     from .topics import induce_topics

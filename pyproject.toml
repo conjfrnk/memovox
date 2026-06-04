@@ -47,6 +47,7 @@ vectors = ["lancedb>=0.6.0"]                          # Loom: embedded vector DB
 graph = ["kuzu>=0.4.0"]                               # Loom: embeddable graph DB
 serve = ["fastapi>=0.110.0", "uvicorn>=0.29.0"]      # Augur: REST API
 mcp = ["mcp>=1.0.0"]                                  # Augur: agent-native MCP server
+otel = ["opentelemetry-sdk>=1.20.0", "opentelemetry-api>=1.20.0"]  # M0.1: optional trace export
 dev = ["pytest>=7.0", "ruff>=0.4.0"]
 
 [project.scripts]

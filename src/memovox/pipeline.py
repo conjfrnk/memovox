@@ -106,7 +106,7 @@ def ingest(
 ) -> IngestReport:
     config.ensure()
     settings = settings or config.settings
-    tracer = tracer or Tracer("ingest")
+    tracer = tracer or Tracer("ingest", otel_enabled=settings.otel_enabled)
 
     # --- Stentor: acquire + ASR + diarize -------------------------------
     with tracer.span("asr") as _sp:
