@@ -58,11 +58,15 @@ def make_handler(mv: Memovox):
                 if path == "/":
                     return self._send({"name": "memovox", "endpoints": [
                         "POST /ingest", "POST /query", "GET /clip", "GET /export/{id}",
-                        "GET /graph/contradictions", "GET /videos"]})
+                        "GET /graph/contradictions", "GET /timeline", "GET /videos"]})
                 if path == "/videos":
                     return self._send([v.to_dict() for v in mv.list_videos()])
                 if path == "/clip":
                     return self._clip(q)
+                if path == "/timeline":
+                    # M3.1: how a claim/position changed over time (reuses loom/evolution)
+                    return self._send(mv.evolution(entity=q.get("entity", [None])[0],
+                                                   topic=q.get("topic", [None])[0]))
                 if path.startswith("/export/"):
                     return self._export(path[len("/export/"):], q)
                 if path == "/graph/contradictions":

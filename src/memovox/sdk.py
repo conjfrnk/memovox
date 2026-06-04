@@ -105,6 +105,12 @@ class Memovox:
             steps = claim_evolution(store, entity_id=entity, topic=topic)
             return [s.to_dict() for s in steps]
 
+    def claim_history(self, claim_id: str) -> List[dict]:
+        """Every version in a claim's supersede lineage, oldest→newest (M3.1, §2).
+        Nothing is deleted — superseded versions are returned alongside the live one."""
+        with LoomStore(self.config) as store:
+            return [c.to_dict() for c in store.claim_history(claim_id)]
+
     # -- read / export -----------------------------------------------------
 
     def export(self, video_id: str, fmt: str = "md") -> str:

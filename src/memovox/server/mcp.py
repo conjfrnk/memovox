@@ -77,6 +77,15 @@ TOOLS = [
                        "detection, consensus, dedup). Run after ingesting new videos.",
         "inputSchema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "claim_timeline",
+        "description": "Trace how a position/number about an entity or topic changed over time "
+                       "(ordered, deep-linked evolution steps).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"entity": {"type": "string"}, "topic": {"type": "string"}},
+        },
+    },
 ]
 
 
@@ -155,6 +164,10 @@ class McpServer:
 
     def _tool_consolidate(self, args: dict) -> dict:
         return _tool_json(self.mv.consolidate())
+
+    def _tool_claim_timeline(self, args: dict) -> dict:
+        # M3.1: reuse loom/evolution via the SDK (no new ordering logic)
+        return _tool_json(self.mv.evolution(entity=args.get("entity"), topic=args.get("topic")))
 
 
 def _version() -> str:

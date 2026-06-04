@@ -42,7 +42,16 @@ class TestMcp(unittest.TestCase):
         self.assertIn("search_knowledge", names)
         self.assertIn("ingest_video", names)
         self.assertIn("consolidate", names)
-        self.assertEqual(len(names), 6)
+        self.assertIn("claim_timeline", names)
+        self.assertEqual(len(names), 7)
+
+    def test_claim_timeline_tool(self):
+        resp = self.server.handle({
+            "jsonrpc": "2.0", "id": 12, "method": "tools/call",
+            "params": {"name": "claim_timeline", "arguments": {"topic": "chunk size"}},
+        })
+        self.assertNotIn("error", resp)
+        self.assertIsInstance(resp["result"]["content"][0]["text"], str)  # ordered steps JSON
 
     def test_tools_call_search(self):
         resp = self.server.handle({

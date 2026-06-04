@@ -42,6 +42,25 @@ class RestClipTest(unittest.TestCase):
         h._clip(q)
         return captured["payload"]
 
+    def _get(self, path, q):
+        Handler = make_handler(self.mv)
+        h = Handler.__new__(Handler)
+        captured = {}
+        h._send = lambda obj, status=None: captured.update(payload=obj, status=status)
+        # drive the do_GET dispatch via the closure's path handling
+        h.path = path + ("?" + "&".join(f"{k}={v[0]}" for k, v in q.items()) if q else "")
+        h.do_GET()
+        return captured["payload"]
+
+    def test_timeline_endpoint_reuses_evolution(self):
+        # M3.1: /timeline returns ordered evolution steps (reuses loom/evolution)
+        payload = self._get("/timeline", {"topic": ["chunk size"]})
+        self.assertIsInstance(payload, list)  # ordered EvolutionStep dicts (possibly empty)
+
+    def test_index_lists_timeline(self):
+        payload = self._get("/", {})
+        self.assertIn("GET /timeline", payload["endpoints"])
+
     def test_clip_endpoint_returns_stitched_superset(self):
         payload = self._clip({"video": ["yt:abc123"], "t_start": ["0"], "t_end": ["60"]})
         # legacy keys unchanged
