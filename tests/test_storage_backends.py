@@ -94,5 +94,42 @@ class ParityTest(unittest.TestCase):
                          SqliteGraphStore(self.store.conn).edges(rel="PRECEDES"))
 
 
+class FtsPrefilterTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.config = Config(store=pathlib.Path(self._tmp.name) / "store").ensure()
+        self.store = LoomStore(self.config)
+        if not self.store.fts:
+            self.skipTest("FTS5 not available")
+        self.emb = HashingEmbedder(dim=256)
+        self.store.upsert_video(Video(video_id="v", source_url="https://x/v",
+                                      title="v", content_hash="v"))
+        self.A = Moment("v#m0000", "v", 0.0, 5.0, "alpha beta gamma machine learning",
+                        "spk_0", index=0)
+        self.B = Moment("v#m0001", "v", 5.0, 10.0, "delta epsilon zeta cooking recipe",
+                        "spk_0", index=1)
+        self.store.add_moment(self.A, self.emb.embed_one(self.A.text_for_embedding()))
+        self.store.add_moment(self.B, self.emb.embed_one(self.B.text_for_embedding()))
+
+    def tearDown(self):
+        self.store.close()
+        self._tmp.cleanup()
+
+    def test_prefilter_off_by_default_scores_all(self):
+        self.assertFalse(self.config.settings.vector_prefilter_fts)
+        q = self.emb.embed_one("alpha beta")
+        ids = [m for m, _ in self.store.vector_search(q, 5, query_text="alpha beta")]
+        # OFF: both scored regardless of lexical overlap (today's behavior)
+        self.assertIn("v#m0000", ids)
+        self.assertIn("v#m0001", ids)
+
+    def test_prefilter_on_restricts_to_fts_candidates(self):
+        self.config.settings.vector_prefilter_fts = True
+        q = self.emb.embed_one("alpha beta")
+        ids = [m for m, _ in self.store.vector_search(q, 5, query_text="alpha beta")]
+        self.assertIn("v#m0000", ids)       # FTS candidate for "alpha beta"
+        self.assertNotIn("v#m0001", ids)    # excluded: not a lexical candidate
+
+
 if __name__ == "__main__":
     unittest.main()

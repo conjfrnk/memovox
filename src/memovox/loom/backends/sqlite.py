@@ -61,6 +61,9 @@ class SqliteVectorIndex(VectorIndex):
         if not query_vec or norm(query_vec) == 0.0:
             return []
         q = normalize(query_vec)  # cosine == dot once both sides are unit vectors
+        # Opt-in FTS candidate prefilter: when query_text is provided, score only
+        # the lexical-match candidate set (None == FTS unavailable -> score all).
+        restrict = self._fts_candidate_ids(query_text) if query_text else None
         if video_id:
             rows = self.conn.execute(
                 "SELECT v.moment_id AS moment_id, v.vec AS vec FROM vectors v "
@@ -72,12 +75,25 @@ class SqliteVectorIndex(VectorIndex):
         qlen = len(q)
         scored: List[Tuple[str, float]] = []
         for r in rows:
+            if restrict is not None and r["moment_id"] not in restrict:
+                continue
             vec = unpack_floats(r["vec"])
             if len(vec) != qlen:
                 continue
             scored.append((r["moment_id"], dot(q, vec)))  # no per-row norm() recompute
         scored.sort(key=lambda x: x[1], reverse=True)
         return scored[:top_k]
+
+    def _fts_candidate_ids(self, query_text: str) -> Optional[set]:
+        """Moment ids matching ``query_text`` via FTS5, or None if FTS unavailable."""
+        try:
+            rows = self.conn.execute(
+                "SELECT moment_id FROM moments_fts WHERE moments_fts MATCH ?",
+                (_fts_query(query_text),),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return None
+        return {r["moment_id"] for r in rows}
 
 
 class SqliteLexicalIndex(LexicalIndex):

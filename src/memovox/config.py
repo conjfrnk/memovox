@@ -64,6 +64,7 @@ class Settings:
     rrf_k: int = 60
     top_k: int = 8
     contradiction_threshold: float = 0.55
+    vector_prefilter_fts: bool = False  # M0.2: restrict vector candidates to FTS hits (opt-in)
 
     # Loom — synthesis (Phase 3, spec §4.7)
     topic_similarity: float = 0.5   # cosine floor to merge moments into one topic

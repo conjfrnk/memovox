@@ -57,7 +57,7 @@ def retrieve(
     settings = settings or Settings()
     pool = max(settings.top_k * 3, 12)
     query_vec = embedder.embed_one(query)
-    dense = store.vector_search(query_vec, pool, video_id=video_id)
+    dense = store.vector_search(query_vec, pool, video_id=video_id, query_text=query)
     lexical = store.lexical_search(query, pool)
     if video_id:
         lexical = [(mid, s) for (mid, s) in lexical if mid.startswith(video_id)]

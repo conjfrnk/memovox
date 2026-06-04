@@ -588,6 +588,11 @@ class LoomStore:
         self, query_vec: Sequence[float], top_k: int = 20, *,
         video_id: Optional[str] = None, query_text: Optional[str] = None,
     ) -> List[Tuple[str, float]]:
+        # The FTS candidate prefilter (M0.2 W4) is opt-in: pass query_text to the
+        # index ONLY when the flag is on, so the default free path scores all
+        # vectors (byte-identical to today).
+        if not self.config.settings.vector_prefilter_fts:
+            query_text = None
         return self.vector_index.search(query_vec, top_k, video_id=video_id,
                                         query_text=query_text)
 
