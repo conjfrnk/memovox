@@ -29,3 +29,7 @@ class IngestionError(MemovoxError):
 
 class NotFoundError(MemovoxError):
     """A requested entity does not exist."""
+
+
+class BudgetExceeded(MemovoxError):
+    """A per-video token/compute budget was exceeded in hard mode (spec §9)."""

@@ -5,11 +5,15 @@ from __future__ import annotations
 import io
 import json
 import logging
+import os
 import sys
 import unittest
 from contextlib import redirect_stdout
+from unittest import mock
 
-from memovox.observe import Span, Tracer, get_logger
+from memovox.config import Settings
+from memovox.errors import MemovoxError
+from memovox.observe import Budget, BudgetExceeded, Span, Tracer, get_logger
 
 
 class TracerSpanTest(unittest.TestCase):
@@ -81,6 +85,45 @@ class StructuredLoggingTest(unittest.TestCase):
             with tracer.span("asr") as span:
                 span.add_counter("x", 1)
         self.assertEqual(out.getvalue(), "")
+
+
+class BudgetTest(unittest.TestCase):
+    def test_soft_budget_records_overage_without_raising(self):
+        budget = Budget(max_units=10, mode="soft")
+        overage = budget.charge(15)
+        self.assertTrue(budget.exceeded)
+        self.assertEqual(budget.overage, 5)
+        self.assertEqual(overage, 5)
+
+    def test_hard_budget_raises_budget_exceeded(self):
+        budget = Budget(max_units=10, mode="hard")
+        with self.assertRaises(BudgetExceeded):
+            budget.charge(15)
+
+    def test_budget_exceeded_is_a_memovox_error(self):
+        # so the CLI's `except (MemovoxError, ...)` catches hard-mode failures
+        self.assertTrue(issubclass(BudgetExceeded, MemovoxError))
+
+    def test_under_budget_is_not_exceeded(self):
+        budget = Budget(max_units=10, mode="hard")
+        self.assertEqual(budget.charge(4), 0)
+        self.assertEqual(budget.charge(6), 0)  # exactly at the cap is not over
+        self.assertFalse(budget.exceeded)
+
+    def test_none_max_units_means_unbounded(self):
+        budget = Budget(max_units=None, mode="hard")
+        budget.charge(10_000)  # never raises, never exceeded
+        self.assertFalse(budget.exceeded)
+        self.assertEqual(budget.overage, 0)
+
+
+class SettingsBudgetTest(unittest.TestCase):
+    def test_default_budget_mode_is_soft(self):
+        self.assertEqual(Settings().budget_mode, "soft")
+
+    def test_from_env_coerces_budget_mode(self):
+        with mock.patch.dict(os.environ, {"MEMOVOX_BUDGET_MODE": "hard"}):
+            self.assertEqual(Settings.from_env().budget_mode, "hard")
 
 
 if __name__ == "__main__":

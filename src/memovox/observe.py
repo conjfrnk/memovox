@@ -24,6 +24,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Dict, Iterator, List, Optional
 
+from .errors import BudgetExceeded
+
 # status vocabulary for a span
 STATUS_OK = "ok"
 STATUS_ERROR = "error"
@@ -65,6 +67,57 @@ class Span:
             "status": self.status,
             "counters": dict(self.counters),
             "caps": list(self.caps),
+        }
+
+
+class Budget:
+    """A per-video token/compute budget (spec §9).
+
+    "Units" are a coarse, deterministic count defined per stage (moments
+    processed + frames sampled + NLI calls), not LLM tokens — so the free path
+    has a meaningful, stable budget. ``mode="soft"`` (the free default) records
+    overage and never raises; ``mode="hard"`` raises :class:`BudgetExceeded` as
+    soon as the running total passes ``max_units``. ``max_units=None`` is
+    unbounded.
+    """
+
+    def __init__(self, max_units: Optional[int] = None, mode: str = "soft") -> None:
+        self.max_units = max_units
+        self.mode = mode
+        self.used: float = 0
+
+    @property
+    def exceeded(self) -> bool:
+        return self.max_units is not None and self.used > self.max_units
+
+    @property
+    def overage(self) -> float:
+        if self.max_units is None:
+            return 0
+        return max(0, self.used - self.max_units)
+
+    def charge(self, units: float, *, label: Optional[str] = None) -> float:
+        """Add ``units`` to the running total; return the current overage.
+
+        In hard mode, raises :class:`BudgetExceeded` when the total exceeds the
+        cap. In soft mode (default) it only records — callers read ``exceeded`` /
+        ``overage`` afterward.
+        """
+        self.used += units
+        if self.exceeded and self.mode == "hard":
+            where = f" at {label}" if label else ""
+            raise BudgetExceeded(
+                f"budget exceeded{where}: used {self.used} > {self.max_units} units"
+            )
+        return self.overage
+
+    def to_dict(self) -> dict:
+        return {
+            "max_units": self.max_units,
+            "used": self.used,
+            "mode": self.mode,
+            "exceeded": self.exceeded,
+            "overage": self.overage,
         }
 
 

@@ -70,6 +70,9 @@ class Settings:
     topic_min_size: int = 1         # drop induced topics with fewer members
     consensus_jaccard: float = 0.5  # content-token Jaccard floor to cluster equivalent claims
 
+    # Observability (M0.1, spec §7/§9) — all default to the free, no-output-change path
+    budget_mode: str = "soft"       # "soft" records overage; "hard" raises BudgetExceeded
+
     @classmethod
     def from_env(cls, base: "Settings | None" = None) -> "Settings":
         data = asdict(base) if base else {}
