@@ -1,6 +1,6 @@
 # M3.2 — Subscriptions & incremental sync
 
-> **Wave:** 3 · **Effort:** L · **Status:** not started
+> **Wave:** 3 · **Effort:** L · **Status:** ✅ done (branch `phase4-subscriptions`, 7/7 + review fix; 449 pass / 2 skip; 14 gates). enumerate_source (no download) + sync_state cursor + resolve_corpus deferral + SyncReport engine + subscribe/unsubscribe CLI + incremental==batch gate.
 > **Depends on:** M0.2 (incremental consolidation — *consume, do not reimplement*) · **Owns (single-owner concerns):** the sync rewrite (Serving / M3.3 consumes this) · **Blocks:** M3.3
 > **Spec:** §8 (CLI: `memovox ingest <url | playlist | channel>`, `memovox sync`), §11 (Phase 4: "channel/playlist subscriptions + incremental sync")
 

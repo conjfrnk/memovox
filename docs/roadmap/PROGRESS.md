@@ -5,7 +5,7 @@ Update a row when you start/finish a track; tick the detailed workstream checkli
 inside each track doc (its *Definition of done*) as you go. Keep this file and each
 doc's `Status:` line in sync.
 
-_Last updated: 2026-06-04 — Waves 0-2 + M3.1 decay merged: 433 pass / 2 skip; 12 gates._
+_Last updated: 2026-06-04 — Waves 0-2 + M3.1 + M3.2 merged: 449 pass / 2 skip; 14 gates._
 
 ## Baseline (keep green at every commit)
 
