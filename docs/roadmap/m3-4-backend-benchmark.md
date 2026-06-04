@@ -1,6 +1,6 @@
 # M3.4 — Backend A/B benchmark harness
 
-> **Wave:** 3 · **Effort:** M · **Status:** not started
+> **Wave:** 3 · **Effort:** M · **Status:** ✅ done (branch `phase4-benchmark`, 6/6 + review fix; 480 pass / 2 skip; 15 gates). BackendConfig + FREE snapshot covering every slot; injected at the 2 pin-points (byte-identical); available_configs auto-shrinks to FREE; --benchmark/--json deterministic table; --assert-no-regression on the FREE row.
 > **Depends on:** M2.1 (rerank slot), M1.1 (Surya/Qwen visual slots + the `visual_result` injection seam) — so there are real upgrade slots to rank · **Owns (single-owner concerns):** none · **Blocks:** none
 > **Spec:** §7 ("any backend is A/B-benchmarkable against another"; named backends), §10 (eval dimensions / the measuring stick)
 
