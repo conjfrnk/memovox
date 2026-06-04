@@ -133,6 +133,19 @@ class TestAgenticAsk(unittest.TestCase):
         self.store.close()
         self._tmp.cleanup()
 
+    def test_answer_to_dict_carries_plan(self):
+        from memovox.config import Settings
+        q = ("What was the optimal context length for retrieval, and which model "
+             "family reused the Chinchilla token ratio?")
+        d = augur.ask(self.store, q, embedder=self.emb, settings=Settings(top_k=2)).to_dict()
+        self.assertIn("plan", d)
+        self.assertEqual(len(d["plan"]), 2)
+        for entry in d["plan"]:
+            self.assertEqual(set(entry), {"text", "strategy", "modality"})
+        # single-clause -> one-element plan
+        d1 = augur.ask(self.store, "what is the context length", embedder=self.emb).to_dict()
+        self.assertEqual(len(d1["plan"]), 1)
+
     def test_multipart_cites_both_disjoint_moments(self):
         from memovox.config import Settings
         q = ("What was the optimal context length for retrieval, and which model "

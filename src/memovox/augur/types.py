@@ -31,6 +31,7 @@ class Answer:
     strategy: str = "hybrid"
     low_evidence: bool = False
     metrics: dict = field(default_factory=dict)  # M0.1 per-stage trace (volatile wall_ms)
+    plan: List[dict] = field(default_factory=list)  # M2.2 decomposed sub-queries
 
     def to_dict(self) -> dict:
         return {
@@ -39,4 +40,5 @@ class Answer:
             "low_evidence": self.low_evidence,
             "citations": [c.to_dict() for c in self.citations],
             "metrics": self.metrics,
+            "plan": self.plan,
         }

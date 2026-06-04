@@ -108,6 +108,7 @@ def ask(
     tracer = tracer or Tracer("ask", otel_enabled=settings.otel_enabled)
     qp = decompose(query)  # multi-part decomposition (single-clause => one verbatim sub-query)
     multi = len(qp.subqueries) > 1
+    plan_dicts = [sq.to_dict() for sq in qp.subqueries]
     # The VISUAL leg (M1.1) turns on when the plan routes to visual OR the caller
     # explicitly asks for modality="visual"; it only fires if a visual query vector
     # is supplied (e.g. an image query), so a plain text ask is byte-identical.
@@ -156,7 +157,7 @@ def ask(
         _sp.add_counter("results", len(fused))
     if not fused:
         return Answer(text=_LOW_EVIDENCE_MSG, citations=[], strategy=qp.strategy,
-                      low_evidence=True, metrics=tracer.to_dict())
+                      low_evidence=True, metrics=tracer.to_dict(), plan=plan_dicts)
 
     # M2.1 rerank stage (spec §5/§3): the single-clause path reranks the fused set
     # here (the multi-part path already reranked each sub-query above). The free
@@ -227,4 +228,4 @@ def ask(
             text = _LOW_EVIDENCE_MSG
         _sp.add_counter("citations", len(citations))
     return Answer(text=text, citations=citations, strategy=qp.strategy,
-                  low_evidence=low_evidence, metrics=tracer.to_dict())
+                  low_evidence=low_evidence, metrics=tracer.to_dict(), plan=plan_dicts)
