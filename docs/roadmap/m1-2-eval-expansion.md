@@ -1,6 +1,6 @@
 # M1.2 — Eval expansion (graph leg, span/citation, keyframe, gate promotions)
 
-> **Wave:** 1 · **Effort:** L · **Status:** not started
+> **Wave:** 1 · **Effort:** L · **Status:** ✅ done (branch `phase4-eval-expansion`, W1-W9 + review fix; 377 pass / 2 skip; 9 gates green). FINDING: a genuinely graph-ONLY golden item via an NLI-derived edge is infeasible on LexicalNLI (contradictor is lexically similar to the seed → dense-retrievable); the §5 graph leg is instead proven e2e through mv.ask() with a controlled hand-placed-edge test. entity_f1/der promoted to gates (0.5, both 1.0 stable on 3 talks).
 > **Depends on:** M1.1 (visual fixtures + `visual_result` injection seam), M0.3 (word-precise spans + `pipeline.ingest` signature) · **Owns (single-owner concerns):** the `talk_c` re-baseline (a single serialized commit — coordinate against ALL other harness edits) · **Blocks:** none
 > **Spec:** §10 (eval dimensions), §12 (risks / claim-granularity)
 
