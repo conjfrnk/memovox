@@ -449,6 +449,32 @@ class LoomStore:
         sql += " ORDER BY claim_id"
         return [_row_to_claim(r) for r in self.conn.execute(sql, tuple(params)).fetchall()]
 
+    def claim_history(self, claim_id: str) -> List[Claim]:
+        """All versions in a claim's supersede lineage, oldest→newest (M3.1, §2).
+
+        Given ANY id in the chain, walk predecessors (claims whose ``superseded_by``
+        points here) back to the head, then follow ``superseded_by`` forward to the
+        end. Nothing is deleted — superseded versions are returned alongside the
+        live one. Empty if the claim doesn't exist."""
+        if not self.get_claim(claim_id):
+            return []
+        head, seen = claim_id, set()
+        while head not in seen:
+            seen.add(head)
+            row = self.conn.execute(
+                "SELECT claim_id FROM claims WHERE superseded_by = ?", (head,)
+            ).fetchone()
+            if not row:
+                break
+            head = row["claim_id"]
+        chain: List[Claim] = []
+        cur, walked = self.get_claim(head), set()
+        while cur and cur.claim_id not in walked:
+            walked.add(cur.claim_id)
+            chain.append(cur)
+            cur = self.get_claim(cur.superseded_by) if cur.superseded_by else None
+        return chain
+
     def supersede_claim(self, old_id: str, new_id: str) -> None:
         """Mark ``old_id`` as superseded by ``new_id`` (versioned, never deleted).
 

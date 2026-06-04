@@ -70,16 +70,24 @@ class ClaimCluster:
         return rep.text
 
 
+def recency_weight(published_at: Optional[str], reference_date: Optional[str], *,
+                   halflife: float = _RECENCY_HALFLIFE_DAYS, default: float = 0.5) -> float:
+    """Exponential half-life recency in [0,1] (the single shared decay model, reused
+    by consensus scoring AND retrieval decay — M3.1). ``default`` is returned when a
+    date is missing: consensus uses 0.5 (neutral term in a weighted sum); retrieval
+    uses 1.0 (a no-op multiplier, so an all-undated corpus is byte-identical)."""
+    if not published_at or not reference_date:
+        return default
+    ref, nd = parse_iso(reference_date), parse_iso(published_at)
+    if not ref or not nd:
+        return default
+    age_days = max(0.0, (ref - nd).total_seconds() / 86400.0)
+    return 0.5 ** (age_days / halflife)
+
+
 def _recency_term(cluster: ClaimCluster, reference_date: Optional[str]) -> float:
     """Exponential-decay recency in [0,1]; neutral 0.5 when dates are absent."""
-    newest = cluster.newest_date
-    if not newest or not reference_date:
-        return 0.5
-    ref, nd = parse_iso(reference_date), parse_iso(newest)
-    if not ref or not nd:
-        return 0.5
-    age_days = max(0.0, (ref - nd).total_seconds() / 86400.0)
-    return 0.5 ** (age_days / _RECENCY_HALFLIFE_DAYS)
+    return recency_weight(cluster.newest_date, reference_date, default=0.5)
 
 
 def score_consensus(cluster: ClaimCluster, *, reference_date: Optional[str] = None) -> float:

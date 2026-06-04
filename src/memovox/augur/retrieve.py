@@ -88,4 +88,37 @@ def retrieve(
         if visual:
             legs.append(visual)
     # span passed only to the final fuse (the user-visible top_k cut), not the seed fuse
-    return rrf_fuse(legs, k=settings.rrf_k, top_k=settings.top_k, span=span)
+    fused = rrf_fuse(legs, k=settings.rrf_k, top_k=settings.top_k, span=span)
+    # M3.1 decay (default OFF -> early skip -> byte-identical). When ON, re-weight by
+    # recency and drop fully-superseded moments; an all-undated corpus stays
+    # byte-identical because every recency multiplier is 1.0.
+    if settings.decay_enabled:
+        fused = _apply_decay(store, fused, settings)
+    return fused
+
+
+def _video_of(moment_id: str) -> str:
+    """The video_id embedded in a moment id (``<video_id>#m####``)."""
+    return moment_id.split("#", 1)[0]
+
+
+def _apply_decay(store: LoomStore, fused, settings: Settings):
+    """Recency re-weight + fully-superseded demotion (M3.1, decay path only)."""
+    from ..loom.consensus import recency_weight
+
+    vids = {_video_of(mid) for mid, _ in fused}
+    dates = {v: (store.get_video(v).published_at if store.get_video(v) else None) for v in vids}
+    reference_date = max((d for d in dates.values() if d), default=None)
+
+    reweighted = []
+    for mid, score in fused:
+        # Demote (exclude) a moment whose claims are ALL superseded — it has claims
+        # but none committed (§2: the stored claim is untouched, only its ranking).
+        committed = store.claims_for_moment(mid, status="committed")
+        if not committed and store.claims_for_moment(mid, status=None):
+            continue
+        w = recency_weight(dates.get(_video_of(mid)), reference_date,
+                           halflife=settings.decay_halflife_days, default=1.0)
+        reweighted.append((mid, score * w))
+    reweighted.sort(key=lambda x: x[1], reverse=True)  # stable: undated keeps order
+    return reweighted

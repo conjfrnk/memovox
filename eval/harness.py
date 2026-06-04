@@ -86,6 +86,7 @@ _DEFAULT_OFF_FLAGS = dict(
     otel_enabled=False,
     vector_prefilter_fts=False,  # M0.2: opt-in FTS vector prefilter must stay OFF on the gate
     visual_retrieval=False,      # M1.1: VISUAL leg master switch OFF on the gate
+    decay_enabled=False,         # M3.1: recency decay/demotion OFF on the gate
     asr_device="auto",           # M0.3: ASR device knobs pinned
     asr_compute_type="default",
     asr_allow_cpu=False,
@@ -109,6 +110,7 @@ _INTENTIONALLY_UNPINNED = frozenset({
     "visual_workers",  # M1.1: pool size (1=serial); not a feature toggle
     "rerank_backend",  # M2.1: backend selector (pinned to 'none' in _FREE_BACKENDS)
     "clip_merge_gap_s",  # M2.3: clip stitch gap tuning knob
+    "decay_halflife_days",  # M3.1: recency half-life tuning knob
 })
 
 # Frozen FULL Settings snapshot (M1.2 W8) — beyond _DEFAULT_OFF_FLAGS, this pins
@@ -120,6 +122,7 @@ EVAL_SETTINGS_SNAPSHOT = {
     "asr_device": "auto", "boundary_similarity": 0.45, "budget_mode": "soft",
     "captions_as_prior": True, "clip_merge_gap_s": 2.5,
     "consensus_jaccard": 0.5, "contradiction_threshold": 0.55,
+    "decay_enabled": False, "decay_halflife_days": 365.0,
     "embed_backend": "auto", "embed_dim": 256, "entailment_threshold": 0.5,
     "entity_backend": "auto", "frame_max": 1200, "frame_sample_fps": 1.0, "frame_side": 16,
     "keyframe_min_gain": 0.12, "keyframe_per_scene_cap": 8, "llm_backend": "auto",

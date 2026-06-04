@@ -77,6 +77,8 @@ class Settings:
     clip_merge_gap_s: float = 2.5  # M2.3: merge cited spans <= this gap into one stitched clip
     vector_prefilter_fts: bool = False  # M0.2: restrict vector candidates to FTS hits (opt-in)
     visual_retrieval: bool = False      # M1.1: master switch for the VISUAL retrieval leg in ask()
+    decay_enabled: bool = False         # M3.1: recency re-weight + superseded demotion (opt-in)
+    decay_halflife_days: float = 365.0  # M3.1: recency half-life (reuses the consensus model)
 
     # Loom — synthesis (Phase 3, spec §4.7)
     topic_similarity: float = 0.5   # cosine floor to merge moments into one topic
