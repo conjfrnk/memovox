@@ -166,10 +166,58 @@ class Memovox:
     def consolidate(self) -> dict:
         """Run the cross-corpus consolidation background job (spec §4 stage 7):
         topic induction, contradiction/agreement detection, consensus clustering,
-        and dedup. Run after ingesting new videos; returns a counts report."""
+        and dedup. Run after ingesting new videos; returns a counts report.
+
+        SYNCHRONOUS and unchanged — the eval harness + incremental_equivalence gate
+        depend on this inline path. ``enqueue_consolidate`` is the async alternative."""
         with LoomStore(self.config) as store:
             nli = get_nli(self.settings.nli_backend, config=self.config)
             return run_consolidation(store, nli=nli, settings=self.settings).to_dict()
+
+    # -- async jobs (M3.3) -------------------------------------------------
+
+    def _jobstore(self):
+        from .serving.jobs import JobStore
+        return JobStore(self.config)
+
+    def _ensure_worker(self) -> None:
+        """Auto-spawn ONE daemon JobWorker per process on first enqueue, so a
+        single-process MCP/SDK caller drains its own queue without a separate
+        memovox-worker. A deployed setup runs memovox-worker explicitly instead."""
+        from .serving.jobs import JobWorker
+        worker = getattr(self, "_worker", None)
+        if worker is None or not worker.is_alive():
+            self._worker = JobWorker(self)
+            self._worker.start()
+
+    def enqueue_consolidate(self) -> dict:
+        """Enqueue an async consolidation; returns {job_id, state} immediately."""
+        with self._jobstore() as jobs:
+            job_id = jobs.enqueue("consolidate", {})
+            state = jobs.get_job(job_id)["state"]
+        self._ensure_worker()
+        return {"job_id": job_id, "state": state}
+
+    def enqueue_sync(self) -> dict:
+        with self._jobstore() as jobs:
+            job_id = jobs.enqueue("sync", {})
+            state = jobs.get_job(job_id)["state"]
+        self._ensure_worker()
+        return {"job_id": job_id, "state": state}
+
+    def job_status(self, job_id: str) -> Optional[dict]:
+        """Resolve a job id to {state, result, error, attempts} (None if unknown)."""
+        import json
+
+        with self._jobstore() as jobs:
+            job = jobs.get_job(job_id)
+        if job is None:
+            return None
+        return {
+            "job_id": job["job_id"], "kind": job["kind"], "state": job["state"],
+            "attempts": job["attempts"], "error": job["error"],
+            "result": json.loads(job["result_json"]) if job["result_json"] else None,
+        }
 
     def synthesize(self, topic: str) -> augur.Synthesis:
         """Corpus-level "literature review" of what the sources say about a topic

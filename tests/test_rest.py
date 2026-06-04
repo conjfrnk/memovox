@@ -35,12 +35,7 @@ class RestClipTest(unittest.TestCase):
         self._tmp.cleanup()
 
     def _clip(self, q):
-        Handler = make_handler(self.mv)
-        h = Handler.__new__(Handler)  # bypass BaseHTTPRequestHandler socket init
-        captured = {}
-        h._send = lambda obj, status=None: captured.update(payload=obj, status=status)
-        h._clip(q)
-        return captured["payload"]
+        return self._get("/clip", q)  # /clip is now a routes.route_clip adapter
 
     def _get(self, path, q):
         Handler = make_handler(self.mv)

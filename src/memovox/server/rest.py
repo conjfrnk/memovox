@@ -19,9 +19,8 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
-from ..loom import LoomStore
 from ..sdk import Memovox
-from ..util import deep_link
+from . import routes
 
 
 def make_handler(mv: Memovox):
@@ -48,76 +47,43 @@ def make_handler(mv: Memovox):
             except ValueError:
                 return {}
 
+        # -- adapter: parse → call the pure route → serialize ------------
+
+        def _respond(self, result):
+            status, payload, content_type = result
+            if content_type == routes.JSON:
+                return self._send(payload, status)
+            body = payload.encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
         # -- GET ----------------------------------------------------------
 
         def do_GET(self):
             parsed = urlsplit(self.path)
             path = parsed.path
-            q = parse_qs(parsed.query)
+            params = {k: v[0] for k, v in parse_qs(parsed.query).items()}
             try:
                 if path == "/":
-                    return self._send({"name": "memovox", "endpoints": [
-                        "POST /ingest", "POST /query", "GET /clip", "GET /export/{id}",
-                        "GET /graph/contradictions", "GET /timeline", "GET /videos"]})
+                    return self._respond(routes.route_index(mv))
                 if path == "/videos":
-                    return self._send([v.to_dict() for v in mv.list_videos()])
+                    return self._respond(routes.route_videos(mv))
                 if path == "/clip":
-                    return self._clip(q)
+                    return self._respond(routes.route_clip(mv, params))
                 if path == "/timeline":
-                    # M3.1: how a claim/position changed over time (reuses loom/evolution)
-                    return self._send(mv.evolution(entity=q.get("entity", [None])[0],
-                                                   topic=q.get("topic", [None])[0]))
+                    return self._respond(routes.route_timeline(mv, params))
                 if path.startswith("/export/"):
-                    return self._export(path[len("/export/"):], q)
+                    return self._respond(routes.route_export(mv, path[len("/export/"):], params))
                 if path == "/graph/contradictions":
-                    pairs = mv.contradictions(topic=(q.get("topic", [None])[0]))
-                    return self._send([p.to_dict() for p in pairs])
+                    return self._respond(routes.route_contradictions(mv, params))
+                if path.startswith("/job/"):
+                    return self._respond(routes.route_job_status(mv, path[len("/job/"):]))
                 return self._send({"error": "not found"}, HTTPStatus.NOT_FOUND)
             except Exception as exc:  # pragma: no cover - defensive
                 self._send({"error": str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR)
-
-        def _clip(self, q):
-            video_id = q.get("video", [None])[0]
-            t_start = float(q.get("t_start", [0])[0])
-            t_end = float(q.get("t_end", [t_start])[0])
-            with LoomStore(mv.config) as store:
-                video = store.get_video(video_id) if video_id else None
-                if not video:
-                    return self._send({"error": "unknown video"}, HTTPStatus.NOT_FOUND)
-                moments = [
-                    m for m in store.moments_for_video(video_id)
-                    if m.t_end_s >= t_start and m.t_start_s <= t_end
-                ]
-            # M2.3: stitched superset — legacy keys unchanged, additive `clips` array.
-            from ..augur.stitch import stitch_clips
-            from ..augur.types import Citation
-            cits = [Citation(index=i, video_id=video_id, moment_id=m.moment_id,
-                             t_start_s=m.t_start_s, t_end_s=m.t_end_s, title=video.title)
-                    for i, m in enumerate(moments, start=1)]
-            clips = stitch_clips(cits, videos={video_id: video},
-                                 merge_gap_s=mv.settings.clip_merge_gap_s)
-            self._send({
-                "video_id": video_id, "t_start_s": t_start, "t_end_s": t_end,
-                "deep_link": deep_link(video.source_url, t_start),
-                "moments": [m.to_dict() for m in moments],
-                "clips": [c.to_dict() for c in clips],
-            })
-
-        def _export(self, video_id, q):
-            fmt = q.get("format", ["json"])[0]
-            try:
-                content = mv.export(video_id, fmt=fmt)
-            except KeyError:
-                return self._send({"error": "unknown video"}, HTTPStatus.NOT_FOUND)
-            if fmt == "json":
-                self._send(json.loads(content))
-            else:
-                body = content.encode("utf-8")
-                self.send_response(HTTPStatus.OK)
-                self.send_header("Content-Type", "text/markdown; charset=utf-8")
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
 
         # -- POST ---------------------------------------------------------
 
@@ -126,20 +92,13 @@ def make_handler(mv: Memovox):
             data = self._body()
             try:
                 if parsed.path == "/ingest":
-                    if not data.get("source"):
-                        return self._send({"error": "missing 'source'"}, HTTPStatus.BAD_REQUEST)
-                    report = mv.ingest(data["source"], source_url=data.get("source_url"),
-                                       title=data.get("title"))
-                    return self._send(report.to_dict())
+                    return self._respond(routes.route_ingest(mv, data))
                 if parsed.path == "/query":
-                    if not data.get("query"):
-                        return self._send({"error": "missing 'query'"}, HTTPStatus.BAD_REQUEST)
-                    answer = mv.ask(data["query"], video_id=data.get("video_id"))
-                    return self._send(answer.to_dict())
+                    return self._respond(routes.route_query(mv, data))
                 if parsed.path == "/synthesize":
-                    if not data.get("topic"):
-                        return self._send({"error": "missing 'topic'"}, HTTPStatus.BAD_REQUEST)
-                    return self._send(mv.synthesize(data["topic"]).to_dict())
+                    return self._respond(routes.route_synthesize(mv, data))
+                if parsed.path == "/consolidate":
+                    return self._respond(routes.route_consolidate(mv, data))
                 return self._send({"error": "not found"}, HTTPStatus.NOT_FOUND)
             except Exception as exc:  # pragma: no cover - defensive
                 self._send({"error": str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR)
