@@ -20,6 +20,16 @@ from eval.harness import (
 )
 
 
+class InjectionByteIdentityTest(unittest.TestCase):
+    def test_run_eval_default_equals_explicit_free_config(self):
+        import json
+
+        from eval.harness import run_eval
+        a = run_eval()
+        b = run_eval(config=FREE_CONFIG)
+        self.assertEqual(json.dumps(a, sort_keys=True), json.dumps(b, sort_keys=True))
+
+
 class BackendConfigTest(unittest.TestCase):
     def test_free_config_backend_kwargs(self):
         kw = FREE_CONFIG.backend_kwargs()

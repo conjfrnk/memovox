@@ -346,10 +346,17 @@ def _corpus_vtts(golden_dir: Path = GOLDEN_DIR) -> List[Path]:
             if g.name.split(".")[0] not in _NON_CORPUS_STEMS]
 
 
-def _ingest_golden(golden_dir: Path, store_dir: str) -> _Ingested:
+#: The non-backend free-path flags _FREE_BACKENDS pins (kept alongside a config's
+#: backend slots so an injected BackendConfig changes ONLY backend choice — M3.4).
+_FREE_NON_BACKEND = {k: v for k, v in _FREE_BACKENDS.items() if not k.endswith("_backend")}
+
+
+def _ingest_golden(golden_dir: Path, store_dir: str,
+                   config: "BackendConfig" = None) -> _Ingested:
     from memovox import Memovox
 
-    mv = Memovox(store=store_dir, **_FREE_BACKENDS)
+    config = config or FREE_CONFIG
+    mv = Memovox(store=store_dir, **_FREE_NON_BACKEND, **config.backend_kwargs())
     logical_to_store: Dict[str, str] = {}
     for vtt in sorted(golden_dir.glob("*.en.vtt")):
         logical_id = vtt.name.split(".")[0]  # filename stem before ".en.vtt"
@@ -673,7 +680,7 @@ def _contradiction_pairs(ing: _Ingested, gold_contradictions: List[dict]):
 
 
 def run_eval(golden_dir=GOLDEN_DIR, *, store: Optional[_Ingested] = None,
-             k: int = DEFAULT_K) -> dict:
+             k: int = DEFAULT_K, config: "BackendConfig" = None) -> dict:
     """Run the full eval over the golden corpus and return the report dict.
 
     When ``store`` is ``None`` (the CLI path), build a temp store, ingest the
@@ -697,14 +704,15 @@ def run_eval(golden_dir=GOLDEN_DIR, *, store: Optional[_Ingested] = None,
     gold_speakers = _load_json(golden_dir / "speakers.json")
     gold_contradictions = _load_json(golden_dir / "contradictions.json")
 
+    config = config or FREE_CONFIG
     if store is not None:
         return _compute_report(store, qa, gold_entities, gold_speakers,
-                               gold_contradictions, k=k)
+                               gold_contradictions, k=k, config=config)
 
     with tempfile.TemporaryDirectory(prefix="memovox-eval-") as tmp:
-        ing = _ingest_golden(golden_dir, tmp)
+        ing = _ingest_golden(golden_dir, tmp, config)
         return _compute_report(ing, qa, gold_entities, gold_speakers,
-                               gold_contradictions, k=k)
+                               gold_contradictions, k=k, config=config)
 
 
 # Free-path retrieval parity (M0.2 W2). A fixed query set whose vector+lexical
@@ -1332,13 +1340,15 @@ def _rerank_metrics(ing: _Ingested, qa, *, k: int) -> dict:
 
 
 def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
-                    gold_contradictions, *, k: int) -> dict:
+                    gold_contradictions, *, k: int, config: "BackendConfig" = None) -> dict:
     from memovox.backends import get_nli
     from memovox.config import Settings
 
+    config = config or FREE_CONFIG
     settings = ing.mv.settings if hasattr(ing.mv, "settings") else Settings()
     entail_threshold = getattr(settings, "entailment_threshold", 0.5)
-    nli = get_nli("lexical", config=ing.mv.config)
+    # M3.4: the report-time scorer is the INJECTED config's NLI, not a literal.
+    nli = get_nli(config.nli_backend, config=ing.mv.config)
 
     per_query, overall_groundedness = _retrieval_and_groundedness(
         ing, qa, nli, k=k, entail_threshold=entail_threshold
