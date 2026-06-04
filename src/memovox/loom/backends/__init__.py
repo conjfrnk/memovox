@@ -11,6 +11,7 @@ import sqlite3
 from typing import Optional
 
 from ...errors import BackendUnavailable
+from .ann import LanceVectorIndex, QdrantVectorIndex
 from .base import GraphStore, LexicalIndex, StorageBackend, VectorIndex
 from .sqlite import SqliteGraphStore, SqliteLexicalIndex, SqliteVectorIndex
 
@@ -24,7 +25,11 @@ __all__ = [
     "get_graph_store",
 ]
 
-_VECTOR_INDICES = {"sqlite": SqliteVectorIndex}
+_VECTOR_INDICES = {
+    "sqlite": SqliteVectorIndex,
+    "lance": LanceVectorIndex,      # opt-in (M0.2 W7); BackendUnavailable if absent
+    "qdrant": QdrantVectorIndex,    # opt-in (M0.2 W7); BackendUnavailable if absent
+}
 _LEXICAL_INDICES = {"sqlite": SqliteLexicalIndex}
 _GRAPH_STORES = {"sqlite": SqliteGraphStore}
 
