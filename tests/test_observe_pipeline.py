@@ -152,8 +152,9 @@ class MetricsPersistenceTest(unittest.TestCase):
                             embedder=embedder, settings=self.config.settings)
         d = ans.to_dict()
         self.assertIn("metrics", d)
-        # the new key is purely additive — removing it leaves today's exact shape
+        # the new keys are purely additive — removing them leaves today's exact shape
         d.pop("metrics")
+        d.pop("plan")  # M2.2 additive plan key
         self.assertEqual(set(d), {"text", "strategy", "low_evidence", "citations"})
 
     def test_consolidation_report_carries_metrics(self):
