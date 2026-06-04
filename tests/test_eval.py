@@ -455,6 +455,16 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         for k in ("topic_f1", "keyframe", "claim_granularity", "span_accuracy"):
             self.assertFalse(any(k in f for f in failures))
 
+    def test_rerank_block_off_equals_today(self):
+        # M2.1 W4: the free identity reranker is a no-op — rerank mrr/ndcg equal both
+        # the no-rerank baseline AND the retrieval block (the off==today guard).
+        rr = self.report["rerank"]
+        self.assertEqual(rr["mrr"], rr["no_rerank_mrr"])
+        self.assertEqual(rr["ndcg"], rr["no_rerank_ndcg"])
+        self.assertEqual(rr["mrr"], self.report["retrieval"]["mrr"])
+        self.assertEqual(rr["ndcg"], self.report["retrieval"]["ndcg"])
+        self.assertFalse(any("rerank" in f for f in _check_thresholds(self.report)))
+
     def test_observability_is_ungated(self):
         # discipline (a): observability never participates in --assert-thresholds.
         failures = _check_thresholds(self.report)

@@ -69,6 +69,7 @@ _FREE_BACKENDS = dict(
     entity_backend="none",
     visual_embed_backend="signature",  # M1.1: free visual embedder pinned
     visual_retrieval=False,            # M1.1: VISUAL leg OFF for the gate
+    rerank_backend="none",            # M2.1: identity reranker pinned (off==today)
 )
 
 # Frozen eval-settings snapshot (M0.1 W8 / review discipline (b)): the default-OFF
@@ -1042,6 +1043,34 @@ def _claim_granularity(ing: _Ingested) -> dict:
     }
 
 
+def _rerank_metrics(ing: _Ingested, qa, *, k: int) -> dict:
+    """UNGATED (M2.1): mrr/ndcg of the free (identity) reranked retrieval vs the
+    no-rerank baseline. With the identity default they are EQUAL (off==today) — the
+    equivalence is the regression guard. A cross-encoder may improve, never degrade."""
+    from memovox import augur
+    from memovox.backends import get_embedder, get_reranker
+    from memovox.loom.store import LoomStore
+
+    emb = get_embedder("hashing", config=ing.mv.config)
+    reranker = get_reranker(ing.mv.settings.rerank_backend, config=ing.mv.config)
+    store_vids = list(ing.logical_to_store.values())
+    per_no, per_re = [], []
+    with LoomStore(ing.mv.config) as store:
+        for item in qa:
+            gold = _relevant_moment_ids(store, store_vids,
+                                        item.get("relevant_moment_substrings", []))
+            ids_no = [c.moment_id for c in augur.ask(
+                store, item["q"], embedder=emb, settings=ing.mv.settings, reranker=None).citations]
+            ids_re = [c.moment_id for c in augur.ask(
+                store, item["q"], embedder=emb, settings=ing.mv.settings, reranker=reranker).citations]
+            per_no.append((ids_no, gold))
+            per_re.append((ids_re, gold))
+    return {
+        "mrr": round(mrr(per_re), 6), "ndcg": round(ndcg(per_re, k=k), 6),
+        "no_rerank_mrr": round(mrr(per_no), 6), "no_rerank_ndcg": round(ndcg(per_no, k=k), 6),
+    }
+
+
 def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
                     gold_contradictions, *, k: int) -> dict:
     from memovox.backends import get_nli
@@ -1084,6 +1113,7 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
     _, _, topic_f1 = clustering_f1(*_topic_clusters(ing, gold_topics)) if gold_topics else (0.0, 0.0, 0.0)
     keyframe_efficiency = _keyframe_efficiency()
     claim_granularity = _claim_granularity(ing)
+    rerank = _rerank_metrics(ing, qa, k=k)
 
     return {
         "retrieval": {
@@ -1110,6 +1140,7 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
         "topic_f1": round(topic_f1, 6),    # M1.2 topic induction guard (UNGATED; thin corpus)
         "keyframe_efficiency": keyframe_efficiency,  # M1.2 adaptive vs uniform (UNGATED)
         "claim_granularity": claim_granularity,      # M1.2 §12 granularity curve (UNGATED)
+        "rerank": rerank,                            # M2.1 rerank mrr/ndcg vs no-rerank (UNGATED)
     }
 
 
