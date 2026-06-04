@@ -8,7 +8,7 @@ configured. Low-evidence queries are flagged rather than confabulated.
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from ..backends.base import Embedder, LLMBackend, Reranker
 from ..config import Settings
@@ -16,7 +16,7 @@ from ..loom.models import make_provenance
 from ..loom.store import LoomStore
 from ..observe import Tracer
 from ..util import split_sentences, tokenize, truncate
-from .planner import plan as plan_query
+from .planner import decompose
 from .retrieve import retrieve
 from .types import Answer, Citation
 
@@ -60,6 +60,37 @@ def _synthesize_llm(llm: LLMBackend, query: str, citations: List[Citation]) -> s
     return llm.complete(prompt, system=_LLM_SYSTEM, temperature=0.0).strip()
 
 
+def _apply_rerank(reranker, query, fused, store):
+    """Rerank a fused (id, score) list (no-op for identity / empty / None)."""
+    if reranker is None or not fused:
+        return fused
+    texts = None
+    if reranker.needs_text:
+        texts = {m.moment_id: m.text_for_embedding()
+                 for m in store.get_moments([mid for mid, _ in fused])}
+    return reranker.rerank(query, fused, texts=texts)
+
+
+def _merge_round_robin(legs, top_k):
+    """Interleave per-sub-query fused lists (rank-0 of each, then rank-1, …),
+    de-duplicating moments and capping at ``top_k`` — so every clause contributes
+    its top result(s) before any clause's deeper results (per-clause coverage)."""
+    merged: List[Tuple[str, float]] = []
+    seen = set()
+    depth = 0
+    while len(merged) < top_k and any(depth < len(leg) for leg in legs):
+        for leg in legs:
+            if depth < len(leg):
+                mid, score = leg[depth]
+                if mid not in seen:
+                    seen.add(mid)
+                    merged.append((mid, score))
+                    if len(merged) >= top_k:
+                        break
+        depth += 1
+    return merged
+
+
 def ask(
     store: LoomStore,
     query: str,
@@ -75,7 +106,8 @@ def ask(
 ) -> Answer:
     settings = settings or Settings()
     tracer = tracer or Tracer("ask", otel_enabled=settings.otel_enabled)
-    qp = plan_query(query)
+    qp = decompose(query)  # multi-part decomposition (single-clause => one verbatim sub-query)
+    multi = len(qp.subqueries) > 1
     # The VISUAL leg (M1.1) turns on when the plan routes to visual OR the caller
     # explicitly asks for modality="visual"; it only fires if a visual query vector
     # is supplied (e.g. an image query), so a plain text ask is byte-identical.
@@ -97,27 +129,41 @@ def ask(
     # not editorialize the relation), so adding SUPPORTS only widens evidence.
     graph_rels = ["CONTRADICTS", "SUPPORTS"] if use_graph else None
     with tracer.span("retrieve") as _sp:
-        fused = retrieve(
-            store, query, embedder=embedder, settings=settings, video_id=video_id,
-            use_graph=use_graph, graph_rels=graph_rels, span=_sp,
-            use_visual=use_visual, visual_query_vec=visual_query_vec,
-        )
+        if not multi:
+            # SINGLE-CLAUSE: the literal today's path (retrieve over the full query),
+            # so the output stays byte-identical.
+            fused = retrieve(
+                store, query, embedder=embedder, settings=settings, video_id=video_id,
+                use_graph=use_graph, graph_rels=graph_rels, span=_sp,
+                use_visual=use_visual, visual_query_vec=visual_query_vec,
+            )
+        else:
+            # MULTI-PART (spec §5): retrieve + rerank EACH sub-query (the rerank sees
+            # a focused clause), then merge round-robin so every clause is covered.
+            legs = []
+            for sq in qp.subqueries:
+                sq_graph = sq.strategy == "contradiction"
+                sq_rels = ["CONTRADICTS", "SUPPORTS"] if sq_graph else None
+                sq_visual = settings.visual_retrieval and (
+                    sq.modality == "visual" or sq.strategy == "visual")
+                leg = retrieve(
+                    store, sq.text, embedder=embedder, settings=settings, video_id=video_id,
+                    use_graph=sq_graph, graph_rels=sq_rels,
+                    use_visual=sq_visual, visual_query_vec=visual_query_vec,
+                )
+                legs.append(_apply_rerank(reranker, sq.text, leg, store))
+            fused = _merge_round_robin(legs, settings.top_k)
         _sp.add_counter("results", len(fused))
     if not fused:
         return Answer(text=_LOW_EVIDENCE_MSG, citations=[], strategy=qp.strategy,
                       low_evidence=True, metrics=tracer.to_dict())
 
-    # M2.1 rerank stage (spec §5/§3): reorder the fused candidate set between
-    # fusion and citation build. The free identity reranker returns it unchanged
-    # (byte-identical); a cross-encoder reorders by query↔text relevance. Same set,
-    # no add/drop — so [n] indices/deep links re-derive contiguously below.
-    if reranker is not None:
+    # M2.1 rerank stage (spec §5/§3): the single-clause path reranks the fused set
+    # here (the multi-part path already reranked each sub-query above). The free
+    # identity reranker is a no-op -> [n] indices/deep links re-derive contiguously.
+    if reranker is not None and not multi:
         with tracer.span("rerank") as _rsp:
-            texts = None
-            if reranker.needs_text:
-                texts = {m.moment_id: m.text_for_embedding()
-                         for m in store.get_moments([mid for mid, _ in fused])}
-            fused = reranker.rerank(query, fused, texts=texts)
+            fused = _apply_rerank(reranker, query, fused, store)
             _rsp.add_counter("candidates", len(fused))
 
     with tracer.span("synthesize") as _sp:

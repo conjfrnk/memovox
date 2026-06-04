@@ -105,6 +105,47 @@ class TestAsk(unittest.TestCase):
             store2.close()
 
 
+class TestAgenticAsk(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.config = Config(store=pathlib.Path(self._tmp.name) / "s").ensure()
+        self.store = LoomStore(self.config)
+        self.emb = HashingEmbedder(dim=256)
+        self.store.upsert_video(Video("v", "https://x/v", "talk"))
+        # clause-A moment (shares only A's terms) + clause-B moment (only B's) + decoys.
+        mA = Moment("v#m0000", "v", 0.0, 5.0,
+                    "the optimal context length for retrieval was 512 tokens", "spk", index=0)
+        mB = Moment("v#m0001", "v", 5.0, 10.0,
+                    "the Llama family of models reused the Chinchilla token ratio", "spk", index=1)
+        # clause-A-flavored decoys: a single fused pass over the combined query (which
+        # carries more clause-A terms) ranks these above mB, crowding it out of top_k.
+        for i, txt in enumerate([
+            "the optimal context length for retrieval and token windows matters",
+            "more on optimal retrieval context length and token budgets here",
+            "retrieval context length tuning and the optimal token count",
+        ], start=2):
+            self.store.add_moment(Moment(f"v#m{i:04d}", "v", float(i), float(i) + 1, txt,
+                                         "spk", index=i), self.emb.embed_one(txt))
+        self.store.add_moment(mA, self.emb.embed_one(mA.text_for_embedding()))
+        self.store.add_moment(mB, self.emb.embed_one(mB.text_for_embedding()))
+
+    def tearDown(self):
+        self.store.close()
+        self._tmp.cleanup()
+
+    def test_multipart_cites_both_disjoint_moments(self):
+        from memovox.config import Settings
+        q = ("What was the optimal context length for retrieval, and which model "
+             "family reused the Chinchilla token ratio?")
+        ans = augur.ask(self.store, q, embedder=self.emb, settings=Settings(top_k=2))
+        cited = {c.moment_id for c in ans.citations}
+        self.assertIn("v#m0000", cited)   # clause A's moment
+        self.assertIn("v#m0001", cited)   # clause B's moment — would be missed by one fused pass
+        # [n] indices contiguous over the merged citation list
+        self.assertEqual([c.index for c in ans.citations],
+                         list(range(1, len(ans.citations) + 1)))
+
+
 class TestGraphLegThroughAsk(unittest.TestCase):
     """M1.2 W1: the §5 graph-retrieval leg fires END-TO-END through mv.ask(), not
     just via hand-built retrieve() unit stores. A gold moment reachable ONLY by a
