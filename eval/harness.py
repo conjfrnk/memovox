@@ -1069,6 +1069,52 @@ def clip_coverage(found_clips, gold_clip) -> float:
     return max((span_iou(c, tuple(gold_clip)) for c in found_clips), default=0.0)
 
 
+def _decay_metrics() -> dict:
+    """UNGATED (M3.1): decay behaviors on a SELF-CONTAINED dated fixture (kept out
+    of the scored golden corpus so it cannot perturb the default gates). Two
+    structural sub-metrics under decay_enabled=True:
+      - recent_first_ordering: the newer source's moment outranks the older one;
+      - superseded_excluded: a fully-superseded moment drops out of results.
+    Deterministic; the unit tests in tests/test_decay.py are the behavioral guard."""
+    from memovox.augur.retrieve import retrieve
+    from memovox.backends import get_embedder
+    from memovox.config import Config, Settings
+    from memovox.loom import LoomStore, Moment, Video
+    from memovox.loom.models import Claim
+
+    q = "scaling laws and model performance over the years"
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg = Config(store=str(Path(tmp) / "s")).ensure()
+        emb = get_embedder("hashing", config=cfg)
+        with LoomStore(cfg) as store:
+            for vid, date, txt in [
+                ("yt:old", "2019-01-01", "scaling laws and model performance the older account"),
+                ("yt:mid", "2022-01-01", "scaling laws and model performance the middle account"),
+                ("yt:new", "2026-01-01", "scaling laws and model performance the recent account"),
+            ]:
+                store.upsert_video(Video(vid, f"https://youtu.be/{vid}", vid, published_at=date))
+                m = Moment(f"{vid}#m0000", vid, 0.0, 10.0, txt, "spk", index=0)
+                store.add_moment(m, emb.embed_one(m.text_for_embedding()))
+            # a fully-superseded moment (all claims superseded)
+            store.upsert_video(Video("yt:sup", "https://youtu.be/sup", "sup", published_at="2026-06-01"))
+            ms = Moment("yt:sup#m0000", "yt:sup", 0.0, 10.0,
+                        "scaling laws and model performance now outdated", "spk", index=0)
+            store.add_moment(ms, emb.embed_one(ms.text_for_embedding()))
+            store.add_claim(Claim("yt:sup#m0000.c0", "yt:sup#m0000", "yt:sup", "old", subject="x"))
+            store.add_claim(Claim("yt:sup#m0000.c1", "yt:sup#m0000", "yt:sup", "new", subject="x"))
+            store.supersede_claim("yt:sup#m0000.c0", "yt:sup#m0000.c1")
+            store.conn.execute("UPDATE claims SET status='superseded' WHERE claim_id='yt:sup#m0000.c1'")
+            store.conn.commit()
+
+            on = [m for m, _ in retrieve(store, q, embedder=emb, settings=Settings(decay_enabled=True))]
+            off = [m for m, _ in retrieve(store, q, embedder=emb, settings=Settings(decay_enabled=False))]
+    dated = [m for m in on if m in ("yt:old#m0000", "yt:mid#m0000", "yt:new#m0000")]
+    recent_first = dated == ["yt:new#m0000", "yt:mid#m0000", "yt:old#m0000"]
+    superseded_excluded = ("yt:sup#m0000" in off) and ("yt:sup#m0000" not in on)
+    return {"recent_first_ordering": recent_first, "superseded_excluded": superseded_excluded,
+            "items": 3}
+
+
 def _clip_metrics(ing: _Ingested) -> dict:
     """UNGATED until W7 (M2.3): mean best-match clip coverage over clips.json, plus
     the two structural invariants — clips are non-overlapping per video, and
@@ -1212,6 +1258,7 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
     rerank = _rerank_metrics(ing, qa, k=k)
     plan = _plan_metrics(ing, qa)
     clip = _clip_metrics(ing)
+    decay = _decay_metrics()
 
     return {
         "retrieval": {
@@ -1241,6 +1288,7 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
         "rerank": rerank,                            # M2.1 rerank mrr/ndcg vs no-rerank (UNGATED)
         "plan": plan,                                # M2.2 agentic subquery_recall (UNGATED)
         "clip": clip,                                # M2.3 clip coverage + invariants
+        "decay": decay,                              # M3.1 recency ordering + supersede demotion (UNGATED)
     }
 
 
