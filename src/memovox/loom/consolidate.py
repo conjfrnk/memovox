@@ -16,7 +16,7 @@ from typing import List, Optional
 
 from ..backends.base import NLIBackend
 from ..config import Settings
-from ..observe import Span
+from ..observe import Span, Tracer
 from ..util import deep_link, tokenize
 from .models import STATUS_COMMITTED, Claim
 from .store import LoomStore
@@ -212,7 +212,8 @@ class ConsolidationReport:
 
 
 def consolidate(
-    store: LoomStore, *, nli: NLIBackend, settings: Optional[Settings] = None
+    store: LoomStore, *, nli: NLIBackend, settings: Optional[Settings] = None,
+    tracer: Optional[Tracer] = None,
 ) -> ConsolidationReport:
     """Run the full cross-corpus consolidation pass (spec §4 stage 7).
 
@@ -223,26 +224,36 @@ def consolidate(
     status-gated.
     """
     settings = settings or store.config.settings
+    tracer = tracer or Tracer("consolidate")
     # Local imports to avoid a circular import (topics/consensus import this module).
     from .consensus import cluster_claims
     from .topics import induce_topics
 
-    topics = induce_topics(store, settings=settings)
+    with tracer.span("topics") as _sp:
+        topics = induce_topics(store, settings=settings)
+        _sp.add_counter("topics", len(topics))
 
     # All graph agreement/disagreement edges come from the NLI here (correct even
     # for lexically near-identical-but-negated pairs); cluster_claims is used only
     # to count consensus clusters, with no edge writes.
-    pairs = find_contradictions(
-        store, nli=nli, threshold=settings.contradiction_threshold,
-        include_supports=True, write_edges=True,
-    )
-    contradictions = sum(1 for p in pairs if p.relation == "CONTRADICTS")
-    supports = sum(1 for p in pairs if p.relation == "SUPPORTS")
+    with tracer.span("contradictions") as _sp:
+        pairs = find_contradictions(
+            store, nli=nli, threshold=settings.contradiction_threshold,
+            include_supports=True, write_edges=True, span=_sp,
+        )
+        contradictions = sum(1 for p in pairs if p.relation == "CONTRADICTS")
+        supports = sum(1 for p in pairs if p.relation == "SUPPORTS")
+        _sp.add_counter("contradictions", contradictions)
+        _sp.add_counter("supports", supports)
 
-    clusters = cluster_claims(store, write_edges=False)
-    consensus_clusters = sum(1 for c in clusters if c.support_count >= 2)
+    with tracer.span("consensus") as _sp:
+        clusters = cluster_claims(store, write_edges=False)
+        consensus_clusters = sum(1 for c in clusters if c.support_count >= 2)
+        _sp.add_counter("clusters", consensus_clusters)
 
-    superseded = dedup_claims(store)
+    with tracer.span("dedup") as _sp:
+        superseded = dedup_claims(store)
+        _sp.add_counter("superseded", superseded)
 
     return ConsolidationReport(
         topics=len(topics), contradictions=contradictions, supports=supports,

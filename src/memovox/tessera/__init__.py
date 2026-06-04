@@ -19,6 +19,7 @@ from typing import List, Optional
 from ..backends import get_ocr, get_vlm
 from ..backends.base import OCRBackend, VLMBackend
 from ..config import Config, Settings
+from ..observe import Span
 from ..util import slugify
 from .frames import FrameSig, bytes_to_signature, extract_keyframe_image, sample_frame_signatures
 from .keyframes import select_keyframes
@@ -71,6 +72,7 @@ def run(
     frames: Optional[List[FrameSig]] = None,
     vlm: Optional[VLMBackend] = None,
     ocr: Optional[OCRBackend] = None,
+    span: Optional[Span] = None,
 ) -> VisualResult:
     """Extract visual events from a source's video stream.
 
@@ -92,6 +94,7 @@ def run(
             fps=settings.frame_sample_fps,
             side=settings.frame_side,
             max_frames=settings.frame_max,
+            span=span,
         )
     if not frames:
         return VisualResult(available=False, reason="no frames extracted")
@@ -101,6 +104,7 @@ def run(
         frames, scenes,
         min_gain=settings.keyframe_min_gain,
         per_scene_cap=settings.keyframe_per_scene_cap,
+        span=span,
     )
     scene_of = {i: sc.index for sc in scenes for i in range(sc.start_idx, sc.end_idx + 1)}
 

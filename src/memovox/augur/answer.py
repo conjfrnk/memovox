@@ -14,6 +14,7 @@ from ..backends.base import Embedder, LLMBackend
 from ..config import Settings
 from ..loom.models import make_provenance
 from ..loom.store import LoomStore
+from ..observe import Tracer
 from ..util import split_sentences, tokenize, truncate
 from .planner import plan as plan_query
 from .retrieve import retrieve
@@ -67,8 +68,10 @@ def ask(
     llm: Optional[LLMBackend] = None,
     settings: Optional[Settings] = None,
     video_id: Optional[str] = None,
+    tracer: Optional[Tracer] = None,
 ) -> Answer:
     settings = settings or Settings()
+    tracer = tracer or Tracer("ask")
     qp = plan_query(query)
     # Consume the plan: the strategy chooses the retrieval mode (and, below, the
     # citation ordering) — it is NOT decorative. Only the contradiction route
@@ -84,69 +87,73 @@ def ask(
     # The extractive synthesizer cites every surfaced moment neutrally (it does
     # not editorialize the relation), so adding SUPPORTS only widens evidence.
     graph_rels = ["CONTRADICTS", "SUPPORTS"] if use_graph else None
-    fused = retrieve(
-        store, query, embedder=embedder, settings=settings, video_id=video_id,
-        use_graph=use_graph, graph_rels=graph_rels,
-    )
+    with tracer.span("retrieve") as _sp:
+        fused = retrieve(
+            store, query, embedder=embedder, settings=settings, video_id=video_id,
+            use_graph=use_graph, graph_rels=graph_rels, span=_sp,
+        )
+        _sp.add_counter("results", len(fused))
     if not fused:
         return Answer(text=_LOW_EVIDENCE_MSG, citations=[], strategy=qp.strategy, low_evidence=True)
 
-    moment_ids = [mid for mid, _ in fused]
-    score_by_id = dict(fused)
-    moments = store.get_moments(moment_ids)
+    with tracer.span("synthesize") as _sp:
+        moment_ids = [mid for mid, _ in fused]
+        score_by_id = dict(fused)
+        moments = store.get_moments(moment_ids)
 
-    citations: List[Citation] = []
-    video_cache: dict = {}
-    for i, moment in enumerate(moments, start=1):
-        video = video_cache.get(moment.video_id)
-        if video is None:
-            video = store.get_video(moment.video_id)
-            video_cache[moment.video_id] = video
-        prov = make_provenance(
-            video, moment.t_start_s, moment.t_end_s,
-            modality=moment.modality, speaker=moment.speaker_id,
-            confidence=round(min(1.0, score_by_id.get(moment.moment_id, 0.0) * 30), 4),
-        ) if video else None
-        snippet = _best_sentence(moment.text_for_embedding(), query)
-        citations.append(
-            Citation(
-                index=i,
-                video_id=moment.video_id,
-                moment_id=moment.moment_id,
-                t_start_s=moment.t_start_s,
-                t_end_s=moment.t_end_s,
-                modality=moment.modality,
-                speaker=moment.speaker_id,
-                title=video.title if video else None,
-                deep_link=prov.deep_link if prov else None,
-                snippet=truncate(snippet, 240),
-                score=round(score_by_id.get(moment.moment_id, 0.0), 6),
+        citations: List[Citation] = []
+        video_cache: dict = {}
+        for i, moment in enumerate(moments, start=1):
+            video = video_cache.get(moment.video_id)
+            if video is None:
+                video = store.get_video(moment.video_id)
+                video_cache[moment.video_id] = video
+            prov = make_provenance(
+                video, moment.t_start_s, moment.t_end_s,
+                modality=moment.modality, speaker=moment.speaker_id,
+                confidence=round(min(1.0, score_by_id.get(moment.moment_id, 0.0) * 30), 4),
+            ) if video else None
+            snippet = _best_sentence(moment.text_for_embedding(), query)
+            citations.append(
+                Citation(
+                    index=i,
+                    video_id=moment.video_id,
+                    moment_id=moment.moment_id,
+                    t_start_s=moment.t_start_s,
+                    t_end_s=moment.t_end_s,
+                    modality=moment.modality,
+                    speaker=moment.speaker_id,
+                    title=video.title if video else None,
+                    deep_link=prov.deep_link if prov else None,
+                    snippet=truncate(snippet, 240),
+                    score=round(score_by_id.get(moment.moment_id, 0.0), 6),
+                )
             )
-        )
 
-    if qp.strategy == "temporal":
-        # Multi-hop temporal synthesis: order the cited moments chronologically by
-        # their video's published_at (ascending), missing dates last, then RE-INDEX
-        # so the [n] markers stay aligned with the new order. This must happen
-        # BEFORE synthesis, because the extractive synthesizer emits [c.index] and
-        # iterates citations in list order — both must reflect the temporal order.
-        def _published_at(c: Citation) -> str:
-            video = video_cache.get(c.video_id)
-            return (video.published_at or "") if video else ""
+        if qp.strategy == "temporal":
+            # Multi-hop temporal synthesis: order the cited moments chronologically
+            # by their video's published_at (ascending), missing dates last, then
+            # RE-INDEX so the [n] markers stay aligned with the new order. This must
+            # happen BEFORE synthesis, because the extractive synthesizer emits
+            # [c.index] and iterates citations in list order — both must reflect it.
+            def _published_at(c: Citation) -> str:
+                video = video_cache.get(c.video_id)
+                return (video.published_at or "") if video else ""
 
-        citations.sort(key=lambda c: (_published_at(c) == "", _published_at(c)))
-        for new_index, c in enumerate(citations, start=1):
-            c.index = new_index
+            citations.sort(key=lambda c: (_published_at(c) == "", _published_at(c)))
+            for new_index, c in enumerate(citations, start=1):
+                c.index = new_index
 
-    if llm is not None and getattr(llm, "is_generative", False):
-        try:
-            text = _synthesize_llm(llm, query, citations)
-        except Exception:
+        if llm is not None and getattr(llm, "is_generative", False):
+            try:
+                text = _synthesize_llm(llm, query, citations)
+            except Exception:
+                text = _synthesize_extractive(citations)
+        else:
             text = _synthesize_extractive(citations)
-    else:
-        text = _synthesize_extractive(citations)
 
-    low_evidence = not text.strip()
-    if low_evidence:
-        text = _LOW_EVIDENCE_MSG
+        low_evidence = not text.strip()
+        if low_evidence:
+            text = _LOW_EVIDENCE_MSG
+        _sp.add_counter("citations", len(citations))
     return Answer(text=text, citations=citations, strategy=qp.strategy, low_evidence=low_evidence)

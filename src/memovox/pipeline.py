@@ -23,6 +23,7 @@ from .loom import Claim, LoomStore, Speaker, Video
 from .loom.digest import render_digest
 from .loom.models import STATUS_COMMITTED
 from .loom.resolve import link_claim_relations, resolve_entities, resolve_speakers
+from .observe import Tracer
 from .util import make_video_id, slugify
 
 
@@ -100,15 +101,19 @@ def ingest(
     force: bool = False,
     settings: Optional[Settings] = None,
     store: Optional[LoomStore] = None,
+    tracer: Optional[Tracer] = None,
 ) -> IngestReport:
     config.ensure()
     settings = settings or config.settings
+    tracer = tracer or Tracer("ingest")
 
     # --- Stentor: acquire + ASR + diarize -------------------------------
-    st = stentor.run(
-        config, source, source_url=source_url, title=title, captions=captions,
-        cookies=cookies, asr_backend=settings.asr_backend, language=language, glossary=glossary,
-    )
+    with tracer.span("asr") as _sp:
+        st = stentor.run(
+            config, source, source_url=source_url, title=title, captions=captions,
+            cookies=cookies, asr_backend=settings.asr_backend, language=language, glossary=glossary,
+        )
+        _sp.add_counter("segments", len(st.segments))
     meta = st.meta
     video_id = make_video_id(meta.source_url or source, content_hash=meta.content_hash)
 
@@ -141,97 +146,111 @@ def ingest(
         store.set_meta("embed_backend", embedder.name)
 
         # --- Tessera: visual track (degrades gracefully, spec §9) -------
-        visual = tessera.run(config, meta, settings=settings)
+        with tracer.span("visual") as _sp:
+            visual = tessera.run(config, meta, settings=settings, span=_sp)
+            _sp.add_counter("frames", visual.n_frames)
+            _sp.add_counter("scenes", visual.n_scenes)
+            _sp.add_counter("events", len(visual.events))
 
         # --- Escapement: Moments (fused with visual events) -------------
-        moments = escapement.build_moments(
-            video_id, st.segments, embedder=embedder, settings=settings,
-            visual_events=visual.events,
-        )
-        for m in moments:
-            m.speaker_id = _namespace_speaker(video_id, m.speaker_id)
+        with tracer.span("moments") as _sp:
+            moments = escapement.build_moments(
+                video_id, st.segments, embedder=embedder, settings=settings,
+                visual_events=visual.events,
+            )
+            for m in moments:
+                m.speaker_id = _namespace_speaker(video_id, m.speaker_id)
 
-        # --- Loom: speakers ---------------------------------------------
-        for raw, name in (st.speaker_names or {}).items():
-            sid = _namespace_speaker(video_id, raw)
-            store.upsert_speaker(Speaker(speaker_id=sid, label=raw, resolved_name=name))
-        for m in moments:
-            if m.speaker_id and store.get_speaker(m.speaker_id) is None:
-                store.upsert_speaker(Speaker(speaker_id=m.speaker_id, label=m.speaker_id.split(":")[-1]))
+            # --- Loom: speakers -----------------------------------------
+            for raw, name in (st.speaker_names or {}).items():
+                sid = _namespace_speaker(video_id, raw)
+                store.upsert_speaker(Speaker(speaker_id=sid, label=raw, resolved_name=name))
+            for m in moments:
+                if m.speaker_id and store.get_speaker(m.speaker_id) is None:
+                    store.upsert_speaker(Speaker(speaker_id=m.speaker_id, label=m.speaker_id.split(":")[-1]))
+            _sp.add_counter("moments", len(moments))
 
         # --- Loom: triple write (vector + lexical via add_moment) -------
-        if moments:
-            embeddings = embedder.embed([m.text_for_embedding() for m in moments])
-        else:
-            embeddings = []
-        for m, emb in zip(moments, embeddings):
-            vis_emb = escapement.moment_visual_embedding(m, visual.events) if visual.events else None
-            store.add_moment(m, emb, visual_embedding=vis_emb)
+        with tracer.span("embed") as _sp:
+            if moments:
+                embeddings = embedder.embed([m.text_for_embedding() for m in moments])
+            else:
+                embeddings = []
+            for m, emb in zip(moments, embeddings):
+                vis_emb = escapement.moment_visual_embedding(m, visual.events) if visual.events else None
+                store.add_moment(m, emb, visual_embedding=vis_emb)
 
-        # PRECEDES edges along the timeline.
-        for prev, nxt in zip(moments, moments[1:]):
-            store.add_edge(prev.moment_id, "PRECEDES", nxt.moment_id,
-                           src_type="Moment", dst_type="Moment", video_id=video_id,
-                           t_start_s=prev.t_start_s, t_end_s=nxt.t_end_s)
+            # PRECEDES edges along the timeline.
+            for prev, nxt in zip(moments, moments[1:]):
+                store.add_edge(prev.moment_id, "PRECEDES", nxt.moment_id,
+                               src_type="Moment", dst_type="Moment", video_id=video_id,
+                               t_start_s=prev.t_start_s, t_end_s=nxt.t_end_s)
+            _sp.add_counter("embedded", len(moments))
 
         # --- Assay: claims + verify + graph edges -----------------------
-        committed = unsupported = 0
-        all_claims: List[Claim] = []
-        for m in moments:
-            for claim in assay.run(m, nli=nli, llm=llm, settings=settings):
-                store.add_claim(claim)
-                all_claims.append(claim)
-                if claim.status == STATUS_COMMITTED:
-                    committed += 1
-                    if claim.speaker_id:
-                        store.add_edge(claim.speaker_id, "STATES", claim.claim_id,
-                                       src_type="Speaker", dst_type="Claim", video_id=video_id,
-                                       t_start_s=claim.t_start_s, t_end_s=claim.t_end_s,
-                                       confidence=claim.entailment_score)
-                        store.add_edge(claim.claim_id, "ATTRIBUTED_TO", claim.speaker_id,
-                                       src_type="Claim", dst_type="Speaker", video_id=video_id)
-                else:
-                    unsupported += 1
+        with tracer.span("claims") as _sp:
+            committed = unsupported = 0
+            all_claims: List[Claim] = []
+            for m in moments:
+                for claim in assay.run(m, nli=nli, llm=llm, settings=settings):
+                    store.add_claim(claim)
+                    all_claims.append(claim)
+                    if claim.status == STATUS_COMMITTED:
+                        committed += 1
+                        if claim.speaker_id:
+                            store.add_edge(claim.speaker_id, "STATES", claim.claim_id,
+                                           src_type="Speaker", dst_type="Claim", video_id=video_id,
+                                           t_start_s=claim.t_start_s, t_end_s=claim.t_end_s,
+                                           confidence=claim.entailment_score)
+                            store.add_edge(claim.claim_id, "ATTRIBUTED_TO", claim.speaker_id,
+                                           src_type="Claim", dst_type="Speaker", video_id=video_id)
+                    else:
+                        unsupported += 1
+            _sp.add_counter("committed", committed)
+            _sp.add_counter("unsupported", unsupported)
+            _sp.add_counter("claims", len(all_claims))
 
-        # --- Loom: cross-corpus entity resolution (spec §4.6) -----------
-        # Canonicalize each committed claim's mentions into Entity nodes +
-        # provenanced MENTIONS edges, so the SAME entity across videos is ONE
-        # node. resolve_entities filters to committed claims internally.
-        linker = get_entity_linker(settings.entity_backend, config=config)
-        resolve_entities(store, all_claims, linker=linker)
+        # --- Loom: entity + speaker resolution + discourse edges --------
+        with tracer.span("resolve") as _sp:
+            # Canonicalize each committed claim's mentions into Entity nodes +
+            # provenanced MENTIONS edges, so the SAME entity across videos is ONE
+            # node. resolve_entities filters to committed claims internally.
+            linker = get_entity_linker(settings.entity_backend, config=config)
+            resolve_entities(store, all_claims, linker=linker)
 
-        # --- Loom: cross-video speaker resolution (spec §4.6/§12) -------
-        # Unify the SAME named speaker across videos onto one canonical
-        # ``spk:<slug>`` identity (per-video rows preserved, linked by SAME_AS).
-        # Re-resolves the WHOLE corpus each ingest (idempotent); anonymous
-        # diarization labels are never merged across videos by NAME.
-        #
-        # OPTIONAL voiceprint merge (W4.2, §12): only when a voiceprint backend is
-        # installed AND local audio exists do we extract per-speaker voiceprints
-        # and pass them in, letting anonymous same-voice speakers merge. On the
-        # free/captions path the backend is None and media is absent, so
-        # voiceprints is None and resolve_speakers stays name-only (no pyannote
-        # import, no behavior change). Voiceprints are transient (not persisted).
-        voiceprint_backend = get_voiceprint_backend(
-            getattr(settings, "voiceprint_backend", "auto"), config=config
-        )
-        voiceprints = _extract_voiceprints(
-            voiceprint_backend,
-            video_id=video_id,
-            segments=st.segments,
-            audio_path=meta.media_path,
-        )
-        resolve_speakers(store, voiceprints=voiceprints)
+            # Unify the SAME named speaker across videos onto one canonical
+            # ``spk:<slug>`` identity (per-video rows preserved, linked by SAME_AS).
+            # Re-resolves the WHOLE corpus each ingest (idempotent); anonymous
+            # diarization labels are never merged across videos by NAME.
+            #
+            # OPTIONAL voiceprint merge (W4.2, §12): only when a voiceprint backend
+            # is installed AND local audio exists do we extract per-speaker
+            # voiceprints and pass them in, letting anonymous same-voice speakers
+            # merge. On the free/captions path the backend is None and media is
+            # absent, so voiceprints is None and resolve_speakers stays name-only
+            # (no pyannote import, no behavior change). Voiceprints are transient.
+            voiceprint_backend = get_voiceprint_backend(
+                getattr(settings, "voiceprint_backend", "auto"), config=config
+            )
+            voiceprints = _extract_voiceprints(
+                voiceprint_backend,
+                video_id=video_id,
+                segments=st.segments,
+                audio_path=meta.media_path,
+            )
+            resolve_speakers(store, voiceprints=voiceprints)
 
-        # --- Loom: discourse edges (spec §6) ----------------------------
-        # Link claim->claim within the video: ELABORATES (adjacent same-speaker
-        # claims inside a Moment) and CORRECTS (a CORRECTION -> nearest prior
-        # claim sharing a subject/entity). Committed-only; provenance-stamped.
-        link_claim_relations(store, all_claims)
+            # Link claim->claim within the video: ELABORATES (adjacent same-speaker
+            # claims inside a Moment) and CORRECTS (a CORRECTION -> nearest prior
+            # claim sharing a subject/entity). Committed-only; provenance-stamped.
+            link_claim_relations(store, all_claims)
+            _sp.add_counter("claims", len(all_claims))
 
         # --- human-readable digest --------------------------------------
-        digest = render_digest(video, moments, all_claims)
-        (config.digests_dir / f"{slugify(video_id)}.md").write_text(digest, encoding="utf-8")
+        with tracer.span("digest") as _sp:
+            digest = render_digest(video, moments, all_claims)
+            (config.digests_dir / f"{slugify(video_id)}.md").write_text(digest, encoding="utf-8")
+            _sp.add_counter("bytes", len(digest))
 
         return IngestReport(
             video_id=video_id,
