@@ -83,6 +83,20 @@ class TestCLI(unittest.TestCase):
         code, out = run(["--store", self.store, "subscriptions"])
         self.assertIn("No subscriptions", out)
 
+    def test_worker_once_drains_queue(self):
+        from memovox import Memovox
+        mv = Memovox(store=self.store, llm_backend="none")
+        mv.ingest(str(self.vtt), source_url="https://youtu.be/abc123")
+        job = mv.enqueue_consolidate()
+        code, out = run(["--store", self.store, "--llm", "none", "worker", "--once"])
+        self.assertEqual(code, 0)
+        self.assertEqual(mv.job_status(job["job_id"])["state"], "succeeded")
+
+    def test_worker_default_concurrency_is_one(self):
+        from memovox.cli import build_parser
+        args = build_parser().parse_args(["worker"])
+        self.assertEqual(args.concurrency, 1)
+
     def test_sync_prints_structured_summary(self):
         from unittest import mock
         from memovox.stentor.acquire import EnumeratedEntry

@@ -295,6 +295,48 @@ def cmd_mcp(args, mv: Memovox) -> int:
     return 0
 
 
+def _run_worker(mv: Memovox, *, once: bool, concurrency: int, poll_interval: float) -> int:
+    from .serving.jobs import JobWorker
+
+    if once:
+        ran = JobWorker(mv, once=True).drain()
+        print(f"drained {ran} job(s)", file=sys.stderr)
+        return 0
+    workers = [JobWorker(mv, poll_interval=poll_interval) for _ in range(max(1, concurrency))]
+    for w in workers:
+        w.start()
+    try:
+        print(f"memovox-worker: {len(workers)} thread(s), polling every {poll_interval}s "
+              f"(Ctrl-C to stop)", file=sys.stderr)
+        for w in workers:
+            w.join()
+    except KeyboardInterrupt:
+        for w in workers:
+            w.stop()
+    return 0
+
+
+def cmd_worker(args, mv: Memovox) -> int:
+    return _run_worker(mv, once=args.once, concurrency=args.concurrency,
+                       poll_interval=args.poll_interval)
+
+
+def worker_main() -> int:
+    """Console-script entry (``memovox-worker``) — runs the job worker loop."""
+    import argparse
+
+    p = argparse.ArgumentParser(prog="memovox-worker", description="Drain the memovox job queue.")
+    p.add_argument("--store", default=None)
+    p.add_argument("--once", action="store_true", help="drain the queue then exit.")
+    p.add_argument("--concurrency", type=int, default=1,
+                   help="worker threads (default 1, deterministic; >1 is opt-in/ungated).")
+    p.add_argument("--poll-interval", type=float, default=1.0)
+    args = p.parse_args()
+    mv = Memovox(store=args.store) if args.store else Memovox()
+    return _run_worker(mv, once=args.once, concurrency=args.concurrency,
+                       poll_interval=args.poll_interval)
+
+
 def cmd_serve(args, mv: Memovox) -> int:
     if getattr(args, "fastapi", False):
         from .server import fastapi_app
@@ -423,6 +465,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--fastapi", action="store_true",
                    help="use the FastAPI/uvicorn server ([serve] extra) instead of stdlib.")
     s.set_defaults(func=cmd_serve)
+
+    s = sub.add_parser("worker", help="run the background job worker (consolidate/sync/ingest).")
+    s.add_argument("--once", action="store_true", help="drain the queue then exit.")
+    s.add_argument("--concurrency", type=int, default=1,
+                   help="worker threads (default 1, deterministic; >1 opt-in/ungated).")
+    s.add_argument("--poll-interval", type=float, default=1.0)
+    s.set_defaults(func=cmd_worker)
 
     return p
 

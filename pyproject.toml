@@ -53,6 +53,7 @@ dev = ["pytest>=7.0", "ruff>=0.4.0"]
 
 [project.scripts]
 memovox = "memovox.cli:main"
+memovox-worker = "memovox.cli:worker_main"
 
 [project.urls]
 Homepage = "https://github.com/conjfrnk/memovox"
