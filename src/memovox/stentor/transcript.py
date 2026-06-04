@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from ..backends.base import Segment
+from ..backends.base import Segment, Word
 from ..util import split_sentences
 
 FILLERS = {"um", "uh", "erm", "uhh", "umm", "mm", "hmm", "mhm", "uhm", "ah", "er"}
@@ -86,7 +86,16 @@ def parse_json(data) -> List[Segment]:
         text = str(item.get("text", "")).strip()
         if not text:
             continue
-        segments.append(Segment(start=start, end=end, text=text, speaker=item.get("speaker")))
+        # Optional per-word timings (M0.3): a free-path fixture can carry word
+        # precision via a "words": [{"word","start","end"}, ...] array per cue.
+        words = [
+            Word(word=str(w.get("word", "")), start=float(w.get("start", 0.0)),
+                 end=float(w.get("end", 0.0)))
+            for w in (item.get("words") or [])
+            if w.get("word")
+        ]
+        segments.append(Segment(start=start, end=end, text=text,
+                                speaker=item.get("speaker"), words=words))
     return segments
 
 

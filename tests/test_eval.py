@@ -412,6 +412,18 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         # M0.2 W5/W6: incremental consolidation == a single full pass on the golden.
         self.assertEqual(self.report["incremental_equivalence"], 1.0)
 
+    def test_span_unchanged_perfect(self):
+        # M0.3 W5: free-path claim spans are byte-identical to the recorded baseline.
+        su = self.report["span_unchanged"]
+        self.assertTrue(su["recorded"])
+        self.assertEqual(su["score"], 1.0)
+        self.assertEqual(su["drifted"], [])
+
+    def test_span_accuracy_present_ungated(self):
+        # M0.3 W5: word-precision signal computed + printed (M1.2 owns gating).
+        self.assertIn("span_accuracy", self.report)
+        self.assertIn("tightened_fraction", self.report["span_accuracy"])
+
     def test_observability_is_ungated(self):
         # discipline (a): observability never participates in --assert-thresholds.
         failures = _check_thresholds(self.report)
@@ -490,6 +502,12 @@ class TestFrozenSettingsSnapshot(unittest.TestCase):
         self.assertIn("vector_prefilter_fts", _DEFAULT_OFF_FLAGS)
         self.assertFalse(_DEFAULT_OFF_FLAGS["vector_prefilter_fts"])
 
+    def test_snapshot_pins_m0_3_asr_flags(self):
+        from eval.harness import _DEFAULT_OFF_FLAGS
+
+        for flag in ("asr_device", "asr_compute_type", "asr_allow_cpu"):
+            self.assertIn(flag, _DEFAULT_OFF_FLAGS)
+
 
 class TestNewExactGates(unittest.TestCase):
     """M0.2 W6: parity and incremental_equivalence gate immediately at 1.0 — they
@@ -515,6 +533,13 @@ class TestNewExactGates(unittest.TestCase):
         from eval.harness import _check_thresholds
         bad = dict(self._base(), incremental_equivalence=0.0)
         self.assertTrue(any("incremental" in f for f in _check_thresholds(bad)))
+
+    def test_span_unchanged_below_one_fails(self):
+        from eval.harness import _check_thresholds
+        base = dict(self._base(), span_unchanged={"score": 1.0})
+        self.assertEqual(_check_thresholds(base), [])
+        bad = dict(base, span_unchanged={"score": 0.9})
+        self.assertTrue(any("span_unchanged" in f for f in _check_thresholds(bad)))
 
 
 if __name__ == "__main__":  # pragma: no cover

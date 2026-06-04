@@ -79,6 +79,9 @@ _DEFAULT_OFF_FLAGS = dict(
     budget_mode="soft",
     otel_enabled=False,
     vector_prefilter_fts=False,  # M0.2: opt-in FTS vector prefilter must stay OFF on the gate
+    asr_device="auto",           # M0.3: ASR device knobs pinned
+    asr_compute_type="default",
+    asr_allow_cpu=False,
 )
 
 # Default retrieval cutoff for hit_rate / nDCG.
@@ -663,6 +666,74 @@ def _record_parity(golden_dir: Path) -> Path:
     return out
 
 
+def _span_snapshot(ing: _Ingested) -> dict:
+    """Logical claim id -> [t_start_s, t_end_s] for every committed golden claim."""
+    from memovox.loom.store import LoomStore
+
+    out: dict = {}
+    with LoomStore(ing.mv.config) as store:
+        for store_vid in ing.logical_to_store.values():
+            for c in store.claims_for_video(store_vid, status=None):
+                out[_logicalize(ing, c.claim_id)] = [round(c.t_start_s, 3), round(c.t_end_s, 3)]
+    return out
+
+
+def _span_unchanged_block(ing: _Ingested) -> dict:
+    """M0.3 W5 hard guard: the free VTT/captions span output must be byte-identical
+    to the recorded baseline (the golden VTTs carry no word tags, so word-window
+    tightening runs its identity branch — any silent widening/narrowing fails CI)."""
+    live = _span_snapshot(ing)
+    path = GOLDEN_DIR / "span_baseline.json"
+    if not path.exists():
+        return {"score": 1.0, "claims": len(live), "recorded": False, "drifted": []}
+    baseline = _load_json(path)
+    drifted = sorted(
+        {cid for cid in baseline if live.get(cid) != baseline[cid]}
+        | {cid for cid in live if cid not in baseline}
+    )
+    score = 1.0 if live == baseline else (
+        sum(1 for cid in baseline if live.get(cid) == baseline[cid]) / max(len(baseline), 1)
+    )
+    return {"score": round(score, 6), "claims": len(baseline), "recorded": True,
+            "drifted": drifted}
+
+
+def _span_accuracy() -> dict:
+    """UNGATED (M1.2 owns gating): on a word-bearing free-path fixture, the fraction
+    of committed claims whose span was tightened strictly inside its source cue —
+    the word-precision signal. ``None`` if the fixture is absent."""
+    fixture = _REPO_ROOT / "eval" / "fixtures" / "words_clip.json"
+    if not fixture.exists():
+        return {"tightened_fraction": None, "claims": 0}
+    from memovox import pipeline
+    from memovox.config import Config, Settings
+    from memovox.loom.store import LoomStore
+
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg = Config(store=str(Path(tmp) / "store"), settings=Settings(**_FREE_BACKENDS)).ensure()
+        rep = pipeline.ingest(cfg, str(fixture), source_url="https://x/words")
+        with LoomStore(cfg) as store:
+            claims = store.claims_for_video(rep.video_id)
+            moments = {m.moment_id: m for m in store.moments_for_video(rep.video_id)}
+            tightened = 0
+            for c in claims:
+                m = moments.get(c.moment_id)
+                if m and (c.t_start_s > m.t_start_s or c.t_end_s < m.t_end_s):
+                    tightened += 1
+    return {"tightened_fraction": round(tightened / len(claims), 6) if claims else None,
+            "claims": len(claims)}
+
+
+def _record_span_baseline(golden_dir: Path) -> Path:
+    with tempfile.TemporaryDirectory() as tmp:
+        ing = _ingest_golden(golden_dir, str(Path(tmp) / "store"))
+        snap = _span_snapshot(ing)
+    out = GOLDEN_DIR / "span_baseline.json"
+    out.write_text(json.dumps(snap, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+                   encoding="utf-8")
+    return out
+
+
 def _incremental_equivalence() -> float:
     """1.0 iff incremental consolidation (batched, watermark) produces the IDENTICAL
     CONTRADICTS/SUPPORTS graph as a single full pass on the golden corpus (M0.2)."""
@@ -802,6 +873,8 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
     observability = _observability_metrics(ing)
     parity_block = _parity_block(ing)
     incremental_equiv = _incremental_equivalence()
+    span_unchanged = _span_unchanged_block(ing)
+    span_accuracy = _span_accuracy()
 
     return {
         "retrieval": {
@@ -822,6 +895,8 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
         "observability": observability,  # UNGATED (discipline (a)); structural only
         "parity": parity_block,          # exact-equivalence invariant (gated)
         "incremental_equivalence": incremental_equiv,  # exact-equivalence invariant (gated)
+        "span_unchanged": span_unchanged,  # M0.3 free-path span byte-identity (gated)
+        "span_accuracy": span_accuracy,    # M0.3 word-precision signal (UNGATED; M1.2 gates)
     }
 
 
@@ -881,6 +956,9 @@ def _check_thresholds(report: dict) -> List[str]:
     inc = report.get("incremental_equivalence", 1.0)
     if inc < 1.0:
         failures.append(f"incremental_equivalence {inc:.3f} < 1.0 (incremental != full)")
+    span = report.get("span_unchanged", {}).get("score", 1.0)
+    if span < 1.0:
+        failures.append(f"span_unchanged {span:.3f} < 1.0 (free-path claim spans drifted)")
     return failures
 
 
@@ -909,11 +987,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="(maintenance) re-record eval/golden/parity.json from the CURRENT "
              "free-path top-k, then exit. Use only after a deliberate, reviewed change.",
     )
+    parser.add_argument(
+        "--record-spans", action="store_true",
+        help="(maintenance) re-record eval/golden/span_baseline.json from the CURRENT "
+             "free-path claim spans, then exit. Use only after a reviewed change.",
+    )
     args = parser.parse_args(argv)
 
     if args.record_parity:
         path = _record_parity(Path(args.golden_dir))
         print(f"recorded parity golden -> {path}")
+        return 0
+
+    if args.record_spans:
+        path = _record_span_baseline(Path(args.golden_dir))
+        print(f"recorded span baseline -> {path}")
         return 0
 
     _assert_default_off_flags()

@@ -103,7 +103,17 @@ def ingest(
     settings: Optional[Settings] = None,
     store: Optional[LoomStore] = None,
     tracer: Optional[Tracer] = None,
+    published_at: Optional[str] = None,
+    visual_result: Optional[object] = None,
+    modality: Optional[str] = None,
 ) -> IngestReport:
+    # CANONICAL ingest() signature (M0.3, single-owner). Keyword-only Phase-4 seams:
+    #   published_at: override the source's publication date (local files have none).
+    #   visual_result: inject a precomputed Tessera result instead of recomputing
+    #                  (reserved for M1.1; None -> tessera.run as today).
+    #   modality: reserved citation-routing hint (reserved for M1.1; inert here).
+    # Adding a Phase-4 keyword? Add it here, keyword-only with an inert default —
+    # do NOT churn the positional list. None reproduces today's free-path behavior.
     config.ensure()
     settings = settings or config.settings
     tracer = tracer or Tracer("ingest", otel_enabled=settings.otel_enabled)
@@ -125,7 +135,7 @@ def ingest(
         source_url=meta.source_url,
         title=meta.title,
         channel=meta.channel,
-        published_at=meta.published_at,
+        published_at=published_at or meta.published_at,  # explicit override (M0.3)
         duration_s=st.duration,
         lang=st.language,
         content_hash=meta.content_hash,
@@ -151,7 +161,9 @@ def ingest(
 
         # --- Tessera: visual track (degrades gracefully, spec §9) -------
         with tracer.span("visual") as _sp:
-            visual = tessera.run(config, meta, settings=settings, span=_sp)
+            # M1.1 may inject a precomputed visual_result; else compute as today.
+            visual = visual_result if visual_result is not None else \
+                tessera.run(config, meta, settings=settings, span=_sp)
             _sp.add_counter("frames", visual.n_frames)
             _sp.add_counter("scenes", visual.n_scenes)
             _sp.add_counter("events", len(visual.events))
