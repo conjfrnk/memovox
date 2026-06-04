@@ -1360,6 +1360,9 @@ _GATE_DECLARATIONS = {
     "der": {"kind": "statistical", "fixture": "speakers.json", "grandfathered_thin": True},
     # M2.3 W7: genuinely eligible — clips.json has 5 stable items (>= 3); gated at 0.3.
     "clip.coverage": {"kind": "statistical", "fixture": "clips.json"},
+    # M3.1: deterministic structural invariants on a synthetic dated fixture (exact).
+    "decay.recent_first_ordering": {"kind": "exact"},
+    "decay.superseded_excluded": {"kind": "exact"},
     "parity": {"kind": "exact"},
     "incremental_equivalence": {"kind": "exact"},
     "span_unchanged": {"kind": "exact"},
@@ -1412,6 +1415,12 @@ def _check_thresholds(report: dict) -> List[str]:
     clip_cov = (report.get("clip") or {}).get("coverage")
     if clip_cov is not None and clip_cov < _CLIP_COVERAGE_GATE:
         failures.append(f"clip.coverage {clip_cov:.3f} < {_CLIP_COVERAGE_GATE}")
+    # M3.1: decay structural invariants (exact — deterministic on the dated fixture).
+    decay = report.get("decay") or {}
+    if "recent_first_ordering" in decay and not decay["recent_first_ordering"]:
+        failures.append("decay.recent_first_ordering is False")
+    if "superseded_excluded" in decay and not decay["superseded_excluded"]:
+        failures.append("decay.superseded_excluded is False")
     # M0.2 exact-equivalence invariants — gated at 1.0 (correctness, not statistics).
     pscore = report.get("parity", {}).get("score", 1.0)
     if pscore < 1.0:
