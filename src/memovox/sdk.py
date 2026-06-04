@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+import sys
+from dataclasses import dataclass, field
 from typing import List, Optional
 
 from . import augur, pipeline
@@ -23,6 +25,20 @@ from .loom.consolidate import (
 )
 from .loom.digest import build_digest
 from .loom.evolution import claim_evolution
+
+
+@dataclass
+class SyncReport:
+    """Result of one ``Memovox.sync()`` (M3.2): per-entry status + batch counts."""
+
+    entries: List[dict] = field(default_factory=list)
+    n_new: int = 0
+    n_skipped: int = 0
+    n_failed: int = 0
+
+    def to_dict(self) -> dict:
+        return {"n_new": self.n_new, "n_skipped": self.n_skipped,
+                "n_failed": self.n_failed, "entries": self.entries}
 
 
 class Memovox:
@@ -40,8 +56,52 @@ class Memovox:
     def ingest(self, source: str, **kwargs) -> pipeline.IngestReport:
         return pipeline.ingest(self.config, source, settings=self.settings, **kwargs)
 
-    def sync(self) -> List[pipeline.IngestReport]:
-        """Ingest new items from subscriptions.json (channels/playlists)."""
+    def sync(self) -> "SyncReport":
+        """Subscription sync (M3.2): for each subscribed source, enumerate its
+        videos (metadata only), skip ids already in the cursor, ingest the rest with
+        the whole-corpus resolve DEFERRED, isolate per-entry failures, then run ONE
+        corpus resolve + one incremental consolidation for the batch. Idempotent: a
+        re-sync with no new uploads ingests nothing. All diagnostics go to stderr."""
+        from . import pipeline, sync_state
+        from .stentor import enumerate_source
+
+        entries: List[dict] = []
+        n_new = n_skipped = n_failed = 0
+        any_new = False
+        with LoomStore(self.config) as store:
+            for src in self._load_sources():
+                try:
+                    enumerated = enumerate_source(self.config, src)
+                except Exception as exc:  # enumeration failure is per-source, not fatal
+                    print(f"sync: enumerate failed for {src}: {exc}", file=sys.stderr)
+                    entries.append({"url": src, "status": "enumerate_failed", "error": str(exc)[:200]})
+                    continue
+                seen = sync_state.seen_ids(store, src)
+                for e in enumerated:
+                    if e.video_id in seen:
+                        n_skipped += 1
+                        entries.append({"video_id": e.video_id, "url": e.url, "status": "skipped"})
+                        continue
+                    try:
+                        pipeline.ingest(self.config, e.url, settings=self.settings,
+                                        store=store, resolve_corpus=False)
+                    except Exception as exc:  # one bad entry never aborts the batch
+                        print(f"sync: ingest failed for {e.url}: {exc}", file=sys.stderr)
+                        n_failed += 1
+                        entries.append({"video_id": e.video_id, "url": e.url,
+                                        "status": "failed", "error": str(exc)[:200]})
+                        continue
+                    sync_state.mark_seen(store, src, e.video_id)  # only on success
+                    n_new += 1
+                    any_new = True
+                    entries.append({"video_id": e.video_id, "url": e.url, "status": "new"})
+            if any_new:
+                pipeline.resolve_corpus_pass(self.config, store, self.settings)
+        if any_new:
+            self.consolidate()  # one incremental (M0.2 watermark) consolidation per batch
+        return SyncReport(entries=entries, n_new=n_new, n_skipped=n_skipped, n_failed=n_failed)
+
+    def _load_sources(self) -> List[str]:
         import json
 
         path = self.config.subscriptions_path
@@ -51,12 +111,37 @@ class Memovox:
             subs = json.loads(path.read_text(encoding="utf-8"))
         except (ValueError, OSError):
             return []
-        reports = []
+        out = []
         for entry in subs.get("sources", []):
             url = entry.get("url") if isinstance(entry, dict) else entry
             if url:
-                reports.append(self.ingest(url))
-        return reports
+                out.append(url)
+        return out
+
+    def _write_sources(self, sources: List[str]) -> None:
+        import json
+
+        path = self.config.subscriptions_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"sources": [{"url": u} for u in sources]}, indent=2),
+                        encoding="utf-8")
+
+    def subscribe(self, url: str) -> List[str]:
+        """Add a channel/playlist/video URL to subscriptions.json (idempotent)."""
+        sources = self._load_sources()
+        if url not in sources:
+            sources.append(url)
+            self._write_sources(sources)
+        return sources
+
+    def unsubscribe(self, url: str) -> List[str]:
+        """Remove a source from subscriptions.json (no-op if absent)."""
+        sources = [s for s in self._load_sources() if s != url]
+        self._write_sources(sources)
+        return sources
+
+    def list_subscriptions(self) -> List[str]:
+        return self._load_sources()
 
     # -- query -------------------------------------------------------------
 

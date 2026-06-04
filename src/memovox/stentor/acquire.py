@@ -54,6 +54,9 @@ def enumerate_source(config: Config, url: str) -> list:
     :class:`AcquisitionError` (with an install hint) when yt-dlp is absent."""
     from ..util import make_video_id, youtube_id
 
+    if not _is_url(url):
+        # A local path (free-path sync) enumerates to itself — no yt-dlp needed.
+        return [EnumeratedEntry(video_id=make_video_id(url), url=url, title=None)]
     if not shutil.which("yt-dlp"):
         raise AcquisitionError(
             "Subscription enumeration requires yt-dlp, which was not found.\n"
