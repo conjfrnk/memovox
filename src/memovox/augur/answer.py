@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from ..backends.base import Embedder, LLMBackend
+from ..backends.base import Embedder, LLMBackend, Reranker
 from ..config import Settings
 from ..loom.models import make_provenance
 from ..loom.store import LoomStore
@@ -71,6 +71,7 @@ def ask(
     tracer: Optional[Tracer] = None,
     modality: str = "any",
     visual_query_vec: Optional[List[float]] = None,
+    reranker: Optional["Reranker"] = None,
 ) -> Answer:
     settings = settings or Settings()
     tracer = tracer or Tracer("ask", otel_enabled=settings.otel_enabled)
@@ -105,6 +106,19 @@ def ask(
     if not fused:
         return Answer(text=_LOW_EVIDENCE_MSG, citations=[], strategy=qp.strategy,
                       low_evidence=True, metrics=tracer.to_dict())
+
+    # M2.1 rerank stage (spec §5/§3): reorder the fused candidate set between
+    # fusion and citation build. The free identity reranker returns it unchanged
+    # (byte-identical); a cross-encoder reorders by query↔text relevance. Same set,
+    # no add/drop — so [n] indices/deep links re-derive contiguously below.
+    if reranker is not None:
+        with tracer.span("rerank") as _rsp:
+            texts = None
+            if reranker.needs_text:
+                texts = {m.moment_id: m.text_for_embedding()
+                         for m in store.get_moments([mid for mid, _ in fused])}
+            fused = reranker.rerank(query, fused, texts=texts)
+            _rsp.add_counter("candidates", len(fused))
 
     with tracer.span("synthesize") as _sp:
         moment_ids = [mid for mid, _ in fused]

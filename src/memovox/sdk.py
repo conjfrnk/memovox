@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from . import augur, pipeline
-from .backends import backend_status, get_embedder, get_llm, get_nli
+from .backends import backend_status, get_embedder, get_llm, get_nli, get_reranker
 from .config import Config, Settings
 from .loom import LoomStore, Video
 from .loom.consolidate import (
@@ -65,9 +65,10 @@ class Memovox:
         with LoomStore(self.config) as store:
             embedder = get_embedder(self.settings.embed_backend, config=self.config)
             llm = get_llm(self.settings.llm_backend, config=self.config)
+            reranker = get_reranker(self.settings.rerank_backend, config=self.config)
             return augur.ask(
                 store, query, embedder=embedder, llm=llm, settings=self.settings,
-                video_id=video_id, modality=modality,
+                video_id=video_id, modality=modality, reranker=reranker,
             )
 
     def contradictions(self, topic: Optional[str] = None) -> List[ContradictionPair]:

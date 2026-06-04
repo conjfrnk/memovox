@@ -57,5 +57,64 @@ class CrossEncoderGatingTest(unittest.TestCase):
         self.assertTrue(CrossEncoderReranker.needs_text)
 
 
+class RerankWiringTest(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        from memovox.backends.embed import HashingEmbedder
+        from memovox.config import Config
+        from memovox.loom import LoomStore, Moment, Video
+        self._tmp = tempfile.TemporaryDirectory()
+        self.config = Config(store=pathlib.Path(self._tmp.name) / "s").ensure()
+        self.store = LoomStore(self.config)
+        self.emb = HashingEmbedder(dim=256)
+        self.store.upsert_video(Video("v", "https://x/v", "talk"))
+        for i in range(3):
+            text = f"chunk {i} about retrieval augmented generation and models"
+            m = Moment(f"v#m{i:04d}", "v", float(i), float(i) + 1, text, "spk_0", index=i)
+            self.store.add_moment(m, self.emb.embed_one(m.text_for_embedding()))
+
+    def tearDown(self):
+        self.store.close()
+        self._tmp.cleanup()
+
+    def test_identity_default_is_byte_identical_to_no_rerank(self):
+        from memovox import augur
+        from memovox.config import Settings
+        q = "retrieval augmented generation models"
+        base = augur.ask(self.store, q, embedder=self.emb, settings=Settings(top_k=5),
+                         reranker=None)
+        idn = augur.ask(self.store, q, embedder=self.emb, settings=Settings(top_k=5),
+                        reranker=get_reranker("identity"))
+        self.assertEqual([c.moment_id for c in base.citations],
+                         [c.moment_id for c in idn.citations])
+        self.assertEqual([c.index for c in base.citations], [c.index for c in idn.citations])
+
+    def test_reranker_reorders_citations_with_contiguous_indices(self):
+        from memovox import augur
+        from memovox.backends.base import Reranker
+        from memovox.config import Settings
+
+        class ReverseReranker(Reranker):
+            name = "reverse"
+            needs_text = False
+
+            @classmethod
+            def is_available(cls):
+                return True
+
+            def rerank(self, query, candidates, *, texts=None):
+                return list(reversed(candidates))
+
+        q = "retrieval augmented generation models"
+        base = augur.ask(self.store, q, embedder=self.emb, settings=Settings(top_k=5))
+        rev = augur.ask(self.store, q, embedder=self.emb, settings=Settings(top_k=5),
+                        reranker=ReverseReranker())
+        self.assertEqual([c.moment_id for c in rev.citations],
+                         list(reversed([c.moment_id for c in base.citations])))
+        # [n] indices stay contiguous 1..N over the new order
+        self.assertEqual([c.index for c in rev.citations],
+                         list(range(1, len(rev.citations) + 1)))
+
+
 if __name__ == "__main__":
     unittest.main()
