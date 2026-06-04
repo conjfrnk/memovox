@@ -1,16 +1,16 @@
 {
   "What is the foundational architecture for modern language models according to talk_a?": {
     "vector": [
+      "talk_c#m0001",
       "talk_a#m0001",
       "talk_b#m0001",
       "talk_a#m0000",
-      "talk_a#m0002",
-      "talk_a#m0006"
+      "talk_a#m0002"
     ],
     "lexical": [
+      "talk_c#m0001",
       "talk_a#m0001",
       "talk_a#m0000",
-      "talk_a#m0006",
       "talk_b#m0001",
       "talk_a#m0004"
     ]
@@ -34,17 +34,17 @@
   "What was the optimal context length for retrieval in the experiments?": {
     "vector": [
       "talk_a#m0004",
+      "talk_c#m0001",
       "talk_b#m0001",
       "talk_a#m0001",
-      "talk_a#m0002",
-      "talk_b#m0004"
+      "talk_a#m0002"
     ],
     "lexical": [
       "talk_a#m0004",
       "talk_a#m0000",
+      "talk_c#m0002",
       "talk_a#m0003",
-      "talk_a#m0001",
-      "talk_b#m0001"
+      "talk_c#m0001"
     ]
   },
   "Which model family reused the Chinchilla token ratio?": {
@@ -52,8 +52,8 @@
       "talk_b#m0003",
       "talk_a#m0001",
       "talk_b#m0006",
-      "talk_a#m0002",
-      "talk_b#m0004"
+      "talk_c#m0001",
+      "talk_a#m0002"
     ],
     "lexical": [
       "talk_b#m0003",
@@ -77,6 +77,22 @@
       "talk_b#m0004",
       "talk_a#m0000",
       "talk_b#m0000"
+    ]
+  },
+  "Which claim is disputed regarding the attention dominance narrative?": {
+    "vector": [
+      "talk_c#m0001",
+      "talk_b#m0002",
+      "talk_b#m0005",
+      "talk_b#m0001",
+      "talk_a#m0001"
+    ],
+    "lexical": [
+      "talk_c#m0001",
+      "talk_c#m0000",
+      "talk_b#m0002",
+      "talk_a#m0006",
+      "talk_a#m0001"
     ]
   }
 }

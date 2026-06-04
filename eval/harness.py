@@ -286,6 +286,11 @@ def _ingest_golden(golden_dir: Path, store_dir: str) -> _Ingested:
             continue
         report = mv.ingest(str(vtt))
         logical_to_store[logical_id] = report.video_id
+    # Run consolidation so cross-video CONTRADICTS/SUPPORTS edges + topic_id exist
+    # BEFORE retrieval scoring — this is what lets the §5 graph leg fire end-to-end
+    # (and feeds topic_f1). Safe on the golden corpus: dedup is a no-op (no exact
+    # duplicates), so claim counts are unchanged.
+    mv.consolidate()
     return _Ingested(mv, logical_to_store)
 
 

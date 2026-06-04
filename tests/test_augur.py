@@ -70,6 +70,62 @@ class TestAsk(unittest.TestCase):
             store2.close()
 
 
+class TestGraphLegThroughAsk(unittest.TestCase):
+    """M1.2 W1: the §5 graph-retrieval leg fires END-TO-END through mv.ask(), not
+    just via hand-built retrieve() unit stores. A gold moment reachable ONLY by a
+    CONTRADICTS edge (no embedding, no shared query terms) is surfaced when the
+    planner routes the question to the contradiction strategy, and is ABSENT when
+    it does not. (NLI-derived edges connect lexically-similar claims, so a robust
+    graph-only proof uses a hand-placed edge between dissimilar claims.)"""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.config = Config(store=pathlib.Path(self._tmp.name) / "s").ensure()
+        self.store = LoomStore(self.config)
+        self.emb = HashingEmbedder(dim=256)
+        self.store.upsert_video(Video("yt:a", "https://youtu.be/a", "talk a"))
+        self.store.upsert_video(Video("yt:b", "https://youtu.be/b", "talk b"))
+        # SEED (has embedding + matches the question terms)
+        a = Moment("yt:a#m0000", "yt:a", 0.0, 30.0,
+                   "Photosynthesis stores chemical energy in glucose during the light reactions.",
+                   "spk_0", index=0)
+        # GOLD (NO embedding, shares no query term incl. stopwords — reachable ONLY
+        # by the edge; FTS OR-matches on shared stopwords, so b must avoid them too)
+        b = Moment("yt:b#m0000", "yt:b", 0.0, 30.0,
+                   "Cellular respiration releases stored fuel within mitochondria.",
+                   "spk_1", index=0)
+        self.store.add_moment(a, self.emb.embed_one(a.text_for_embedding()))
+        self.store.add_moment(b)  # no embedding
+        self.store.add_claim(Claim("yt:a#m0000.c00", "yt:a#m0000", "yt:a",
+                                   "Photosynthesis stores energy in glucose.",
+                                   subject="photosynthesis", t_start_s=0.0, t_end_s=30.0))
+        self.store.add_claim(Claim("yt:b#m0000.c00", "yt:b#m0000", "yt:b",
+                                   "Respiration breaks glucose back down.",
+                                   subject="respiration", t_start_s=0.0, t_end_s=30.0))
+        self.store.add_edge("yt:a#m0000.c00", "CONTRADICTS", "yt:b#m0000.c00",
+                            src_type="Claim", dst_type="Claim", video_id="yt:a")
+
+    def tearDown(self):
+        self.store.close()
+        self._tmp.cleanup()
+
+    def _cited(self, answer):
+        return {c.moment_id for c in answer.citations}
+
+    def test_graph_leg_surfaces_gold_when_routed_to_contradiction(self):
+        # trigger word "contradicts" -> planner routes contradiction -> graph leg ON.
+        # Stopword-free query so FTS cannot spuriously OR-match the gold.
+        ans = augur.ask(self.store, "contradict photosynthesis glucose energy claim",
+                        embedder=self.emb, settings=Settings(top_k=10))
+        self.assertIn("yt:b#m0000", self._cited(ans))  # graph-only gold surfaced
+
+    def test_gold_absent_without_contradiction_routing(self):
+        # no trigger word -> hybrid strategy -> graph leg OFF -> gold unreachable
+        ans = augur.ask(self.store, "describe photosynthesis glucose energy claim",
+                        embedder=self.emb, settings=Settings(top_k=10))
+        self.assertNotIn("yt:b#m0000", self._cited(ans))
+
+
 class TestVisualLeg(unittest.TestCase):
     QUERY = "the loss curve diagram"
 

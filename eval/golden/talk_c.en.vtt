@@ -1,0 +1,10 @@
+WEBVTT
+
+00:00:01.000 --> 00:00:12.000
+<v Dr. Park>Welcome. I want to revisit some claims from the earlier sessions today.
+
+00:00:14.000 --> 00:00:30.000
+<v Dr. Park>People dispute the attention dominance narrative. The transformer architecture is not the foundation of any modern language model.
+
+00:00:30.000 --> 00:00:40.000
+<v Dr. Park>Newer recurrent designs already match it on very long inputs at lower cost.
