@@ -82,6 +82,7 @@ _DEFAULT_OFF_FLAGS = dict(
     asr_device="auto",           # M0.3: ASR device knobs pinned
     asr_compute_type="default",
     asr_allow_cpu=False,
+    captions_as_prior=True,      # M0.3: §9 cost lever default pinned
 )
 
 # Default retrieval cutoff for hit_rate / nDCG.

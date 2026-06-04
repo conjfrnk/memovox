@@ -68,13 +68,38 @@ def get_asr(name: str, *, config: Optional[Config] = None, **options) -> ASRBack
     return cls(config=config, **options)
 
 
-def resolve_asr_backend(meta: SourceMeta, requested: str = "auto") -> str:
+def asr_readiness(meta: SourceMeta) -> tuple:
+    """Structured §4.1 ASR-readiness verdict ``(ok, reason)`` for the whisper path."""
+    if meta.media_path is None:
+        return False, "no media acquired"
+    if not audio.has_audio_stream(meta.media_path):
+        return False, f"no decodable audio stream in {meta.media_path} (ffprobe pre-check)"
+    return True, "ok"
+
+
+def resolve_asr_backend(meta: SourceMeta, requested: str = "auto", *,
+                        captions_as_prior: bool = True) -> str:
+    """Resolve the ASR backend for ``auto`` (spec §4.1/§9).
+
+    ``captions_as_prior`` (the §9 cost lever, default True) keeps the current
+    behavior: free, exact-timing captions win over paying for Whisper whenever a
+    transcript is present. Set it False to force re-transcription from media even
+    when captions exist. Before committing to ``whisper`` an ffprobe readiness
+    pre-check runs and raises ``DemuxError`` early if the media has no audio.
+    """
     if requested != "auto":
         return requested
-    if meta.captions_path is not None:
+    has_captions = meta.captions_path is not None
+    can_whisper = WhisperASR.is_available() and meta.media_path is not None
+    if has_captions and (captions_as_prior or not can_whisper):
         return "captions"
-    if WhisperASR.is_available() and meta.media_path is not None:
+    if can_whisper:
+        ok, reason = asr_readiness(meta)
+        if not ok:
+            raise DemuxError(f"ASR not ready: {reason}")
         return "whisper"
+    if has_captions:
+        return "captions"
     raise BackendUnavailable(
         "No ASR backend available for this source. Either supply a transcript "
         "(.vtt/.srt/.json), or install offline ASR: pip install 'memovox[asr]'."
@@ -91,9 +116,10 @@ def run_asr(
     device: str = "auto",
     compute_type: str = "default",
     allow_cpu: bool = False,
+    captions_as_prior: bool = True,
 ) -> ASRResult:
     """Transcribe ``meta`` into cleaned, ordered segments."""
-    name = resolve_asr_backend(meta, backend)
+    name = resolve_asr_backend(meta, backend, captions_as_prior=captions_as_prior)
     options = {}
     if name == "whisper":
         if glossary:

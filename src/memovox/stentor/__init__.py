@@ -40,12 +40,14 @@ def run(
     asr_device: str = "auto",
     asr_compute_type: str = "default",
     asr_allow_cpu: bool = False,
+    captions_as_prior: bool = True,
 ) -> StentorResult:
     meta = acquire(
         config, source, source_url=source_url, title=title, captions=captions, cookies=cookies
     )
     asr = run_asr(config, meta, backend=asr_backend, language=language, glossary=glossary,
-                  device=asr_device, compute_type=asr_compute_type, allow_cpu=asr_allow_cpu)
+                  device=asr_device, compute_type=asr_compute_type, allow_cpu=asr_allow_cpu,
+                  captions_as_prior=captions_as_prior)
     segments = assign_speakers(asr.segments)
     return StentorResult(
         meta=meta,

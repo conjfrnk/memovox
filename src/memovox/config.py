@@ -43,6 +43,7 @@ class Settings:
     asr_device: str = "auto"            # auto | cpu | cuda
     asr_compute_type: str = "default"   # faster-whisper compute_type
     asr_allow_cpu: bool = False         # escape hatch for the DevicePlacementError guard
+    captions_as_prior: bool = True      # §9 cost lever: captions win over Whisper on auto
 
     embed_dim: int = 256  # dimensionality of the hashing fallback embedder
 
