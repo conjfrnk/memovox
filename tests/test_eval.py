@@ -322,12 +322,13 @@ class TestDERReadsPersistence(unittest.TestCase):
 
 
 class TestThresholdGates(unittest.TestCase):
-    def _report(self, hit_rate_v, groundedness_v, contradiction_f1, synthesis_g=1.0):
+    def _report(self, hit_rate_v, groundedness_v, contradiction_f1, synthesis_g=1.0,
+                entity_f1=1.0, der=1.0):
         return {
             "retrieval": {"hit_rate": hit_rate_v, "mrr": 0.0, "ndcg": 0.0, "k": 5},
             "groundedness": groundedness_v,
-            "entity_f1": 0.0,
-            "der": 0.0,
+            "entity_f1": entity_f1,
+            "der": der,
             "contradiction": {"precision": 0.0, "recall": 0.0, "f1": contradiction_f1},
             "synthesis": {"groundedness": synthesis_g, "contradiction_surfaced": True,
                           "consensus_points": 0},
@@ -352,9 +353,12 @@ class TestThresholdGates(unittest.TestCase):
         self.assertTrue(any("hit_rate" in f for f in failures))
         self.assertTrue(any("groundedness" in f for f in failures))
 
-    def test_entity_f1_and_der_are_ungated(self):
-        # entity_f1/der at 0.0 must NOT trip a gate (legit until W2.3/W4.1).
-        self.assertEqual(_check_thresholds(self._report(1.0, 1.0, 1.0)), [])
+    def test_entity_f1_and_der_are_gated(self):
+        # M1.2 W9: promoted to gates (threshold 0.5) after talk_c verification.
+        self.assertEqual(_check_thresholds(self._report(1.0, 1.0, 1.0)), [])  # 1.0 passes
+        fails = _check_thresholds(self._report(1.0, 1.0, 1.0, entity_f1=0.3, der=0.2))
+        self.assertTrue(any("entity_f1" in f for f in fails))
+        self.assertTrue(any("der" in f for f in fails))
 
 
 class TestRunEvalGoldenCorpus(unittest.TestCase):
@@ -517,6 +521,7 @@ class TestThinFixtureDiscipline(unittest.TestCase):
         all_failing = {
             "retrieval": {"hit_rate": 0.0}, "groundedness": 0.0,
             "contradiction": {"f1": 0.0}, "synthesis": {"groundedness": 0.0},
+            "entity_f1": 0.0, "der": 0.0,
             "parity": {"score": 0.0}, "incremental_equivalence": 0.0,
             "span_unchanged": {"score": 0.0},
         }
@@ -571,6 +576,16 @@ class TestFrozenSettingsSnapshot(unittest.TestCase):
             self.assertEqual(getattr(s, flag), expected,
                              f"default-OFF flag {flag!r} drifted from the frozen snapshot")
 
+    def test_full_settings_snapshot_is_frozen(self):
+        # M1.2 W8: the FULL Settings surface (incl. tuning knobs) is pinned, so any
+        # default change fails loudly and forces a conscious re-baseline.
+        from dataclasses import asdict
+
+        from eval.harness import EVAL_SETTINGS_SNAPSHOT
+        from memovox.config import Settings
+
+        self.assertEqual(asdict(Settings()), EVAL_SETTINGS_SNAPSHOT)
+
     def test_snapshot_pins_m0_2_flags(self):
         from eval.harness import _DEFAULT_OFF_FLAGS
 
@@ -613,6 +628,7 @@ class TestNewExactGates(unittest.TestCase):
         return {
             "retrieval": {"hit_rate": 1.0}, "groundedness": 1.0,
             "contradiction": {"f1": 1.0}, "synthesis": {"groundedness": 1.0},
+            "entity_f1": 1.0, "der": 1.0,
             "parity": {"score": 1.0}, "incremental_equivalence": 1.0,
         }
 

@@ -106,6 +106,25 @@ _INTENTIONALLY_UNPINNED = frozenset({
     "visual_workers",  # M1.1: pool size (1=serial); not a feature toggle
 })
 
+# Frozen FULL Settings snapshot (M1.2 W8) — beyond _DEFAULT_OFF_FLAGS, this pins
+# every Settings default INCLUDING numeric tuning knobs (top_k, rrf_k, thresholds,
+# keyframe knobs, …). A change to ANY default fails the snapshot test, forcing a
+# conscious update + a fresh gold re-baseline — the determinism-erosion defense.
+EVAL_SETTINGS_SNAPSHOT = {
+    "asr_allow_cpu": False, "asr_backend": "auto", "asr_compute_type": "default",
+    "asr_device": "auto", "boundary_similarity": 0.45, "budget_mode": "soft",
+    "captions_as_prior": True, "consensus_jaccard": 0.5, "contradiction_threshold": 0.55,
+    "embed_backend": "auto", "embed_dim": 256, "entailment_threshold": 0.5,
+    "entity_backend": "auto", "frame_max": 1200, "frame_sample_fps": 1.0, "frame_side": 16,
+    "keyframe_min_gain": 0.12, "keyframe_per_scene_cap": 8, "llm_backend": "auto",
+    "moment_gap_sec": 2.5, "moment_max_sec": 90.0, "moment_min_sec": 8.0,
+    "nli_backend": "auto", "ocr_backend": "auto", "otel_enabled": False, "rrf_k": 60,
+    "salience_floor": 0.0, "scene_threshold": 0.3, "top_k": 8, "topic_min_size": 1,
+    "topic_similarity": 0.5, "vector_prefilter_fts": False, "visual_embed_backend": "signature",
+    "visual_enabled": True, "visual_retrieval": False, "visual_workers": 1,
+    "vlm_backend": "auto", "voiceprint_backend": "auto",
+}
+
 # Default retrieval cutoff for hit_rate / nDCG.
 DEFAULT_K = 5
 
@@ -1112,6 +1131,11 @@ _CONTRADICTION_F1_GATE = 0.5
 # golden gate: topic-induction quality over a 2-talk corpus is too small to be a
 # stable signal — it is covered by tests/test_topics.py instead.
 _SYNTHESIS_GROUNDEDNESS_GATE = 0.8
+# M1.2 W9: entity_f1/der promoted to gates after talk_c verification — both read
+# 1.0 on the 3-talk corpus (stable across runs), so a conservative 0.5 floor
+# (matching contradiction.f1) is non-flaky and catches a resolution regression.
+_ENTITY_F1_GATE = 0.5
+_DER_GATE = 0.5
 
 
 def _print_report(report: dict) -> None:
@@ -1147,6 +1171,12 @@ _GATE_DECLARATIONS = {
                          "grandfathered_thin": True},
     "synthesis.groundedness": {"kind": "statistical", "fixture": "contradictions.json",
                                "grandfathered_thin": True},
+    # M1.2 W9: gated at 1.0 on the 3-talk corpus; entities/speakers gold are still
+    # thin, so grandfathered with a conservative floor (a resolution regression to
+    # 0.0 still trips the gate, which is the point).
+    "entity_f1": {"kind": "statistical", "fixture": "entities.json",
+                  "grandfathered_thin": True},
+    "der": {"kind": "statistical", "fixture": "speakers.json", "grandfathered_thin": True},
     "parity": {"kind": "exact"},
     "incremental_equivalence": {"kind": "exact"},
     "span_unchanged": {"kind": "exact"},
@@ -1184,6 +1214,13 @@ def _check_thresholds(report: dict) -> List[str]:
         failures.append(f"contradiction.f1 {cf1:.3f} < {_CONTRADICTION_F1_GATE}")
     if sg < _SYNTHESIS_GROUNDEDNESS_GATE:
         failures.append(f"synthesis.groundedness {sg:.3f} < {_SYNTHESIS_GROUNDEDNESS_GATE}")
+    # M1.2 W9: entity_f1/der gated after talk_c verification (1.0 on 3 talks).
+    ef1 = report.get("entity_f1", 1.0)
+    if ef1 < _ENTITY_F1_GATE:
+        failures.append(f"entity_f1 {ef1:.3f} < {_ENTITY_F1_GATE}")
+    der = report.get("der", 1.0)
+    if der < _DER_GATE:
+        failures.append(f"der {der:.3f} < {_DER_GATE}")
     # M0.2 exact-equivalence invariants — gated at 1.0 (correctness, not statistics).
     pscore = report.get("parity", {}).get("score", 1.0)
     if pscore < 1.0:
