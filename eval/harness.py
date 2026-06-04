@@ -1057,6 +1057,56 @@ def _claim_granularity(ing: _Ingested) -> dict:
     }
 
 
+def clip_coverage(found_clips, gold_clip) -> float:
+    """Best-match interval IoU between a gold clip span and the stitched clips
+    (M2.3). ``found_clips`` are (t_start, t_end) spans; 0.0 if none match."""
+    if not found_clips or not gold_clip:
+        return 0.0
+    return max((span_iou(c, tuple(gold_clip)) for c in found_clips), default=0.0)
+
+
+def _clip_metrics(ing: _Ingested) -> dict:
+    """UNGATED until W7 (M2.3): mean best-match clip coverage over clips.json, plus
+    the two structural invariants — clips are non-overlapping per video, and
+    stitching is idempotent (stitch(stitch(x)) == stitch(x))."""
+    from memovox.augur import stitch_clips
+    from memovox.augur.types import Citation
+
+    gold = _load_json(GOLDEN_DIR / "clips.json").get("items", []) if (GOLDEN_DIR / "clips.json").exists() else []
+    coverages = []
+    non_overlap = True
+    idempotent = True
+    for item in gold:
+        store_vid = ing.logical_to_store.get(item["video"])
+        ans = ing.mv.ask(item["q"])
+        by_video = {}
+        for c in ans.clips:
+            by_video.setdefault(c.video_id, []).append((c.t_start_s, c.t_end_s))
+        spans = by_video.get(store_vid, [])
+        coverages.append(clip_coverage(spans, item["gold_clip"]))
+        # invariant: per-video non-overlap
+        for vid_spans in by_video.values():
+            ordered = sorted(vid_spans)
+            for (a0, a1), (b0, b1) in zip(ordered, ordered[1:]):
+                if b0 < a1:
+                    non_overlap = False
+        # invariant: idempotence — re-stitching the clip spans reproduces them
+        restitch = stitch_clips(
+            [Citation(index=i, video_id=c.video_id, moment_id=f"{c.video_id}#r{i}",
+                      t_start_s=c.t_start_s, t_end_s=c.t_end_s, title=c.title)
+             for i, c in enumerate(ans.clips)],
+            videos={}, merge_gap_s=ing.mv.settings.clip_merge_gap_s)
+        if [(c.t_start_s, c.t_end_s, c.video_id) for c in restitch] != \
+                [(c.t_start_s, c.t_end_s, c.video_id) for c in ans.clips]:
+            idempotent = False
+    return {
+        "coverage": round(sum(coverages) / len(coverages), 6) if coverages else None,
+        "items": len(coverages),
+        "non_overlap": non_overlap,
+        "idempotent": idempotent,
+    }
+
+
 def _plan_metrics(ing: _Ingested, qa) -> dict:
     """UNGATED (M2.2): for each multi-part golden item, the fraction of its
     sub-queries whose gold moment appears in the SINGLE composed answer's citations,
@@ -1153,6 +1203,7 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
     claim_granularity = _claim_granularity(ing)
     rerank = _rerank_metrics(ing, qa, k=k)
     plan = _plan_metrics(ing, qa)
+    clip = _clip_metrics(ing)
 
     return {
         "retrieval": {
@@ -1181,6 +1232,7 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
         "claim_granularity": claim_granularity,      # M1.2 §12 granularity curve (UNGATED)
         "rerank": rerank,                            # M2.1 rerank mrr/ndcg vs no-rerank (UNGATED)
         "plan": plan,                                # M2.2 agentic subquery_recall (UNGATED)
+        "clip": clip,                                # M2.3 clip coverage + invariants
     }
 
 

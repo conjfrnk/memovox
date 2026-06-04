@@ -1,0 +1,10 @@
+{
+  "description": "Gold clip windows (the word-precise span a viewer should watch for each QA item). clip.coverage = mean best-match IoU between each gold clip and the stitched clips for that video. UNGATED until >=3 stable items; see harness. M2.3.",
+  "items": [
+    {"q": "What is the foundational architecture for modern language models according to talk_a?", "video": "talk_a", "gold_clip": [11.0, 20.0]},
+    {"q": "What did the Chinchilla study show about training tokens and model size?", "video": "talk_a", "gold_clip": [24.0, 34.0]},
+    {"q": "What was the optimal context length for retrieval in the experiments?", "video": "talk_a", "gold_clip": [44.0, 54.0]},
+    {"q": "Which model family reused the Chinchilla token ratio?", "video": "talk_b", "gold_clip": [33.0, 43.0]},
+    {"q": "Why might scaling laws stop being predictable beyond a certain scale?", "video": "talk_b", "gold_clip": [53.0, 63.0]}
+  ]
+}

@@ -462,6 +462,14 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         self.assertEqual(p["subquery_recall"], 1.0)
         self.assertFalse(any("plan" in f for f in _check_thresholds(self.report)))
 
+    def test_clip_block_coverage_and_invariants(self):
+        # M2.3 W6: clip coverage >= 0.3 over the golden clip items, invariants hold.
+        c = self.report["clip"]
+        self.assertGreaterEqual(c["coverage"], 0.3)
+        self.assertTrue(c["non_overlap"])
+        self.assertTrue(c["idempotent"])
+        self.assertGreaterEqual(c["items"], 3)
+
     def test_rerank_block_off_equals_today(self):
         # M2.1 W4: the free identity reranker is a no-op — rerank mrr/ndcg equal both
         # the no-rerank baseline AND the retrieval block (the off==today guard).
@@ -513,6 +521,15 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         self.assertIn("groundedness", syn)
         self.assertGreaterEqual(syn["groundedness"], 0.8)  # the gated value
         self.assertTrue(syn["contradiction_surfaced"])
+
+
+class TestClipCoverage(unittest.TestCase):
+    def test_clip_coverage_iou(self):
+        from eval.harness import clip_coverage
+        self.assertEqual(clip_coverage([(0.0, 10.0)], [0.0, 10.0]), 1.0)
+        self.assertAlmostEqual(clip_coverage([(0.0, 30.0)], [0.0, 10.0]), 1 / 3)
+        self.assertAlmostEqual(clip_coverage([(100.0, 110.0), (0.0, 20.0)], [0.0, 10.0]), 0.5)
+        self.assertEqual(clip_coverage([], [0.0, 10.0]), 0.0)
 
 
 class TestSubqueryRecall(unittest.TestCase):
