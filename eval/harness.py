@@ -30,6 +30,7 @@ wiring) land. They are NOT stubbed with fake values.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import math
 import os
@@ -72,6 +73,34 @@ _FREE_BACKENDS = dict(
     rerank_backend="none",            # M2.1: identity reranker pinned (off==today)
     clip_merge_gap_s=2.5,             # M2.3: pin the stitch gap so the clip gate can't be env-perturbed
 )
+
+
+@dataclasses.dataclass(frozen=True)
+class BackendConfig:
+    """A named bundle of backend-slot overrides for the A/B benchmark (M3.4, §7).
+
+    ``FREE_CONFIG`` pins every slot to its free value (the frozen snapshot the gate
+    runs on). ``backend_kwargs()`` is the override dict for ``Memovox(**kwargs)``.
+    Defaults are the FREE values, so an upgrade config overrides only what it lifts."""
+
+    name: str
+    asr_backend: str = "captions"
+    embed_backend: str = "hashing"
+    nli_backend: str = "lexical"
+    llm_backend: str = "none"
+    vlm_backend: str = "none"
+    ocr_backend: str = "none"
+    entity_backend: str = "none"
+    voiceprint_backend: str = "auto"      # free-safe: None unless pyannote installed
+    visual_embed_backend: str = "signature"
+    rerank_backend: str = "none"
+
+    def backend_kwargs(self) -> dict:
+        return {f.name: getattr(self, f.name)
+                for f in dataclasses.fields(self) if f.name != "name"}
+
+
+FREE_CONFIG = BackendConfig(name="free")
 
 # Frozen eval-settings snapshot (M0.1 W8 / review discipline (b)): the default-OFF
 # flags whose values the gates implicitly depend on. Pinned so a future default
