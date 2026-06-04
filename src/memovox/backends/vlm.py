@@ -104,9 +104,12 @@ class Qwen25VL(VLMBackend):
 
     @classmethod
     def is_available(cls) -> bool:
-        return importlib.util.find_spec("transformers") is not None
+        # Require the Qwen-VL helper specifically, not just transformers (which is
+        # commonly installed for other reasons) — so is_available means "usable".
+        return (importlib.util.find_spec("transformers") is not None
+                and importlib.util.find_spec("qwen_vl_utils") is not None)
 
-    def caption(self, image_path, *, ocr_text=None, prompt=None) -> str:  # pragma: no cover - needs transformers
+    def caption(self, image_path, *, ocr_text=None, prompt=None) -> str:  # pragma: no cover - needs qwen
         from transformers import AutoModelForVision2Seq  # noqa: F401  (lazy; gated)
 
         raise NotImplementedError(

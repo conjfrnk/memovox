@@ -39,7 +39,10 @@ class VectorIndex(StorageBackend):
         *,
         video_id: Optional[str] = None,
         query_text: Optional[str] = None,
+        space: Optional[str] = None,
     ) -> List[Tuple[str, float]]:
+        # `space` is part of the contract so any backend (incl. ANN) enforces the
+        # cross-space guard, not just the SQLite default.
         raise NotImplementedError
 
 

@@ -426,11 +426,13 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
 
     def test_multimodal_block_present_and_shows_lift(self):
         # M1.1 W7: UNGATED multimodal block — the VISUAL leg surfaces an on-screen-
-        # only moment that transcript-only retrieval misses (tri_modal >= transcript).
+        # only moment that transcript-only retrieval misses. The target moment's OWN
+        # transcript does not contain the query term, so the lift is genuinely visual.
+        # Pinned to the demonstrated values so a regression that breaks the lift fails.
         mm = self.report["multimodal"]
-        self.assertIn("transcript_only", mm)
-        self.assertIn("tri_modal", mm)
-        self.assertGreaterEqual(mm["tri_modal"], mm["transcript_only"])
+        self.assertEqual(mm["transcript_only"], 0.0)  # text retrieval misses the slide
+        self.assertEqual(mm["tri_modal"], 1.0)        # the visual leg surfaces it
+        self.assertEqual(mm["delta"], 1.0)            # a real, non-vacuous lift
 
     def test_multimodal_is_ungated(self):
         # discipline (a): the multimodal block never participates in --assert-thresholds.

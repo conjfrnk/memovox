@@ -269,6 +269,12 @@ class _Ingested:
 _NON_CORPUS_STEMS = {"talk_vis"}
 
 
+def _corpus_vtts(golden_dir: Path = GOLDEN_DIR) -> List[Path]:
+    """Golden VTTs that belong to the SCORED corpus (excludes the visual fixture)."""
+    return [g for g in sorted(golden_dir.glob("*.en.vtt"))
+            if g.name.split(".")[0] not in _NON_CORPUS_STEMS]
+
+
 def _ingest_golden(golden_dir: Path, store_dir: str) -> _Ingested:
     from memovox import Memovox
 
@@ -814,7 +820,7 @@ def _incremental_equivalence() -> float:
     from memovox.loom.consolidate import consolidate
     from memovox.loom.store import LoomStore
 
-    golden = sorted(GOLDEN_DIR.glob("*.en.vtt"))
+    golden = _corpus_vtts()
     if len(golden) < 2:
         return 1.0
 
@@ -859,7 +865,7 @@ def _observability_metrics(ing: _Ingested) -> dict:
     from memovox.loom.store import LoomStore
     from memovox.observe import Span, Tracer
 
-    golden = sorted(GOLDEN_DIR.glob("*.en.vtt"))
+    golden = _corpus_vtts()
     expected = ("asr", "visual", "moments", "embed", "claims", "resolve", "digest")
     if not golden:
         return {"stages_present": [], "all_status_ok": False, "wall_ms_nonneg": False,

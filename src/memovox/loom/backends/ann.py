@@ -35,8 +35,8 @@ class LanceVectorIndex(VectorIndex):
         )
 
     def search(self, query_vec: Sequence[float], top_k: int = 20, *,
-               video_id: Optional[str] = None,
-               query_text: Optional[str] = None) -> List[Tuple[str, float]]:  # pragma: no cover
+               video_id: Optional[str] = None, query_text: Optional[str] = None,
+               space: Optional[str] = None) -> List[Tuple[str, float]]:  # pragma: no cover
         raise NotImplementedError("LanceVectorIndex.search is a W7 skeleton.")
 
 
@@ -60,6 +60,6 @@ class QdrantVectorIndex(VectorIndex):
         )
 
     def search(self, query_vec: Sequence[float], top_k: int = 20, *,
-               video_id: Optional[str] = None,
-               query_text: Optional[str] = None) -> List[Tuple[str, float]]:  # pragma: no cover
+               video_id: Optional[str] = None, query_text: Optional[str] = None,
+               space: Optional[str] = None) -> List[Tuple[str, float]]:  # pragma: no cover
         raise NotImplementedError("QdrantVectorIndex.search is a W7 skeleton.")
