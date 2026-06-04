@@ -1,6 +1,6 @@
 # M3.3 — Serving & deployment
 
-> **Wave:** 3 · **Effort:** L · **Status:** not started
+> **Wave:** 3 · **Effort:** L · **Status:** ✅ done (branch `phase4-serving`, 8/8 + review fix; 468 pass / 2 skip; 15 gates). SQLite job runner + threaded worker + routes.py + optional FastAPI parity + memovox-worker/Dockerfile/DEPLOY.md + local_only + serving.equivalent gate.
 > **Depends on:** M0.2 (incremental consolidation — `consolidate(..., since_watermark=…)` primitive, the single owner) · M3.2 (the `Memovox.sync()` rewrite — the single owner) · **Owns (single-owner concerns):** none · **Blocks:** none
 > **Spec:** §7 (named backends behind a common interface — here FastAPI as an optional serving backend), §8 (the four interfaces: CLI / SDK / REST / MCP), §9 (throughput / scale / observability / graceful degradation), §12 (risks — ToS / private-by-default posture)
 
