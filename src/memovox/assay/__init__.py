@@ -33,6 +33,12 @@ def run(
         # appear nowhere in its span is rejected. Segment-less Moments (old
         # fixtures, store-reloaded Moments) fall back to the whole-Moment text,
         # preserving legacy behaviour.
+        # PROVENANCE INVARIANT (M0.3 W3): the premise stays SEGMENT-granular even
+        # when locate_span narrowed the claim's citation window to a word span —
+        # span_text selects by overlap, so a narrowed window still pulls its whole
+        # parent cue. The displayed citation window is thus always ⊆ the text NLI
+        # verified; it can never drift narrower than the premise. Pinned in
+        # tests/test_span_premise_invariant.py.
         premise = span_text(moment.segments, claim.t_start_s, claim.t_end_s) or moment.text_for_embedding()
         verify_claim(nli, claim, premise, threshold=settings.entailment_threshold)
         # Salience floor (spec §5): salience drives retrieval priority + summary
