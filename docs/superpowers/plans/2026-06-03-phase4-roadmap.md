@@ -6,6 +6,13 @@
 proposal per area → adversarial completeness critic. This doc is the reconciled
 output (overlaps merged, missing spec items folded in, dependencies fixed).
 
+> **Execution docs:** this file is the strategic *rationale*. The **followable**
+> per-track breakdown — TDD workstreams, grounded `file:line`, eval gates,
+> definition of done — lives in [`../../roadmap/`](../../roadmap/README.md)
+> (index), with [`../../roadmap/CONVENTIONS.md`](../../roadmap/CONVENTIONS.md) for
+> the execution loop and [`../../roadmap/PROGRESS.md`](../../roadmap/PROGRESS.md)
+> for live status.
+
 Spec §11 names Phase 4 as "channel/playlist subscriptions + incremental sync,
 answer-with-video clip stitching, ColPali visual retrieval, decay/versioning,
 dashboards." The inventory found those plus a tail of **cross-cutting** items the
