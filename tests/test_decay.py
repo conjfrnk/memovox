@@ -147,5 +147,35 @@ class PublishedAtInjectionTest(unittest.TestCase):
             self.assertEqual(store.get_video(rep.video_id).published_at, "2025-05-05")
 
 
+class LocalOnlyTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = pathlib.Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_local_only_refuses_url_ingest_before_fetch(self):
+        from memovox import Memovox
+        from memovox.errors import IngestionError
+        mv = Memovox(store=self.dir / "store", llm_backend="none", local_only=True)
+        with self.assertRaises(IngestionError):
+            mv.ingest("https://youtu.be/abc123")  # refused before any network call
+
+    def test_local_only_allows_local_files(self):
+        from memovox import Memovox
+        from memovox.loom import LoomStore
+        mv = Memovox(store=self.dir / "store", llm_backend="none", local_only=True)
+        vtt = self.dir / "t.en.vtt"
+        vtt.write_text("WEBVTT\n\n00:00:01.000 --> 00:00:09.000\nHi.\n", encoding="utf-8")
+        rep = mv.ingest(str(vtt), source_url="https://x/a")
+        with LoomStore(mv.config) as store:
+            self.assertIsNotNone(store.get_video(rep.video_id))
+
+    def test_local_only_default_false(self):
+        from memovox.config import Settings
+        self.assertFalse(Settings().local_only)
+
+
 if __name__ == "__main__":
     unittest.main()

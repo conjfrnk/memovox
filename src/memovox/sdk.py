@@ -272,6 +272,12 @@ class Memovox:
         with LoomStore(self.config) as store:
             return store.list_videos()
 
+    def delete_video(self, video_id: str) -> bool:
+        """Redaction primitive (M3.3/§12): delete a video and all its derived
+        moments/claims/edges. Returns True if the video existed."""
+        with LoomStore(self.config) as store:
+            return store.delete_video(video_id)
+
     def get_provenance(self, claim_id: str) -> Optional[dict]:
         with LoomStore(self.config) as store:
             claim = store.get_claim(claim_id)

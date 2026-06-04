@@ -89,6 +89,9 @@ class Settings:
     budget_mode: str = "soft"       # "soft" records overage; "hard" raises BudgetExceeded
     otel_enabled: bool = False      # mirror spans to OpenTelemetry (opt-in [otel] extra)
 
+    # Serving / privacy (M3.3, §12) — private-by-default posture
+    local_only: bool = False        # refuse all network acquisition (air-gapped use)
+
     @classmethod
     def from_env(cls, base: "Settings | None" = None) -> "Settings":
         data = asdict(base) if base else {}

@@ -19,6 +19,7 @@ from .backends import (
     get_voiceprint_backend,
 )
 from .config import PIPELINE_VERSION, Config, Settings
+from .errors import IngestionError
 from .loom import Claim, LoomStore, Speaker, Video
 from .loom.digest import render_digest
 from .loom.models import STATUS_COMMITTED
@@ -118,6 +119,13 @@ def ingest(
     config.ensure()
     settings = settings or config.settings
     tracer = tracer or Tracer("ingest", otel_enabled=settings.otel_enabled)
+
+    # M3.3: private-by-default — refuse network egress BEFORE any fetch when on.
+    if settings.local_only and source.startswith(("http://", "https://")):
+        raise IngestionError(
+            f"local_only is set: refusing to acquire the remote source {source!r}. "
+            "Ingest a downloaded local file instead, or unset local_only."
+        )
 
     # --- Stentor: acquire + ASR + diarize -------------------------------
     with tracer.span("asr") as _sp:

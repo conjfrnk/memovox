@@ -102,6 +102,14 @@ def cmd_unsubscribe(args, mv: Memovox) -> int:
     return 0
 
 
+def cmd_forget(args, mv: Memovox) -> int:
+    if mv.delete_video(args.video):
+        print(f"Forgot {args.video} (video + derived moments/claims/edges deleted).")
+        return 0
+    print(f"No such video: {args.video}", file=sys.stderr)
+    return 1
+
+
 def cmd_subscriptions(args, mv: Memovox) -> int:
     subs = mv.list_subscriptions()
     if not subs:
@@ -465,6 +473,10 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--fastapi", action="store_true",
                    help="use the FastAPI/uvicorn server ([serve] extra) instead of stdlib.")
     s.set_defaults(func=cmd_serve)
+
+    s = sub.add_parser("forget", help="delete a video + all its derived data (redaction).")
+    s.add_argument("--video", required=True)
+    s.set_defaults(func=cmd_forget)
 
     s = sub.add_parser("worker", help="run the background job worker (consolidate/sync/ingest).")
     s.add_argument("--once", action="store_true", help="drain the queue then exit.")
