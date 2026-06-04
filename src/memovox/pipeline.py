@@ -113,6 +113,8 @@ def ingest(
         st = stentor.run(
             config, source, source_url=source_url, title=title, captions=captions,
             cookies=cookies, asr_backend=settings.asr_backend, language=language, glossary=glossary,
+            asr_device=settings.asr_device, asr_compute_type=settings.asr_compute_type,
+            asr_allow_cpu=settings.asr_allow_cpu,
         )
         _sp.add_counter("segments", len(st.segments))
     meta = st.meta

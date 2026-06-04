@@ -88,12 +88,19 @@ def run_asr(
     backend: str = "auto",
     language: Optional[str] = None,
     glossary: Optional[List[str]] = None,
+    device: str = "auto",
+    compute_type: str = "default",
+    allow_cpu: bool = False,
 ) -> ASRResult:
     """Transcribe ``meta`` into cleaned, ordered segments."""
     name = resolve_asr_backend(meta, backend)
     options = {}
-    if name == "whisper" and glossary:
-        options["glossary_prompt"] = ", ".join(glossary)
+    if name == "whisper":
+        if glossary:
+            options["glossary_prompt"] = ", ".join(glossary)
+        options["device"] = device
+        options["compute_type"] = compute_type
+        options["allow_cpu"] = allow_cpu
     asr = get_asr(name, config=config, **options)
 
     audio_path = None

@@ -10,9 +10,47 @@ from __future__ import annotations
 import importlib.util
 from typing import Optional
 
+from ..errors import DevicePlacementError
 from .base import ASRBackend, ASRResult, Segment, Word
 
 DEFAULT_MODEL = "large-v3"
+# Model sizes that are punishingly slow on CPU (the fail-loud set, spec §9).
+_HEAVY_PREFIXES = ("large", "medium")
+
+
+def _is_heavy_model(model_size: str) -> bool:
+    return bool(model_size) and model_size.startswith(_HEAVY_PREFIXES)
+
+
+def _cuda_available() -> bool:
+    """True iff CTranslate2 sees a CUDA device (lazy; safe when absent)."""
+    try:  # pragma: no cover - exercised only with ctranslate2 installed
+        import ctranslate2
+
+        return ctranslate2.get_cuda_device_count() > 0
+    except Exception:
+        return False
+
+
+def _effective_device(device: str) -> str:
+    if device == "auto":
+        return "cuda" if _cuda_available() else "cpu"
+    return device
+
+
+def _check_device_placement(model_size: str, device: str, allow_cpu: bool) -> None:
+    """Raise :class:`DevicePlacementError` if a heavy model would land on CPU.
+
+    Small models (tiny/base/small) and an explicit ``allow_cpu`` never trip it.
+    """
+    if allow_cpu or not _is_heavy_model(model_size):
+        return
+    if _effective_device(device) == "cpu":
+        raise DevicePlacementError(
+            f"Refusing to run ASR model {model_size!r} on CPU — it would be ~10-50x "
+            "slower (spec §9 throughput). Use a smaller model (e.g. 'small'), run on a "
+            "CUDA device, or pass --allow-cpu / set MEMOVOX_ASR_ALLOW_CPU=1."
+        )
 
 
 class WhisperASR(ASRBackend):
@@ -27,6 +65,9 @@ class WhisperASR(ASRBackend):
         model_size = self.options.get("model") or DEFAULT_MODEL
         device = self.options.get("device", "auto")
         compute_type = self.options.get("compute_type", "default")
+        # Fail loud BEFORE the (expensive) model construction if a heavy model
+        # would silently land on CPU (spec §9). Escape-hatched by allow_cpu.
+        _check_device_placement(model_size, device, self.options.get("allow_cpu", False))
         key = (model_size, device, compute_type)
         cached = self._model_cache.get(key)
         if cached is not None:

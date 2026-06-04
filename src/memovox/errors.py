@@ -33,3 +33,10 @@ class NotFoundError(MemovoxError):
 
 class BudgetExceeded(MemovoxError):
     """A per-video token/compute budget was exceeded in hard mode (spec §9)."""
+
+
+class DevicePlacementError(MemovoxError):
+    """A heavy ASR model would silently run on CPU (10-50x slower, spec §9).
+
+    Escape via ``--allow-cpu`` / ``MEMOVOX_ASR_ALLOW_CPU=1`` / ``asr_allow_cpu``.
+    """

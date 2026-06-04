@@ -39,6 +39,11 @@ class Settings:
     # else None (free path); "none" disables the voice-based speaker merge.
     voiceprint_backend: str = "auto"
 
+    # ASR device placement (M0.3) — fail loud if a heavy model lands on CPU.
+    asr_device: str = "auto"            # auto | cpu | cuda
+    asr_compute_type: str = "default"   # faster-whisper compute_type
+    asr_allow_cpu: bool = False         # escape hatch for the DevicePlacementError guard
+
     embed_dim: int = 256  # dimensionality of the hashing fallback embedder
 
     # Tessera — visual track (spec §4 stage 3)

@@ -19,6 +19,8 @@ BACKEND_FLAGS = {"asr": "asr_backend", "embed": "embed_backend", "nli": "nli_bac
 def _make_memovox(args) -> Memovox:
     overrides = {key: getattr(args, flag) for flag, key in BACKEND_FLAGS.items()
                  if getattr(args, flag, None)}
+    if getattr(args, "allow_cpu", False):
+        overrides["asr_allow_cpu"] = True
     return Memovox(store=args.store, **overrides)
 
 
@@ -279,6 +281,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--embed", help="embedder backend (auto/hashing/sentence-transformers).")
     p.add_argument("--nli", help="NLI backend (auto/lexical/deberta-nli).")
     p.add_argument("--llm", help="LLM backend (auto/ollama/none).")
+    p.add_argument("--allow-cpu", action="store_true",
+                   help="allow a heavy ASR model to run on CPU (else it fails loud; spec §9).")
     sub = p.add_subparsers(dest="command", metavar="<command>")
 
     s = sub.add_parser("ingest", help="ingest a video/audio/transcript or URL.")
