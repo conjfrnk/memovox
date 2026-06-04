@@ -90,5 +90,47 @@ class StitchTest(unittest.TestCase):
         self.assertEqual(clips[0].deep_link, "https://www.youtube.com/watch?v=a&start=5&end=65")
 
 
+class RenderClipTest(unittest.TestCase):
+    def setUp(self):
+        self.video = Video("yt:a", "https://youtu.be/a", "talk a")
+        self.clip = Clip(video_id="yt:a", t_start_s=10.0, t_end_s=40.0)
+
+    def test_noop_without_media_or_ffmpeg(self):
+        from memovox.augur import render_clip
+        # no media_path -> None, writes nothing (the CI/free path)
+        self.assertIsNone(render_clip(self.video, self.clip, media_path=None, out_dir="/tmp/x"))
+        self.assertIsNone(render_clip(self.video, self.clip,
+                                      media_path="/does/not/exist.mp4", out_dir="/tmp/x"))
+
+    def test_builds_ffmpeg_cmd(self):
+        import tempfile
+        from unittest import mock
+        from memovox.augur import render_clip
+
+        with tempfile.TemporaryDirectory() as tmp:
+            media = pathlib.Path(tmp) / "src.mp4"
+            media.write_bytes(b"fake")
+            out_dir = pathlib.Path(tmp) / "out"
+            captured = {}
+
+            def _fake_run(cmd, **kwargs):
+                captured["cmd"] = cmd
+                captured["kwargs"] = kwargs
+                (out_dir / "yt-a_10-40.mp4").write_bytes(b"clip")
+                return mock.Mock(returncode=0)
+
+            with mock.patch("memovox.audio.which_ffmpeg", return_value="/usr/bin/ffmpeg"), \
+                    mock.patch("subprocess.run", side_effect=_fake_run):
+                out = render_clip(self.video, self.clip, media_path=str(media), out_dir=out_dir)
+            cmd = captured["cmd"]
+            self.assertEqual(cmd[0], "/usr/bin/ffmpeg")
+            self.assertIn("-ss", cmd)
+            self.assertIn("10.0", cmd)   # t_start
+            self.assertIn("-to", cmd)
+            self.assertIn("40.0", cmd)   # t_end
+            self.assertEqual(captured["kwargs"]["stdout"], __import__("subprocess").DEVNULL)
+            self.assertIsNotNone(out)
+
+
 if __name__ == "__main__":
     unittest.main()
