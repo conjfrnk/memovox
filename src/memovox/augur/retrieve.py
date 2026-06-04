@@ -12,11 +12,16 @@ from typing import List, Optional, Sequence, Tuple
 from ..backends.base import Embedder
 from ..config import Settings
 from ..loom.store import LoomStore
+from ..observe import Span
 from .traverse import expand
 
 
 def rrf_fuse(
-    ranked_lists: Sequence[Sequence[Tuple[str, float]]], *, k: int = 60, top_k: int = 10
+    ranked_lists: Sequence[Sequence[Tuple[str, float]]],
+    *,
+    k: int = 60,
+    top_k: int = 10,
+    span: Optional[Span] = None,
 ) -> List[Tuple[str, float]]:
     """Reciprocal Rank Fusion over several ranked (id, score) lists."""
     scores: dict = {}
@@ -24,6 +29,8 @@ def rrf_fuse(
         for rank, (item_id, _score) in enumerate(lst):
             scores[item_id] = scores.get(item_id, 0.0) + 1.0 / (k + rank + 1)
     fused = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    if span is not None:
+        span.add_cap("top_k", limit=top_k, dropped=max(0, len(fused) - top_k))
     return fused[:top_k]
 
 
@@ -37,6 +44,7 @@ def retrieve(
     use_graph: bool = False,
     graph_rels: Optional[Sequence[str]] = None,
     graph_hops: int = 1,
+    span: Optional[Span] = None,
 ) -> List[Tuple[str, float]]:
     """Return fused (moment_id, rrf_score) for the query.
 
@@ -53,6 +61,12 @@ def retrieve(
     lexical = store.lexical_search(query, pool)
     if video_id:
         lexical = [(mid, s) for (mid, s) in lexical if mid.startswith(video_id)]
+    if span is not None:
+        # pool is the per-leg candidate cap; saturation (len == pool) means the
+        # store had at least this many and some may have been dropped upstream.
+        span.add_counter("pool", pool)
+        span.add_counter("dense_candidates", len(dense))
+        span.add_counter("lexical_candidates", len(lexical))
     legs = [dense, lexical]
     if use_graph:
         seeds = [
@@ -62,4 +76,5 @@ def retrieve(
         rels = list(graph_rels) if graph_rels else ["SUPPORTS", "CONTRADICTS", "ELABORATES"]
         graph = expand(store, seeds, rels=rels, hops=graph_hops, video_id=video_id)
         legs.append(graph)
-    return rrf_fuse(legs, k=settings.rrf_k, top_k=settings.top_k)
+    # span passed only to the final fuse (the user-visible top_k cut), not the seed fuse
+    return rrf_fuse(legs, k=settings.rrf_k, top_k=settings.top_k, span=span)

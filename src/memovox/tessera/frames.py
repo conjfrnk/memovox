@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from .. import audio
+from ..observe import Span
 
 
 @dataclass
@@ -38,6 +39,7 @@ def sample_frame_signatures(
     fps: float = 1.0,
     side: int = 16,
     max_frames: int = 600,
+    span: Optional[Span] = None,
 ) -> List[FrameSig]:
     """Sample frames from ``video_path`` as signatures via ffmpeg.
 
@@ -59,7 +61,13 @@ def sample_frame_signatures(
     except (OSError, subprocess.SubprocessError):
         return []
     data = proc.stdout or b""
-    n = min(len(data) // cell, max_frames) if cell else 0
+    available = len(data) // cell if cell else 0
+    n = min(available, max_frames) if cell else 0
+    if span is not None and cell:
+        # frame_max truncates `available` candidate frames to `n`. Note the
+        # Settings.frame_max=1200 vs function default 600 mismatch (M0.1 open
+        # question) is surfaced here via the actual `max_frames` limit used.
+        span.add_cap("frame_max", limit=max_frames, dropped=max(0, available - n))
     sigs: List[FrameSig] = []
     for i in range(n):
         chunk = data[i * cell : (i + 1) * cell]

@@ -10,8 +10,9 @@ slide- and demo-dense segments are sampled densely. A per-scene cap and the
 
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
+from ..observe import Span
 from .frames import FrameSig
 from .scenes import Scene, frame_distance
 
@@ -22,18 +23,23 @@ def select_keyframes(
     *,
     min_gain: float = 0.12,
     per_scene_cap: int = 8,
+    span: Optional[Span] = None,
 ) -> List[int]:
     """Return the indices of frames to keep, ordered, deduplicated by gain."""
     kept: List[int] = []
+    dropped = 0
     for scene in scenes:
         last = scene.start_idx
         kept.append(last)
         in_scene = 1
         for i in range(scene.start_idx + 1, scene.end_idx + 1):
             if in_scene >= per_scene_cap:
+                dropped += scene.end_idx - i + 1  # frames left unconsidered by the cap
                 break
             if frame_distance(sigs[last].vec, sigs[i].vec) >= min_gain:
                 kept.append(i)
                 last = i
                 in_scene += 1
+    if span is not None:
+        span.add_cap("per_scene_cap", limit=per_scene_cap, dropped=dropped)
     return kept

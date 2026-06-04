@@ -16,6 +16,7 @@ from typing import List, Optional
 
 from ..backends.base import NLIBackend
 from ..config import Settings
+from ..observe import Span
 from ..util import deep_link, tokenize
 from .models import STATUS_COMMITTED, Claim
 from .store import LoomStore
@@ -63,8 +64,13 @@ def find_contradictions(
     max_claims: int = 600,
     write_edges: bool = True,
     include_supports: bool = False,
+    span: Optional[Span] = None,
 ) -> List[ContradictionPair]:
-    claims = store.list_claims(status="committed")[:max_claims]
+    all_committed = store.list_claims(status="committed")
+    claims = all_committed[:max_claims]
+    if span is not None:
+        span.add_cap("max_claims", limit=max_claims,
+                     dropped=max(0, len(all_committed) - max_claims))
     if topic:
         topic_tokens = _content_tokens(topic)
         if topic_tokens:
