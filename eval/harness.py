@@ -100,6 +100,7 @@ _INTENTIONALLY_UNPINNED = frozenset({
     "keyframe_min_gain", "keyframe_per_scene_cap", "moment_max_sec", "moment_min_sec",
     "moment_gap_sec", "boundary_similarity", "entailment_threshold", "rrf_k", "top_k",
     "contradiction_threshold", "topic_similarity", "topic_min_size", "consensus_jaccard",
+    "visual_workers",  # M1.1: pool size (1=serial); not a feature toggle
 })
 
 # Default retrieval cutoff for hit_rate / nDCG.

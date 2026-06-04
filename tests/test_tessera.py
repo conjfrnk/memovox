@@ -24,6 +24,48 @@ class TestFrameTypeClassifier(unittest.TestCase):
 
     def test_low_variance_no_text_is_talking_head(self):
         self.assertEqual(classify_frame([0.5] * 256, ""), "talking_head")
+
+
+class TestKeyframeParallelism(unittest.TestCase):
+    def test_keyframe_work_is_order_deterministic_under_workers(self):
+        import threading
+
+        from memovox.backends.base import OCRBackend, VLMBackend
+
+        class CountingOCR(OCRBackend):
+            name = "counting"
+
+            def __init__(self):
+                super().__init__()
+                self.calls = 0
+                self._lock = threading.Lock()
+
+            def extract(self, image_path):
+                with self._lock:
+                    self.calls += 1
+                return "ocr"
+
+        class FakeVLM(VLMBackend):
+            name = "fake"
+            is_generative = True
+
+            def caption(self, image_path, *, ocr_text=None, prompt=None):
+                return "cap"
+
+        # alternating signatures => multiple scenes => several kept keyframes
+        frames = [FrameSig(t=float(i), vec=[float(i % 2)] * 4) for i in range(8)]
+
+        def run_with(workers):
+            ocr = CountingOCR()
+            res = run(None, None, settings=Settings(visual_workers=workers),
+                      frames=frames, vlm=FakeVLM(), ocr=ocr)
+            return res.events, ocr.calls
+
+        serial, n1 = run_with(1)
+        parallel, n4 = run_with(4)
+        self.assertGreaterEqual(len(serial), 2)
+        self.assertEqual(serial, parallel)   # byte-identical events regardless of pool
+        self.assertEqual(n1, n4)             # same number of keyframes processed
 from memovox.tessera import VisualEvent, VisualResult, run
 from memovox.tessera.frames import FrameSig, bytes_to_signature
 from memovox.tessera.keyframes import select_keyframes

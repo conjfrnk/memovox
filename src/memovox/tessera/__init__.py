@@ -112,13 +112,16 @@ def run(
     ocr = ocr or get_ocr(settings.ocr_backend, config=config)
 
     stem = slugify(getattr(meta, "title", "") or "video") if meta is not None else "video"
-    events: List[VisualEvent] = []
-    for pos, idx in enumerate(kept):
+
+    def _process_keyframe(pos: int) -> VisualEvent:
+        # Pure per-keyframe work (frame extract -> OCR -> VLM caption). Independent
+        # across keyframes, so it parallelizes; the result is keyed by `pos` and
+        # reassembled in order, making output byte-identical to the serial path.
+        idx = kept[pos]
         sig = frames[idx]
         t_start = sig.t
         t_end = frames[kept[pos + 1]].t if pos + 1 < len(kept) else frames[-1].t
         scene_idx = scene_of.get(idx, 0)
-        # info_gain is intra-scene novelty; a scene's first keyframe has none.
         is_scene_start = scene_idx < len(scenes) and idx == scenes[scene_idx].start_idx
         gain = 0.0 if is_scene_start else frame_distance(frames[idx - 1].vec, sig.vec)
 
@@ -126,23 +129,31 @@ def run(
         if media_path and config is not None:
             dst = config.frames_dir / f"{stem}_{idx:05d}.jpg"
             image = extract_keyframe_image(media_path, t_start, dst)
-
         image_arg = str(image) if image else None
         ocr_text = (ocr.extract(image_arg) or "").strip() or None
         caption = (vlm.caption(image_arg, ocr_text=ocr_text) or "").strip() or None
-
-        events.append(
-            VisualEvent(
-                t_start_s=round(t_start, 3),
-                t_end_s=round(max(t_end, t_start), 3),
-                caption=caption,
-                ocr_text=ocr_text,
-                embedding=sig.vec,
-                frame_ref=image_arg,
-                scene_index=scene_idx,
-                info_gain=round(gain, 4),
-            )
+        return VisualEvent(
+            t_start_s=round(t_start, 3),
+            t_end_s=round(max(t_end, t_start), 3),
+            caption=caption,
+            ocr_text=ocr_text,
+            embedding=sig.vec,
+            frame_ref=image_arg,
+            scene_index=scene_idx,
+            info_gain=round(gain, 4),
         )
+
+    # §9 bottleneck: the per-keyframe OCR/VLM work is I/O-bound (ffmpeg + subprocess/
+    # HTTP). visual_workers>1 runs it on a thread pool; results are reassembled by
+    # position so the events list is byte-identical regardless of pool size.
+    workers = max(1, getattr(settings, "visual_workers", 1))
+    if workers > 1 and len(kept) > 1:
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            events: List[VisualEvent] = list(pool.map(_process_keyframe, range(len(kept))))
+    else:
+        events = [_process_keyframe(pos) for pos in range(len(kept))]
 
     return VisualResult(
         events=events,
