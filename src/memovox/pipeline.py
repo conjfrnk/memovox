@@ -106,6 +106,7 @@ def ingest(
     published_at: Optional[str] = None,
     visual_result: Optional[object] = None,
     modality: Optional[str] = None,
+    resolve_corpus: bool = True,
 ) -> IngestReport:
     # CANONICAL ingest() signature (M0.3, single-owner). Keyword-only Phase-4 seams:
     #   published_at: override the source's publication date (local files have none).
@@ -228,40 +229,47 @@ def ingest(
             _sp.add_counter("claims", len(all_claims))
 
         # --- Loom: entity + speaker resolution + discourse edges --------
+        # M3.2: resolve_corpus=False defers the WHOLE-CORPUS resolve passes so a
+        # batch sync runs them ONCE (via resolve_corpus_pass) instead of once per
+        # video. Default True -> byte-identical single-video ingest.
         with tracer.span("resolve") as _sp:
-            # Canonicalize each committed claim's mentions into Entity nodes +
-            # provenanced MENTIONS edges, so the SAME entity across videos is ONE
-            # node. resolve_entities filters to committed claims internally.
-            linker = get_entity_linker(settings.entity_backend, config=config)
-            resolve_entities(store, all_claims, linker=linker)
+            if not resolve_corpus:
+                # Deferred: the batch sync runs resolve_corpus_pass once for all videos.
+                _sp.add_counter("deferred", 1)
+            else:
+                # Canonicalize each committed claim's mentions into Entity nodes +
+                # provenanced MENTIONS edges, so the SAME entity across videos is ONE
+                # node. resolve_entities filters to committed claims internally.
+                linker = get_entity_linker(settings.entity_backend, config=config)
+                resolve_entities(store, all_claims, linker=linker)
 
-            # Unify the SAME named speaker across videos onto one canonical
-            # ``spk:<slug>`` identity (per-video rows preserved, linked by SAME_AS).
-            # Re-resolves the WHOLE corpus each ingest (idempotent); anonymous
-            # diarization labels are never merged across videos by NAME.
-            #
-            # OPTIONAL voiceprint merge (W4.2, §12): only when a voiceprint backend
-            # is installed AND local audio exists do we extract per-speaker
-            # voiceprints and pass them in, letting anonymous same-voice speakers
-            # merge. On the free/captions path the backend is None and media is
-            # absent, so voiceprints is None and resolve_speakers stays name-only
-            # (no pyannote import, no behavior change). Voiceprints are transient.
-            voiceprint_backend = get_voiceprint_backend(
-                getattr(settings, "voiceprint_backend", "auto"), config=config
-            )
-            voiceprints = _extract_voiceprints(
-                voiceprint_backend,
-                video_id=video_id,
-                segments=st.segments,
-                audio_path=meta.media_path,
-            )
-            resolve_speakers(store, voiceprints=voiceprints)
+                # Unify the SAME named speaker across videos onto one canonical
+                # ``spk:<slug>`` identity (per-video rows preserved, linked by SAME_AS).
+                # Re-resolves the WHOLE corpus each ingest (idempotent); anonymous
+                # diarization labels are never merged across videos by NAME.
+                #
+                # OPTIONAL voiceprint merge (W4.2, §12): only when a voiceprint backend
+                # is installed AND local audio exists do we extract per-speaker
+                # voiceprints and pass them in, letting anonymous same-voice speakers
+                # merge. On the free/captions path the backend is None and media is
+                # absent, so voiceprints is None and resolve_speakers stays name-only
+                # (no pyannote import, no behavior change). Voiceprints are transient.
+                voiceprint_backend = get_voiceprint_backend(
+                    getattr(settings, "voiceprint_backend", "auto"), config=config
+                )
+                voiceprints = _extract_voiceprints(
+                    voiceprint_backend,
+                    video_id=video_id,
+                    segments=st.segments,
+                    audio_path=meta.media_path,
+                )
+                resolve_speakers(store, voiceprints=voiceprints)
 
-            # Link claim->claim within the video: ELABORATES (adjacent same-speaker
-            # claims inside a Moment) and CORRECTS (a CORRECTION -> nearest prior
-            # claim sharing a subject/entity). Committed-only; provenance-stamped.
-            link_claim_relations(store, all_claims)
-            _sp.add_counter("claims", len(all_claims))
+                # Link claim->claim within the video: ELABORATES (adjacent same-speaker
+                # claims inside a Moment) and CORRECTS (a CORRECTION -> nearest prior
+                # claim sharing a subject/entity). Committed-only; provenance-stamped.
+                link_claim_relations(store, all_claims)
+                _sp.add_counter("claims", len(all_claims))
 
         # --- human-readable digest --------------------------------------
         with tracer.span("digest") as _sp:
@@ -300,3 +308,23 @@ def ingest(
     finally:
         if owns_store:
             store.close()
+
+
+def resolve_corpus_pass(config: Config, store: LoomStore,
+                        settings: Optional[Settings] = None) -> None:
+    """Run the WHOLE-CORPUS resolve passes ONCE over the store (M3.2): entity
+    resolution, speaker unification, and per-video discourse edges. A batch sync
+    ingests each video with ``resolve_corpus=False`` then calls this once, instead
+    of re-resolving the whole corpus on every video. Idempotent."""
+    from collections import defaultdict
+
+    settings = settings or config.settings
+    linker = get_entity_linker(settings.entity_backend, config=config)
+    all_claims = store.list_claims(status="committed")
+    resolve_entities(store, all_claims, linker=linker)
+    resolve_speakers(store)  # name-only (batch path has no per-video voiceprints)
+    by_video = defaultdict(list)
+    for c in all_claims:
+        by_video[c.video_id].append(c)
+    for claims in by_video.values():
+        link_claim_relations(store, claims)

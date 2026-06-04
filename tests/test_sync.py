@@ -56,5 +56,43 @@ class SyncStateCursorTest(unittest.TestCase):
             self.assertEqual(sync_state.seen_ids(store, url), set())
 
 
+class ResolveCorpusFlagTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = pathlib.Path(self._tmp.name)
+        from memovox import Memovox
+        self.mv = Memovox(store=self.dir / "store", llm_backend="none")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _vtt(self, name, text):
+        p = self.dir / name
+        p.write_text(f"WEBVTT\n\n00:00:01.000 --> 00:00:09.000\n{text}\n", encoding="utf-8")
+        return str(p)
+
+    def test_deferred_then_batch_resolve_equals_default(self):
+        from memovox import pipeline
+        from memovox.loom import LoomStore
+        a = self._vtt("a.en.vtt", "Alice studied the Chinchilla scaling law in detail.")
+        b = self._vtt("b.en.vtt", "Bob also studied the Chinchilla scaling law closely.")
+        # deferred ingest -> entities NOT resolved yet
+        self.mv.ingest(a, source_url="https://x/a", resolve_corpus=False)
+        self.mv.ingest(b, source_url="https://x/b", resolve_corpus=False)
+        with LoomStore(self.mv.config) as store:
+            before = store.conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
+            pipeline.resolve_corpus_pass(self.mv.config, store)
+            after = store.conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
+        self.assertEqual(before, 0)        # deferred: no entities until the batch pass
+        self.assertGreater(after, 0)       # batch pass resolves them
+
+    def test_default_resolve_corpus_true_resolves_immediately(self):
+        from memovox.loom import LoomStore
+        a = self._vtt("a.en.vtt", "Alice studied the Chinchilla scaling law in detail.")
+        self.mv.ingest(a, source_url="https://x/a")  # default resolve_corpus=True
+        with LoomStore(self.mv.config) as store:
+            self.assertGreater(store.conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0], 0)
+
+
 if __name__ == "__main__":
     unittest.main()
