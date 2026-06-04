@@ -408,6 +408,10 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         self.assertEqual(p["score"], 1.0)   # every query's vector+lexical top-k matches
         self.assertEqual(p["mismatches"], [])
 
+    def test_incremental_equivalence_present_and_perfect(self):
+        # M0.2 W5/W6: incremental consolidation == a single full pass on the golden.
+        self.assertEqual(self.report["incremental_equivalence"], 1.0)
+
     def test_observability_is_ungated(self):
         # discipline (a): observability never participates in --assert-thresholds.
         failures = _check_thresholds(self.report)
@@ -479,6 +483,38 @@ class TestFrozenSettingsSnapshot(unittest.TestCase):
         for flag, expected in _DEFAULT_OFF_FLAGS.items():
             self.assertEqual(getattr(s, flag), expected,
                              f"default-OFF flag {flag!r} drifted from the frozen snapshot")
+
+    def test_snapshot_pins_m0_2_flags(self):
+        from eval.harness import _DEFAULT_OFF_FLAGS
+
+        self.assertIn("vector_prefilter_fts", _DEFAULT_OFF_FLAGS)
+        self.assertFalse(_DEFAULT_OFF_FLAGS["vector_prefilter_fts"])
+
+
+class TestNewExactGates(unittest.TestCase):
+    """M0.2 W6: parity and incremental_equivalence gate immediately at 1.0 — they
+    are exact-equivalence correctness invariants, not statistical metrics."""
+
+    def _base(self):
+        return {
+            "retrieval": {"hit_rate": 1.0}, "groundedness": 1.0,
+            "contradiction": {"f1": 1.0}, "synthesis": {"groundedness": 1.0},
+            "parity": {"score": 1.0}, "incremental_equivalence": 1.0,
+        }
+
+    def test_passing_report_has_no_failures(self):
+        from eval.harness import _check_thresholds
+        self.assertEqual(_check_thresholds(self._base()), [])
+
+    def test_parity_below_one_fails(self):
+        from eval.harness import _check_thresholds
+        bad = dict(self._base(), parity={"score": 0.8})
+        self.assertTrue(any("parity" in f for f in _check_thresholds(bad)))
+
+    def test_incremental_below_one_fails(self):
+        from eval.harness import _check_thresholds
+        bad = dict(self._base(), incremental_equivalence=0.0)
+        self.assertTrue(any("incremental" in f for f in _check_thresholds(bad)))
 
 
 if __name__ == "__main__":  # pragma: no cover

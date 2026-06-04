@@ -78,6 +78,7 @@ _FREE_BACKENDS = dict(
 _DEFAULT_OFF_FLAGS = dict(
     budget_mode="soft",
     otel_enabled=False,
+    vector_prefilter_fts=False,  # M0.2: opt-in FTS vector prefilter must stay OFF on the gate
 )
 
 # Default retrieval cutoff for hit_rate / nDCG.
@@ -662,6 +663,45 @@ def _record_parity(golden_dir: Path) -> Path:
     return out
 
 
+def _incremental_equivalence() -> float:
+    """1.0 iff incremental consolidation (batched, watermark) produces the IDENTICAL
+    CONTRADICTS/SUPPORTS graph as a single full pass on the golden corpus (M0.2)."""
+    from memovox import pipeline
+    from memovox.backends import get_nli
+    from memovox.config import Config, Settings
+    from memovox.loom.consolidate import consolidate
+    from memovox.loom.store import LoomStore
+
+    golden = sorted(GOLDEN_DIR.glob("*.en.vtt"))
+    if len(golden) < 2:
+        return 1.0
+
+    def _edges(store) -> set:
+        s = set()
+        for rel in ("CONTRADICTS", "SUPPORTS"):
+            for e in store.edges(rel=rel):
+                s.add((e["src"], e["rel"], e["dst"], e["video_id"]))
+        return s
+
+    with tempfile.TemporaryDirectory() as tmp:
+        full = Config(store=str(Path(tmp) / "full"), settings=Settings(**_FREE_BACKENDS)).ensure()
+        for g in golden:
+            pipeline.ingest(full, str(g), source_url=f"https://x/{g.stem}")
+        with LoomStore(full) as store:
+            consolidate(store, nli=get_nli("lexical", config=full), since_watermark=0)
+            full_edges = _edges(store)
+
+        inc = Config(store=str(Path(tmp) / "inc"), settings=Settings(**_FREE_BACKENDS)).ensure()
+        for g in golden:
+            pipeline.ingest(inc, str(g), source_url=f"https://x/{g.stem}")
+            with LoomStore(inc) as store:
+                consolidate(store, nli=get_nli("lexical", config=inc))
+        with LoomStore(inc) as store:
+            inc_edges = _edges(store)
+
+    return 1.0 if inc_edges == full_edges else 0.0
+
+
 def _observability_metrics(ing: _Ingested) -> dict:
     """Collect the corpus-size-INDEPENDENT structural facts the M0.1 spine emits.
 
@@ -761,6 +801,7 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
     # write_edges=False), so it cannot perturb any metric computed above.
     observability = _observability_metrics(ing)
     parity_block = _parity_block(ing)
+    incremental_equiv = _incremental_equivalence()
 
     return {
         "retrieval": {
@@ -779,7 +820,8 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
         },
         "synthesis": synthesis,
         "observability": observability,  # UNGATED (discipline (a)); structural only
-        "parity": parity_block,          # exact-equivalence invariant (gated in W6)
+        "parity": parity_block,          # exact-equivalence invariant (gated)
+        "incremental_equivalence": incremental_equiv,  # exact-equivalence invariant (gated)
     }
 
 
@@ -832,6 +874,13 @@ def _check_thresholds(report: dict) -> List[str]:
         failures.append(f"contradiction.f1 {cf1:.3f} < {_CONTRADICTION_F1_GATE}")
     if sg < _SYNTHESIS_GROUNDEDNESS_GATE:
         failures.append(f"synthesis.groundedness {sg:.3f} < {_SYNTHESIS_GROUNDEDNESS_GATE}")
+    # M0.2 exact-equivalence invariants — gated at 1.0 (correctness, not statistics).
+    pscore = report.get("parity", {}).get("score", 1.0)
+    if pscore < 1.0:
+        failures.append(f"parity {pscore:.3f} < 1.0 (free-path retrieval moved)")
+    inc = report.get("incremental_equivalence", 1.0)
+    if inc < 1.0:
+        failures.append(f"incremental_equivalence {inc:.3f} < 1.0 (incremental != full)")
     return failures
 
 
