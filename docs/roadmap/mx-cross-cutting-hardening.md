@@ -1,6 +1,6 @@
 # M-X — Cross-cutting hardening & global disciplines
 
-> **Wave:** 0 · **Effort:** M · **Status:** not started
+> **Wave:** 0 · **Effort:** M · **Status:** ✅ done (branch `phase4-cross-cutting`, W1+W2+W3 built; W4 is a tracking ledger folded into host tracks; 353 pass / 2 skip). Disciplines verified to bite (flipped default, unpinned flag, premature gate all caught).
 > **Depends on:** folds into the tracks named per item (M1.1, M0.3, M3.2, M1.2, M3.3) · **Owns (single-owner concerns):** the two global eval disciplines — (a) thin-fixture gating, (b) the frozen eval-settings snapshot of default-OFF flags · **Blocks:** none
 > **Spec:** §5 (extraction / hybrid retrieval), §9 (throughput, graceful degradation, cost levers), §12 (risks: claim granularity, ColPali cost, ToS / private-by-default)
 
