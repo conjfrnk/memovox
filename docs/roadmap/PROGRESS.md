@@ -5,14 +5,14 @@ Update a row when you start/finish a track; tick the detailed workstream checkli
 inside each track doc (its *Definition of done*) as you go. Keep this file and each
 doc's `Status:` line in sync.
 
-_Last updated: 2026-06-04 — M0.1 + M0.2 done & merged to main (309 pass / 2 skip; 6 gates green incl. parity + incremental_equivalence)._
+_Last updated: 2026-06-04 — M0.1+M0.2+M0.3 done & merged to main (342 pass / 2 skip; 7 gates green incl. span_unchanged)._
 
 ## Baseline (keep green at every commit)
 
-- `make test` → 309 pass / 2 skip (was 247 at Phase-3; +36 M0.1, +26 M0.2)
+- `make test` → 342 pass / 2 skip (was 247 at Phase-3; +36 M0.1, +26 M0.2, +33 M0.3)
 - `python -m eval.harness --assert-thresholds` → `hit_rate≥0.6`, `groundedness≥0.8`,
   `contradiction.f1≥0.5`, `synthesis.groundedness≥0.8`, `parity==1.0`,
-  `incremental_equivalence==1.0` (+ ungated `observability` block)
+  `incremental_equivalence==1.0`, `span_unchanged==1.0` (+ ungated `observability`, `span_accuracy`)
 
 ## Wave 0 — foundations
 
@@ -20,7 +20,7 @@ _Last updated: 2026-06-04 — M0.1 + M0.2 done & merged to main (309 pass / 2 sk
 |-------|:------:|--------|:------:|-------|
 | M0.1 Observability & metrics spine | ✅ | phase4-observability | 8/8 | merged; owns the stderr log hook + consolidate cap site |
 | M0.2 Scale & storage + incremental consolidation | ✅ | phase4-scale-storage | 7/7 | merged; owns incremental consolidation (rowid watermark) + storage ABCs |
-| M0.3 Word-precise spans / device / ingest-signature | ⬜ | — | 0/7 | owns the `pipeline.ingest` signature |
+| M0.3 Word-precise spans / device / ingest-signature | ✅ | phase4-word-spans | 7/7 | merged; owns the `pipeline.ingest` signature |
 | M-X Cross-cutting hardening & disciplines | ⬜ | — | 0/4 | encode disciplines early; X-items fold into tracks |
 
 ## Wave 1 — multimodal payoff + eval

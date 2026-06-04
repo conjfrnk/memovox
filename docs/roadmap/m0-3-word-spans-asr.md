@@ -1,6 +1,6 @@
 # M0.3 — Word-precise spans, fail-loud device, ingest-signature owner
 
-> **Wave:** 0 · **Effort:** M · **Status:** not started
+> **Wave:** 0 · **Effort:** M · **Status:** ✅ done (branch `phase4-word-spans`, 7/7 workstreams; 342 pass / 2 skip; 7 gates green incl. span_unchanged==1.0 + ungated span_accuracy). Open questions resolved: tighten within single best segment; `captions_as_prior` Settings bool (priority lever, falls back to captions when whisper can't run); Mac = CPU hits the loud error with `--allow-cpu` escape; `visual_result` typed `Optional[object]` (M1.1 finalizes).
 > **Depends on:** none · **Owns (single-owner concerns):** the `pipeline.ingest()` signature change (keyword-only additions: `published_at=`, `visual_result=`, `modality=`, and the ASR device knobs — coordinated HERE so M1.1/M3.1 layer on, not churn it) · **Blocks:** M1.2 (span/citation gate), M2.3 (clip precision)
 > **Spec:** §4.1, §4.2, §7, §9
 
