@@ -57,7 +57,10 @@ class JobStore:
     def __init__(self, config: Config) -> None:
         self.config = config
         config.ensure()
-        self.conn = sqlite3.connect(str(config.db_path), timeout=5.0)
+        # check_same_thread=False: a JobWorker creates its JobStore on the spawning
+        # thread but uses it on the worker thread (never concurrently — requeue
+        # completes before start()). WAL + busy_timeout serialize cross-connection writes.
+        self.conn = sqlite3.connect(str(config.db_path), timeout=5.0, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode = WAL")
         self.conn.execute("PRAGMA busy_timeout = 5000")

@@ -86,6 +86,16 @@ TOOLS = [
             "properties": {"entity": {"type": "string"}, "topic": {"type": "string"}},
         },
     },
+    {
+        "name": "job_status",
+        "description": "Resolve a background job id (e.g. from consolidate) to its "
+                       "state/result/error.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"job_id": {"type": "string"}},
+            "required": ["job_id"],
+        },
+    },
 ]
 
 
@@ -163,7 +173,15 @@ class McpServer:
         return _tool_json([p.to_dict() for p in pairs])
 
     def _tool_consolidate(self, args: dict) -> dict:
-        return _tool_json(self.mv.consolidate())
+        # M3.3: non-blocking — enqueue + return a handle so the JSON-RPC loop never
+        # freezes on a long consolidation. Resolve completion via job_status.
+        return _tool_json(self.mv.enqueue_consolidate())
+
+    def _tool_job_status(self, args: dict) -> dict:
+        job = self.mv.job_status(args.get("job_id", ""))
+        if job is None:
+            return _tool_text(f"No job {args.get('job_id')!r}", is_error=True)
+        return _tool_json(job)
 
     def _tool_claim_timeline(self, args: dict) -> dict:
         # M3.1: reuse loom/evolution via the SDK (no new ordering logic)

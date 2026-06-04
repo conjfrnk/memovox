@@ -43,7 +43,8 @@ class TestMcp(unittest.TestCase):
         self.assertIn("ingest_video", names)
         self.assertIn("consolidate", names)
         self.assertIn("claim_timeline", names)
-        self.assertEqual(len(names), 7)
+        self.assertIn("job_status", names)
+        self.assertEqual(len(names), 8)
 
     def test_claim_timeline_tool(self):
         resp = self.server.handle({
@@ -100,14 +101,26 @@ class TestMcp(unittest.TestCase):
         self.assertIn("consensus_points", text)
         self.assertIn("contradictions", text)
 
-    def test_tools_call_consolidate(self):
+    def test_consolidate_is_nonblocking_and_job_status_resolves(self):
+        import json
+        # M3.3: consolidate enqueues and returns a job handle (does NOT block).
         resp = self.server.handle({
             "jsonrpc": "2.0", "id": 8, "method": "tools/call",
             "params": {"name": "consolidate", "arguments": {}},
         })
-        text = resp["result"]["content"][0]["text"]
-        self.assertIn("topics", text)
-        self.assertIn("superseded", text)
+        handle = json.loads(resp["result"]["content"][0]["text"])
+        self.assertIn("job_id", handle)
+        self.assertIn(handle["state"], ("queued", "running", "succeeded"))
+        # drain the queue, then job_status resolves the result
+        from memovox.serving.jobs import JobWorker
+        JobWorker(self.mv, once=True).drain()
+        st = self.server.handle({
+            "jsonrpc": "2.0", "id": 9, "method": "tools/call",
+            "params": {"name": "job_status", "arguments": {"job_id": handle["job_id"]}},
+        })
+        status = json.loads(st["result"]["content"][0]["text"])
+        self.assertEqual(status["state"], "succeeded")
+        self.assertIn("topics", status["result"])
 
     def test_unknown_method_errors(self):
         resp = self.server.handle({"jsonrpc": "2.0", "id": 9, "method": "bogus"})
