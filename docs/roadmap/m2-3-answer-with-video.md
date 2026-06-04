@@ -1,6 +1,6 @@
 # M2.3 — Answer-with-video clip stitching
 
-> **Wave:** 2 · **Effort:** M · **Status:** not started
+> **Wave:** 2 · **Effort:** M · **Status:** ✅ done (branch `phase4-clips`, 7/7 + review fix; 420 pass / 2 skip; 10 gates incl. clip.coverage>=0.3). Pure stitch (provenance-safe: widens to union of verified spans), ranged deep links, REST/CLI/MCP surfacing, opt-in ffmpeg render.
 > **Depends on:** M0.3 (word-precise spans), M2.2 (citation-build coordination on `answer.ask`) · **Owns (single-owner concerns):** none · **Blocks:** none
 > **Spec:** §5 ("Answer-with-video: return stitched, deep-linked clip references"), §8 (`GET /clip`, SDK, MCP)
 
