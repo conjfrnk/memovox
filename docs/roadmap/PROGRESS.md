@@ -5,19 +5,19 @@ Update a row when you start/finish a track; tick the detailed workstream checkli
 inside each track doc (its *Definition of done*) as you go. Keep this file and each
 doc's `Status:` line in sync.
 
-_Last updated: 2026-06-04 — none started (all docs written)._
+_Last updated: 2026-06-04 — M0.1 done & merged to main (283 pass / 2 skip; 4 gates green)._
 
 ## Baseline (keep green at every commit)
 
-- `make test` → 247 pass / 2 skip
+- `make test` → 283 pass / 2 skip (was 247 at Phase-3; +36 from M0.1)
 - `python -m eval.harness --assert-thresholds` → `hit_rate≥0.6`, `groundedness≥0.8`,
-  `contradiction.f1≥0.5`, `synthesis.groundedness≥0.8`
+  `contradiction.f1≥0.5`, `synthesis.groundedness≥0.8` (+ ungated `observability` block)
 
 ## Wave 0 — foundations
 
 | Track | Status | Branch | W done | Notes |
 |-------|:------:|--------|:------:|-------|
-| M0.1 Observability & metrics spine | ⬜ | — | 0/8 | recommended first |
+| M0.1 Observability & metrics spine | ✅ | phase4-observability | 8/8 | merged; owns the stderr log hook + consolidate cap site |
 | M0.2 Scale & storage + incremental consolidation | ⬜ | — | 0/7 | owns incremental consolidation; after M0.1 |
 | M0.3 Word-precise spans / device / ingest-signature | ⬜ | — | 0/7 | owns the `pipeline.ingest` signature |
 | M-X Cross-cutting hardening & disciplines | ⬜ | — | 0/4 | encode disciplines early; X-items fold into tracks |

@@ -1,6 +1,6 @@
 # M0.1 — Observability & metrics spine
 
-> **Wave:** 0 · **Effort:** L · **Status:** not started
+> **Wave:** 0 · **Effort:** L · **Status:** ✅ done (branch `phase4-observability`, 8/8 workstreams; 283 pass / 2 skip; 4 gates green)
 > **Depends on:** none · **Owns (single-owner concerns):** the single structured-logging hook (stderr); the cap-surfacing edit to `loom/consolidate.py` `find_contradictions` (so the Scale track M0.2 does not re-edit the same site) · **Blocks:** all later tracks benefit — build FIRST
 > **Spec:** §7 (Observability row: "structured logs + per-stage metrics + traces"), §9 (per-video token/compute budgets are configurable and logged; throughput; graceful degradation)
 
@@ -134,14 +134,20 @@ NON-GOALS / deferrals:
 - **`frame_max` config/function-default mismatch** (`Settings.frame_max=1200` vs `sample_frame_signatures(max_frames=600)`). → Surface both in the cap counter so the discrepancy is visible; flag it as an open question rather than silently "fixing" it here (a fix could change visual output and belongs in M1.1/M-X.1).
 
 ## Definition of done
-- [ ] `src/memovox/observe.py` exists: `Tracer`/`Span` on `perf_counter`, `Budget`/`BudgetExceeded`, `get_logger()` to stderr, no-op OTel bridge.
-- [ ] Every silent cap (`consolidate.max_claims`, `retrieve.pool`/`top_k`, `tessera.frame_max`/`per_scene_cap`) emits a structured, counted cap event — with byte-identical kept results.
-- [ ] `IngestReport`, `Answer`, `ConsolidationReport` carry a `metrics` dict; `stage_metrics` + cumulative `metrics_ledger` persisted in the store.
-- [ ] `memovox metrics` works; `memovox stats` extended; all CLI human output stays on stdout, all structured logs on stderr.
-- [ ] OpenTelemetry behind `[otel]`; clean no-op when absent (CI never installs it).
-- [ ] Eval `observability` block present and **ungated**; structural invariants (span/status/wall_ms>=0, counter reconciliation, forced cap fires) asserted in `tests/test_eval.py`; `wall_ms` never thresholded.
-- [ ] Frozen eval-settings snapshot pins the new default-OFF flags.
-- [ ] `make test` ≥ 247 pass / 2 skip (no regression); `python -m eval.harness --assert-thresholds` passes the four existing gates.
+- [x] `src/memovox/observe.py` exists: `Tracer`/`Span` on `perf_counter`, `Budget`/`BudgetExceeded`, `get_logger()` to stderr, no-op OTel bridge.
+- [x] Every silent cap (`consolidate.max_claims`, `retrieve.pool`/`top_k`, `tessera.frame_max`/`per_scene_cap`) emits a structured, counted cap event — with byte-identical kept results.
+- [x] `IngestReport`, `Answer`, `ConsolidationReport` carry a `metrics` dict; `stage_metrics` + cumulative `metrics_ledger` persisted in the store.
+- [x] `memovox metrics` works; `memovox stats` extended; all CLI human output stays on stdout, all structured logs on stderr.
+- [x] OpenTelemetry behind `[otel]`; clean no-op when absent (CI never installs it).
+- [x] Eval `observability` block present and **ungated**; structural invariants (span/status/wall_ms>=0, counter reconciliation, forced cap fires) asserted in `tests/test_eval.py`; `wall_ms` never thresholded.
+- [x] Frozen eval-settings snapshot pins the new default-OFF flags (`budget_mode`, `otel_enabled`).
+- [x] `make test` 283 pass / 2 skip (no regression); `python -m eval.harness --assert-thresholds` passes the four existing gates.
+
+## Resolved open questions (as built)
+- **Budget units** = deterministic composite (moments + frames + NLI calls), not LLM tokens. Free path stays soft.
+- **`frame_max` mismatch** (`Settings.frame_max=1200` vs fn default 600) — *surface-only* here (the cap records the actual limit used); reconciliation deferred to M1.1.
+- **`metrics_enabled`** — metrics are **always-on** (zero output change), so there is no flag; only the output-affecting pieces (`otel_enabled`, hard `budget_mode`) default OFF and are pinned in the snapshot.
+- **Ledger granularity** — monotonic lifetime counters in `metrics_ledger` + a separate per-video `stage_metrics` table (idempotent replace per video).
 
 ## Open questions
 - **Budget units.** What does one "token/compute unit" count on the free path (no LLM tokens)? Proposed: a deterministic composite of moments processed + frames sampled + NLI calls. A human should confirm the unit definition so soft-budget numbers are meaningful and stable.
