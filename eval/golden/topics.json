@@ -1,0 +1,7 @@
+{
+  "description": "Gold topic clusters (logical moment ids that should share an induced topic). Regression guard for loom/topics.induce_topics; UNGATED (M1.2).",
+  "clusters": [
+    ["talk_a#m0001", "talk_c#m0001"],
+    ["talk_a#m0005", "talk_b#m0004"]
+  ]
+}

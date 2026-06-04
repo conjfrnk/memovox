@@ -739,10 +739,53 @@ def _span_unchanged_block(ing: _Ingested) -> dict:
             "drifted": drifted}
 
 
-def _span_accuracy() -> dict:
-    """UNGATED (M1.2 owns gating): on a word-bearing free-path fixture, the fraction
-    of committed claims whose span was tightened strictly inside its source cue —
-    the word-precision signal. ``None`` if the fixture is absent."""
+def span_iou(pred, gold) -> float:
+    """Interval IoU of two ``(t_start, t_end)`` spans (the unified span/citation
+    metric — subsumes the ASR track's span_iou and the eval track's
+    citation_accuracy). 0.0 if either span is empty/None."""
+    if not pred or not gold:
+        return 0.0
+    p0, p1 = pred
+    g0, g1 = gold
+    inter = max(0.0, min(p1, g1) - max(p0, g0))
+    union = max(p1, g1) - min(p0, g0)
+    return inter / union if union > 0 else 0.0
+
+
+def _span_accuracy(ing: _Ingested, qa: list) -> dict:
+    """UNIFIED span/citation-accuracy (M1.2, UNGATED): mean interval IoU of each
+    cited gold-relevant moment's displayed span vs its gold span (a QA item's
+    explicit ``gold_span`` if present, else the moment's window — word-precise once
+    M0.3 tightening engages). Plus the M0.3 word-tightening signal."""
+    from memovox.loom.store import LoomStore
+
+    store_vids = list(ing.logical_to_store.values())
+    ious = []
+    with LoomStore(ing.mv.config) as store:
+        moment_span = {}
+        for vid in store_vids:
+            for m in store.moments_for_video(vid):
+                moment_span[m.moment_id] = (m.t_start_s, m.t_end_s)
+        for item in qa:
+            gold_ids = _relevant_moment_ids(store, store_vids,
+                                            item.get("relevant_moment_substrings", []))
+            if not gold_ids:
+                continue
+            ans = ing.mv.ask(item["q"])
+            for c in ans.citations:
+                if c.moment_id in gold_ids:
+                    gold_span = item.get("gold_span") or moment_span.get(c.moment_id)
+                    ious.append(span_iou((c.t_start_s, c.t_end_s), tuple(gold_span)))
+                    break
+    mean_iou = round(sum(ious) / len(ious), 6) if ious else None
+    block = {"mean_iou": mean_iou, "items_scored": len(ious)}
+    block.update(_word_tightening_signal())
+    return block
+
+
+def _word_tightening_signal() -> dict:
+    """M0.3 word-precision signal: fraction of a word-bearing fixture's claims whose
+    span was tightened strictly inside its source cue. ``None`` if absent."""
     fixture = _REPO_ROOT / "eval" / "fixtures" / "words_clip.json"
     if not fixture.exists():
         return {"tightened_fraction": None, "claims": 0}
@@ -921,6 +964,67 @@ def _observability_metrics(ing: _Ingested) -> dict:
     }
 
 
+def _topic_clusters(ing: _Ingested, gold_topics: dict):
+    """Gold + predicted topic clusters (members are logical moment ids), reading
+    the PERSISTED ``Moment.topic_id`` (never re-running induce_topics) — a real
+    regression guard for topic induction, mirroring _entity_clusters."""
+    from collections import defaultdict
+
+    from memovox.loom.store import LoomStore
+
+    gold_clusters = [set(c) for c in gold_topics.get("clusters", [])]
+    atoms = [a for c in gold_clusters for a in c]
+    pred_groups: Dict[str, Set[str]] = defaultdict(set)
+    with LoomStore(ing.mv.config) as store:
+        for atom in atoms:
+            logical, _, suffix = atom.partition("#")
+            store_vid = ing.logical_to_store.get(logical)
+            label = f"__no_topic__:{atom}"  # singleton unless a topic_id is persisted
+            if store_vid:
+                m = store.get_moment(f"{store_vid}#{suffix}")
+                if m and m.topic_id:
+                    label = m.topic_id
+            pred_groups[label].add(atom)
+    return [v for v in pred_groups.values()], gold_clusters
+
+
+def _keyframe_efficiency() -> dict:
+    """UNGATED (M1.1/M1.2): adaptive info-gain select_keyframes vs a uniform stride
+    on a synthetic static+dense scene — adaptive keeps FEWER frames (ratio < 1)."""
+    from memovox.tessera.frames import FrameSig
+    from memovox.tessera.keyframes import select_keyframes
+    from memovox.tessera.scenes import Scene
+
+    # 16 identical (static) frames + 4 alternating (slide-dense) frames.
+    frames = [FrameSig(t=float(i), vec=[0.5, 0.5, 0.5, 0.5]) for i in range(16)]
+    frames += [FrameSig(t=float(16 + i), vec=[float(i % 2)] * 4) for i in range(4)]
+    scenes = [Scene(index=0, start_idx=0, end_idx=19, t_start=0.0, t_end=19.0)]
+    adaptive = len(select_keyframes(frames, scenes, min_gain=0.1, per_scene_cap=100))
+    uniform = max(1, len(frames) // 2)  # fixed stride-2 baseline
+    return {"adaptive_frames": adaptive, "uniform_frames": uniform,
+            "ratio": round(adaptive / uniform, 6)}
+
+
+def _claim_granularity(ing: _Ingested) -> dict:
+    """UNGATED (§12 fold-in): claims-per-moment + mean salience cross-tab (the lever
+    for the M-X.3 extraction-granularity knob). Read-only; crash-safe on empty."""
+    from memovox.loom.store import LoomStore
+
+    claims = moments = 0
+    sal: List[float] = []
+    with LoomStore(ing.mv.config) as store:
+        for vid in ing.logical_to_store.values():
+            moments += len(store.moments_for_video(vid))
+            for c in store.claims_for_video(vid):
+                claims += 1
+                sal.append(c.salience)
+    return {
+        "claims_per_moment": round(claims / moments, 4) if moments else 0.0,
+        "mean_salience": round(sum(sal) / len(sal), 4) if sal else 0.0,
+        "moments": moments, "claims": claims,
+    }
+
+
 def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
                     gold_contradictions, *, k: int) -> dict:
     from memovox.backends import get_nli
@@ -956,8 +1060,13 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
     parity_block = _parity_block(ing)
     incremental_equiv = _incremental_equivalence()
     span_unchanged = _span_unchanged_block(ing)
-    span_accuracy = _span_accuracy()
+    span_accuracy = _span_accuracy(ing, qa)
     multimodal = _multimodal_metrics()
+
+    gold_topics = _load_json(GOLDEN_DIR / "topics.json") if (GOLDEN_DIR / "topics.json").exists() else {}
+    _, _, topic_f1 = clustering_f1(*_topic_clusters(ing, gold_topics)) if gold_topics else (0.0, 0.0, 0.0)
+    keyframe_efficiency = _keyframe_efficiency()
+    claim_granularity = _claim_granularity(ing)
 
     return {
         "retrieval": {
@@ -981,6 +1090,9 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
         "span_unchanged": span_unchanged,  # M0.3 free-path span byte-identity (gated)
         "span_accuracy": span_accuracy,    # M0.3 word-precision signal (UNGATED; M1.2 gates)
         "multimodal": multimodal,          # M1.1 transcript-only vs tri-modal lift (UNGATED)
+        "topic_f1": round(topic_f1, 6),    # M1.2 topic induction guard (UNGATED; thin corpus)
+        "keyframe_efficiency": keyframe_efficiency,  # M1.2 adaptive vs uniform (UNGATED)
+        "claim_granularity": claim_granularity,      # M1.2 §12 granularity curve (UNGATED)
     }
 
 

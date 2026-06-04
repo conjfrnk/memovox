@@ -439,6 +439,18 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         failures = _check_thresholds(self.report)
         self.assertFalse(any("multimodal" in f for f in failures))
 
+    def test_m1_2_metrics_present_and_ungated(self):
+        # M1.2 ungated additions: span_accuracy (mean_iou), topic_f1, keyframe
+        # efficiency, claim granularity. None participate in the gate.
+        self.assertIsInstance(self.report["topic_f1"], float)
+        self.assertLess(self.report["keyframe_efficiency"]["ratio"], 1.0)  # adaptive < uniform
+        self.assertGreaterEqual(self.report["claim_granularity"]["claims_per_moment"], 0.0)
+        self.assertIn("mean_iou", self.report["span_accuracy"])
+        self.assertEqual(self.report["span_accuracy"]["mean_iou"], 1.0)  # citations match gold spans
+        failures = _check_thresholds(self.report)
+        for k in ("topic_f1", "keyframe", "claim_granularity", "span_accuracy"):
+            self.assertFalse(any(k in f for f in failures))
+
     def test_observability_is_ungated(self):
         # discipline (a): observability never participates in --assert-thresholds.
         failures = _check_thresholds(self.report)
@@ -480,6 +492,16 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         self.assertIn("groundedness", syn)
         self.assertGreaterEqual(syn["groundedness"], 0.8)  # the gated value
         self.assertTrue(syn["contradiction_surfaced"])
+
+
+class TestSpanIou(unittest.TestCase):
+    def test_span_iou(self):
+        from eval.harness import span_iou
+        self.assertEqual(span_iou((0.0, 10.0), (0.0, 10.0)), 1.0)   # exact
+        self.assertEqual(span_iou((0.0, 5.0), (5.0, 10.0)), 0.0)    # disjoint
+        self.assertAlmostEqual(span_iou((0.0, 10.0), (5.0, 15.0)), 1 / 3)  # half
+        self.assertEqual(span_iou(None, (0.0, 1.0)), 0.0)           # zero-guard
+        self.assertEqual(span_iou((1.0, 1.0), (1.0, 1.0)), 0.0)     # zero-length
 
 
 class TestThinFixtureDiscipline(unittest.TestCase):
