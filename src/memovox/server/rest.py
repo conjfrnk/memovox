@@ -80,13 +80,23 @@ def make_handler(mv: Memovox):
                 video = store.get_video(video_id) if video_id else None
                 if not video:
                     return self._send({"error": "unknown video"}, HTTPStatus.NOT_FOUND)
-                overlapping = [
-                    m.to_dict() for m in store.moments_for_video(video_id)
+                moments = [
+                    m for m in store.moments_for_video(video_id)
                     if m.t_end_s >= t_start and m.t_start_s <= t_end
                 ]
+            # M2.3: stitched superset — legacy keys unchanged, additive `clips` array.
+            from ..augur.stitch import stitch_clips
+            from ..augur.types import Citation
+            cits = [Citation(index=i, video_id=video_id, moment_id=m.moment_id,
+                             t_start_s=m.t_start_s, t_end_s=m.t_end_s, title=video.title)
+                    for i, m in enumerate(moments, start=1)]
+            clips = stitch_clips(cits, videos={video_id: video},
+                                 merge_gap_s=mv.settings.clip_merge_gap_s)
             self._send({
                 "video_id": video_id, "t_start_s": t_start, "t_end_s": t_end,
-                "deep_link": deep_link(video.source_url, t_start), "moments": overlapping,
+                "deep_link": deep_link(video.source_url, t_start),
+                "moments": [m.to_dict() for m in moments],
+                "clips": [c.to_dict() for c in clips],
             })
 
         def _export(self, video_id, q):

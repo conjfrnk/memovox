@@ -71,6 +71,16 @@ class TestMcp(unittest.TestCase):
             })
         self.assertEqual(captured.get("modality"), "visual")  # threaded, not dropped
 
+    def test_search_knowledge_includes_clips(self):
+        # M2.3: clips flow through to_dict() with no schema change
+        resp = self.server.handle({
+            "jsonrpc": "2.0", "id": 11, "method": "tools/call",
+            "params": {"name": "search_knowledge", "arguments": {"query": "chunk size?"}},
+        })
+        text = resp["result"]["content"][0]["text"]
+        self.assertIn("clips", text)
+        self.assertIn("youtube.com/watch?v=abc123", text)  # ranged deep link
+
     def test_tools_call_synthesize_topic(self):
         resp = self.server.handle({
             "jsonrpc": "2.0", "id": 7, "method": "tools/call",

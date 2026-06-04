@@ -54,6 +54,12 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("[1]", out)
         self.assertIn("youtu.be/abc123", out)
+        # M2.3: a stitched Clips: block with a ranged deep link
+        self.assertIn("Clips:", out)
+        self.assertIn("youtube.com/watch?v=abc123", out)
+
+        code, out = run(["--store", self.store, "--llm", "none", "ask", "what chunk size?", "--json"])
+        self.assertIn("\"clips\"", out)
 
         code, out = run(["--store", self.store, "list"])
         self.assertIn("yt:abc123", out)

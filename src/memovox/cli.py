@@ -11,7 +11,7 @@ from . import __version__
 from .errors import MemovoxError
 from .loom import LoomStore
 from .sdk import Memovox
-from .util import seconds_to_hms, truncate
+from .util import format_span, seconds_to_hms, truncate
 
 BACKEND_FLAGS = {"asr": "asr_backend", "embed": "embed_backend", "nli": "nli_backend", "llm": "llm_backend"}
 
@@ -66,6 +66,13 @@ def cmd_ask(args, mv: Memovox) -> int:
                 print(f"      {c.deep_link}")
             if c.snippet:
                 print(f"      “{truncate(c.snippet, 160)}”")
+    if answer.clips:
+        print("\nClips:")
+        for clip in answer.clips:
+            span = format_span(clip.t_start_s, clip.t_end_s)
+            print(f"  ({span}) {clip.title or clip.video_id}")
+            if clip.deep_link:
+                print(f"      {clip.deep_link}")
     return 0
 
 
