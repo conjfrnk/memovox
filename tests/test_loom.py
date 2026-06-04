@@ -105,6 +105,27 @@ class TestSearch(LoomTestBase):
         self.assertEqual(stored, [0.0, 0.0])
         self.assertEqual(self.store.vector_search([0.0, 0.0]), [])  # zero-query guard
 
+    def test_text_and_visual_vectors_are_space_tagged(self):
+        from memovox.errors import VectorSpaceError
+
+        vm = Moment("yt:abc#m0005", "yt:abc", 100.0, 130.0, "a slide", "spk_0", index=5)
+        self.store.add_moment(vm, self.emb.embed_one("a slide"),
+                              visual_embedding=[0.5] * 256)
+        q = self.emb.embed_one("neural networks backpropagation")
+        ids = [m for m, _ in self.store.vector_search(q, 5, space="text")]
+        self.assertIn("yt:abc#m0000", ids)            # text rows scored
+        # the text index serves only the 'text' space: a cross-space request raises
+        with self.assertRaises(VectorSpaceError):
+            self.store.vector_search(q, 5, space="visual_sig")
+
+    def test_visual_vector_stored_raw_not_normalized(self):
+        # space tagging must NOT normalize visual signatures (they live in their
+        # own space and are scored by cosine, which is scale-invariant).
+        vm = Moment("yt:abc#m0006", "yt:abc", 130.0, 160.0, "slide", "spk_0", index=6)
+        self.store.add_moment(vm, self.emb.embed_one("slide"),
+                              visual_embedding=[0.5, 0.25, 0.75])
+        self.assertEqual(self.store.get_visual_vector("yt:abc#m0006"), [0.5, 0.25, 0.75])
+
     def test_vector_search_matches_legacy_cosine_topk(self):
         # The new normalized+dot path must rank identically to legacy per-row
         # cosine over the ORIGINAL (raw) embeddings.

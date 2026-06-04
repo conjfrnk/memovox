@@ -40,3 +40,11 @@ class DevicePlacementError(MemovoxError):
 
     Escape via ``--allow-cpu`` / ``MEMOVOX_ASR_ALLOW_CPU=1`` / ``asr_allow_cpu``.
     """
+
+
+class VectorSpaceError(MemovoxError):
+    """A vector search crossed embedding spaces (e.g. text query vs visual signature).
+
+    Text and visual signatures can be the same length by coincidence; cosining
+    across spaces is meaningless, so a mismatch raises rather than silently scoring.
+    """

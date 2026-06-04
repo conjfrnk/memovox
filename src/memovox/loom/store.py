@@ -33,7 +33,7 @@ from .models import (
     Video,
 )
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -86,12 +86,12 @@ CREATE TABLE IF NOT EXISTS mentions (
 
 CREATE TABLE IF NOT EXISTS vectors (
     moment_id TEXT PRIMARY KEY REFERENCES moments(moment_id) ON DELETE CASCADE,
-    dim INTEGER, vec BLOB
+    dim INTEGER, vec BLOB, space TEXT DEFAULT 'text'
 );
 
 CREATE TABLE IF NOT EXISTS visual_vectors (
     moment_id TEXT PRIMARY KEY REFERENCES moments(moment_id) ON DELETE CASCADE,
-    dim INTEGER, vec BLOB
+    dim INTEGER, vec BLOB, space TEXT DEFAULT 'visual_sig'
 );
 
 CREATE TABLE IF NOT EXISTS edges (
@@ -147,6 +147,13 @@ class LoomStore:
         self.vector_index = get_vector_index("auto", conn=self.conn)
         self.lexical_index = get_lexical_index("auto", conn=self.conn, fts=self.fts)
         self.graph_store = get_graph_store("auto", conn=self.conn)
+        # Visual signature index (M1.1): a SEPARATE space; RAW (un-normalized)
+        # signatures scored by cosine. Reuses the SQLite VectorIndex on a different
+        # table so there is one visual vector index, not a second ad-hoc cosine.
+        self.visual_index = get_vector_index(
+            "auto", conn=self.conn, table="visual_vectors", space="visual_sig",
+            normalize_vectors=False,
+        )
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -167,6 +174,15 @@ class LoomStore:
             self.conn.execute("ALTER TABLE speakers ADD COLUMN canonical_id TEXT")
         except sqlite3.OperationalError:
             pass  # column already exists (fresh store / already migrated)
+        # M1.1: space-tag vector tables (idempotent; backfill old rows).
+        for tbl, default_space in (("vectors", "text"), ("visual_vectors", "visual_sig")):
+            try:
+                self.conn.execute(f"ALTER TABLE {tbl} ADD COLUMN space TEXT")
+            except sqlite3.OperationalError:
+                pass  # column already exists
+            self.conn.execute(
+                f"UPDATE {tbl} SET space = ? WHERE space IS NULL", (default_space,)
+            )
         if self.fts:
             self.conn.execute(
                 "CREATE VIRTUAL TABLE IF NOT EXISTS moments_fts "
@@ -325,10 +341,7 @@ class LoomStore:
         if embedding is not None:
             self.vector_index.add(moment.moment_id, embedding)
         if visual_embedding is not None:
-            self.conn.execute(
-                "INSERT OR REPLACE INTO visual_vectors (moment_id, dim, vec) VALUES (?, ?, ?)",
-                (moment.moment_id, len(visual_embedding), pack_floats(visual_embedding)),
-            )
+            self.visual_index.add(moment.moment_id, visual_embedding)  # raw, space='visual_sig'
         self.conn.commit()
 
     def get_visual_vector(self, moment_id: str) -> Optional[List[float]]:
@@ -607,6 +620,7 @@ class LoomStore:
     def vector_search(
         self, query_vec: Sequence[float], top_k: int = 20, *,
         video_id: Optional[str] = None, query_text: Optional[str] = None,
+        space: str = "text",
     ) -> List[Tuple[str, float]]:
         # The FTS candidate prefilter (M0.2 W4) is opt-in: pass query_text to the
         # index ONLY when the flag is on, so the default free path scores all
@@ -614,7 +628,15 @@ class LoomStore:
         if not self.config.settings.vector_prefilter_fts:
             query_text = None
         return self.vector_index.search(query_vec, top_k, video_id=video_id,
-                                        query_text=query_text)
+                                        query_text=query_text, space=space)
+
+    def visual_search(
+        self, query_vec: Sequence[float], top_k: int = 20, *,
+        video_id: Optional[str] = None,
+    ) -> List[Tuple[str, float]]:
+        """Rank moments by their RAW visual signature (M1.1, space='visual_sig')."""
+        return self.visual_index.search(query_vec, top_k, video_id=video_id,
+                                        space="visual_sig")
 
     # -- stats -------------------------------------------------------------
 

@@ -13,8 +13,9 @@ import json
 import sqlite3
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from ...errors import VectorSpaceError
 from ...util import tokenize
-from ...vectormath import dot, norm, normalize, pack_floats, unpack_floats
+from ...vectormath import cosine, dot, norm, normalize, pack_floats, unpack_floats
 from .base import GraphStore, LexicalIndex, VectorIndex
 
 
@@ -35,19 +36,30 @@ def _row_to_edge(r: sqlite3.Row) -> Dict:
 
 
 class SqliteVectorIndex(VectorIndex):
+    """A single embedding space backed by one BLOB table.
+
+    The text index (``vectors``, space ``text``) stores unit-normalized vectors and
+    scores by dot product. The visual index (``visual_vectors``, space
+    ``visual_sig``) stores RAW signatures and scores by cosine (scale-invariant) —
+    visual signatures are a different space and must NOT be normalized. A search
+    requesting a different ``space`` than the index serves raises VectorSpaceError.
+    """
+
     name = "sqlite"
 
-    def __init__(self, conn: sqlite3.Connection) -> None:
+    def __init__(self, conn: sqlite3.Connection, *, table: str = "vectors",
+                 space: str = "text", normalize_vectors: bool = True) -> None:
         self.conn = conn
+        self.table = table
+        self.space = space
+        self.normalize_vectors = normalize_vectors
 
     def add(self, moment_id: str, embedding: Sequence[float]) -> None:
-        # Store unit-normalized so retrieval can score by dot product (== cosine
-        # for unit vectors) without recomputing norm() per row. Zero vectors are
-        # stored unchanged (normalize is a no-op on them).
-        vec = normalize(embedding)
+        vec = normalize(embedding) if self.normalize_vectors else list(embedding)
         self.conn.execute(
-            "INSERT OR REPLACE INTO vectors (moment_id, dim, vec) VALUES (?, ?, ?)",
-            (moment_id, len(vec), pack_floats(vec)),
+            f"INSERT OR REPLACE INTO {self.table} (moment_id, dim, vec, space) "
+            "VALUES (?, ?, ?, ?)",
+            (moment_id, len(vec), pack_floats(vec), self.space),
         )
 
     def search(
@@ -57,22 +69,32 @@ class SqliteVectorIndex(VectorIndex):
         *,
         video_id: Optional[str] = None,
         query_text: Optional[str] = None,
+        space: Optional[str] = None,
     ) -> List[Tuple[str, float]]:
+        if space is not None and space != self.space:
+            raise VectorSpaceError(
+                f"index serves space {self.space!r} but a {space!r}-space query was made"
+            )
         if not query_vec or norm(query_vec) == 0.0:
             return []
-        q = normalize(query_vec)  # cosine == dot once both sides are unit vectors
-        # Opt-in FTS candidate prefilter: when query_text is provided, score only
-        # the lexical-match candidate set (None == FTS unavailable -> score all).
         restrict = self._fts_candidate_ids(query_text) if query_text else None
         if video_id:
             rows = self.conn.execute(
-                "SELECT v.moment_id AS moment_id, v.vec AS vec FROM vectors v "
-                "JOIN moments m ON m.moment_id = v.moment_id WHERE m.video_id = ?",
-                (video_id,),
+                f"SELECT v.moment_id AS moment_id, v.vec AS vec FROM {self.table} v "
+                "JOIN moments m ON m.moment_id = v.moment_id "
+                "WHERE m.video_id = ? AND v.space = ?",
+                (video_id, self.space),
             ).fetchall()
         else:
-            rows = self.conn.execute("SELECT moment_id, vec FROM vectors").fetchall()
-        qlen = len(q)
+            rows = self.conn.execute(
+                f"SELECT moment_id, vec FROM {self.table} WHERE space = ?", (self.space,)
+            ).fetchall()
+        if self.normalize_vectors:
+            q = normalize(query_vec)  # cosine == dot once both sides are unit vectors
+            score = lambda vec: dot(q, vec)  # noqa: E731
+        else:
+            score = lambda vec: cosine(query_vec, vec)  # raw visual space  # noqa: E731
+        qlen = len(query_vec)
         scored: List[Tuple[str, float]] = []
         for r in rows:
             if restrict is not None and r["moment_id"] not in restrict:
@@ -80,7 +102,7 @@ class SqliteVectorIndex(VectorIndex):
             vec = unpack_floats(r["vec"])
             if len(vec) != qlen:
                 continue
-            scored.append((r["moment_id"], dot(q, vec)))  # no per-row norm() recompute
+            scored.append((r["moment_id"], score(vec)))
         scored.sort(key=lambda x: x[1], reverse=True)
         return scored[:top_k]
 
