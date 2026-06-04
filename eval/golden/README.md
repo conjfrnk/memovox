@@ -64,3 +64,18 @@ are stripped from the knowledge text.
   Note: `topic` is a **human-readable label** for the contradiction, NOT a
   verbatim transcript substring (unlike the substrings in `qa.json`, which are
   required to appear verbatim in the cleaned speech text).
+
+## Phase 4 additions (M1.2)
+
+- **`talk_c.en.vtt`** — a 3rd talk (speaker *Dr. Park*) that disputes talk_a's
+  Transformer-is-the-foundation claim → a real cross-video `CONTRADICTS` edge
+  (re-baselined into `contradictions.json`). The harness runs `mv.consolidate()`
+  after ingest so these edges + `topic_id` exist before retrieval scoring.
+- **`topics.json`** — gold topic clusters (logical moment ids that should share an
+  induced topic); the `topic_f1` regression guard reads the persisted `topic_id`.
+- **`gold_span`** (optional, per `qa.json` item) — a `[t0, t1]` the cited span is
+  scored against (interval IoU) for the unified `span_accuracy` metric; absent →
+  the gold moment's window is used.
+- **`talk_vis.en.vtt` / `visual.json`** (M1.1) — the on-screen-only visual fixture;
+  EXCLUDED from the scored corpus (`_NON_CORPUS_STEMS`), feeds only the ungated
+  `multimodal` block.
