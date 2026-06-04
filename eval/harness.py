@@ -579,20 +579,16 @@ def _synthesis_metrics(ing: _Ingested, nli, *, topic: str, threshold: float) -> 
 def _contradiction_pairs(ing: _Ingested, gold_contradictions: List[dict]):
     """Found + gold cross-video contradiction pairs as logical-id pairs.
 
-    Runs the free consolidation path (writes CONTRADICTS edges) then reads them
-    back, translating Claim src/dst -> store video_id -> logical id.
+    Reads the CONTRADICTS edges the free consolidation path wrote during
+    ``_ingest_golden`` (``mv.consolidate()``) and translates Claim src/dst ->
+    store video_id -> logical id. The edges read catches only
+    ``sqlite3.OperationalError`` (the "no such table" absence) and warns, so a
+    legitimately-missing graph degrades to 0.0 visibly rather than crashing.
 
-    Consolidation works today, so we do NOT swallow ``mv.contradictions()`` — a
-    failure there is a real regression and must propagate. The edges read catches
-    only ``sqlite3.OperationalError`` (the "no such table" absence) and warns, so
-    a legitimately-missing graph degrades to 0.0 visibly rather than crashing.
+    (We do NOT re-run ``mv.contradictions()`` here — consolidation already wrote
+    the edges in ``_ingest_golden``; re-running would double the NLI work.)
     """
     from memovox.loom.store import LoomStore
-
-    # Run consolidation so cross-corpus CONTRADICTS edges exist. Let any error
-    # propagate: this is a working metric today and silent failure would falsely
-    # pass the contradiction gate.
-    ing.mv.contradictions()
 
     found: List[Tuple[str, str]] = []
     with LoomStore(ing.mv.config) as store:
