@@ -953,6 +953,45 @@ def _assert_default_off_flags() -> None:
         )
 
 
+# Thin-fixture gating discipline (M-X W2). A metric may sit in _check_thresholds
+# only if it is an exact-equivalence INVARIANT (correctness, gates at any corpus
+# size) OR a STATISTICAL metric backed by >=3 golden items (else a hard gate on a
+# 2-3 item fixture is noise, not signal). Every gated key is declared here; the
+# meta-test (tests/test_eval.py) asserts _check_thresholds gates exactly this set,
+# so a future premature gate forces a deliberate choice.
+_MIN_FIXTURES_TO_GATE = 3
+_GATE_DECLARATIONS = {
+    "retrieval.hit_rate": {"kind": "statistical", "fixture": "qa.json"},
+    "groundedness": {"kind": "statistical", "fixture": "qa.json"},
+    # contradiction/synthesis ride the single seeded cross-corpus disagreement —
+    # grandfathered thin (pre-Phase-4 baseline); talk_c (M1.2) brings it to >=3.
+    "contradiction.f1": {"kind": "statistical", "fixture": "contradictions.json",
+                         "grandfathered_thin": True},
+    "synthesis.groundedness": {"kind": "statistical", "fixture": "contradictions.json",
+                               "grandfathered_thin": True},
+    "parity": {"kind": "exact"},
+    "incremental_equivalence": {"kind": "exact"},
+    "span_unchanged": {"kind": "exact"},
+}
+
+
+def _fixture_count(name: str) -> int:
+    path = GOLDEN_DIR / name
+    if not path.exists():
+        return 0
+    data = _load_json(path)
+    return len(data) if isinstance(data, list) else 0
+
+
+def _gate_eligible(decl: dict) -> bool:
+    """Whether a metric may be hard-gated under the thin-fixture discipline."""
+    if decl.get("kind") == "exact":
+        return True  # exact-equivalence invariant — corpus-size independent
+    if decl.get("grandfathered_thin"):
+        return True  # pre-existing baseline, accepted as thin
+    return _fixture_count(decl.get("fixture", "")) >= _MIN_FIXTURES_TO_GATE
+
+
 def _check_thresholds(report: dict) -> List[str]:
     failures: List[str] = []
     hr = report["retrieval"]["hit_rate"]

@@ -467,6 +467,44 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         self.assertTrue(syn["contradiction_surfaced"])
 
 
+class TestThinFixtureDiscipline(unittest.TestCase):
+    """M-X W2: a metric may be gated only when it is an exact-equivalence invariant
+    OR backed by >=3 golden items (else it flakes on a thin corpus). A premature
+    gate (new statistical metric, <3 fixtures, not grandfathered) must be caught."""
+
+    def test_no_gate_is_undeclared(self):
+        # Every key _check_thresholds actually gates must be declared, so a NEW gate
+        # cannot be added without a deliberate thin-fixture choice.
+        from eval.harness import _GATE_DECLARATIONS, _check_thresholds
+
+        all_failing = {
+            "retrieval": {"hit_rate": 0.0}, "groundedness": 0.0,
+            "contradiction": {"f1": 0.0}, "synthesis": {"groundedness": 0.0},
+            "parity": {"score": 0.0}, "incremental_equivalence": 0.0,
+            "span_unchanged": {"score": 0.0},
+        }
+        failures = _check_thresholds(all_failing)
+        gated = {f.split()[0] for f in failures}
+        self.assertEqual(gated, set(_GATE_DECLARATIONS),
+                         "a gate in _check_thresholds is undeclared (or vice versa)")
+
+    def test_all_current_gates_are_eligible(self):
+        from eval.harness import _GATE_DECLARATIONS, _gate_eligible
+
+        for metric, decl in _GATE_DECLARATIONS.items():
+            self.assertTrue(_gate_eligible(decl),
+                            f"{metric} is gated but not eligible (thin fixture, not exact/grandfathered)")
+
+    def test_premature_statistical_gate_is_flagged(self):
+        from eval.harness import _gate_eligible
+
+        # a brand-new statistical metric backed by a non-existent (0-item) fixture
+        # is NOT gate-eligible — the guard bites.
+        self.assertFalse(_gate_eligible({"kind": "statistical", "fixture": "does_not_exist.json"}))
+        # exact-equivalence invariants are always eligible regardless of corpus size
+        self.assertTrue(_gate_eligible({"kind": "exact"}))
+
+
 class TestParityHelper(unittest.TestCase):
     def test_parity_detects_reordering(self):
         from eval.harness import parity
