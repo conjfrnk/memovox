@@ -7,7 +7,7 @@ unchanged source is a no-op; re-ingesting changed content replaces it cleanly.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional
 
 from . import assay, escapement, stentor, tessera
@@ -43,6 +43,7 @@ class IngestReport:
     n_visual_events: int = 0
     vlm_backend: str = ""
     ocr_backend: str = ""
+    metrics: dict = field(default_factory=dict)  # M0.1 per-stage trace (volatile wall_ms)
 
     def to_dict(self) -> dict:
         return dict(self.__dict__)
@@ -133,7 +134,8 @@ def ingest(
     store = store or LoomStore(config)
     try:
         if not force and store.is_unchanged(video):
-            return IngestReport(video_id, video.title, "unchanged", asr_backend=st.asr_backend)
+            return IngestReport(video_id, video.title, "unchanged",
+                                asr_backend=st.asr_backend, metrics=tracer.to_dict())
 
         existed = store.get_video(video_id) is not None
         if existed:
@@ -252,6 +254,17 @@ def ingest(
             (config.digests_dir / f"{slugify(video_id)}.md").write_text(digest, encoding="utf-8")
             _sp.add_counter("bytes", len(digest))
 
+        # --- persist per-stage metrics + bump the cumulative ledger ------
+        store.record_stage_metrics(video_id, tracer)
+        store.bump_ledger({
+            "videos": 1,
+            "moments": len(moments),
+            "claims_committed": committed,
+            "claims_unsupported": unsupported,
+            "visual_events": len(visual.events),
+            "frames": visual.n_frames,
+        })
+
         return IngestReport(
             video_id=video_id,
             title=video.title,
@@ -267,6 +280,7 @@ def ingest(
             n_visual_events=len(visual.events),
             vlm_backend=visual.vlm_backend,
             ocr_backend=visual.ocr_backend,
+            metrics=tracer.to_dict(),
         )
     finally:
         if owns_store:

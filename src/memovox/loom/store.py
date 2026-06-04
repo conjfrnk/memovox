@@ -18,6 +18,7 @@ import sqlite3
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from ..config import Config
+from ..observe import Tracer
 from ..util import now_iso, tokenize
 from ..vectormath import cosine, norm, pack_floats, unpack_floats
 from .models import (
@@ -31,7 +32,7 @@ from .models import (
     Video,
 )
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -100,6 +101,16 @@ CREATE TABLE IF NOT EXISTS edges (
     UNIQUE (src, rel, dst, video_id)
 );
 
+CREATE TABLE IF NOT EXISTS stage_metrics (
+    video_id TEXT NOT NULL REFERENCES videos(video_id) ON DELETE CASCADE,
+    stage TEXT, wall_ms REAL, counters TEXT, caps TEXT, recorded_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS metrics_ledger (
+    metric TEXT PRIMARY KEY, value REAL
+);
+
+CREATE INDEX IF NOT EXISTS idx_stage_metrics_video ON stage_metrics(video_id);
 CREATE INDEX IF NOT EXISTS idx_moments_video ON moments(video_id);
 CREATE INDEX IF NOT EXISTS idx_claims_video ON claims(video_id);
 CREATE INDEX IF NOT EXISTS idx_claims_moment ON claims(moment_id);
@@ -175,6 +186,55 @@ class LoomStore:
     def get_meta(self, key: str, default: Optional[str] = None) -> Optional[str]:
         row = self.conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
         return row["value"] if row else default
+
+    # -- observability metrics (M0.1) --------------------------------------
+
+    def record_stage_metrics(self, video_id: str, tracer: Tracer) -> None:
+        """Persist one row per traced stage for ``video_id`` (idempotent: replaces).
+
+        ``wall_ms`` is volatile (machine-dependent) and never gated; counters/caps
+        are deterministic. Old rows for the video are cleared first so re-ingest
+        leaves exactly one current trace.
+        """
+        self.conn.execute("DELETE FROM stage_metrics WHERE video_id = ?", (video_id,))
+        recorded = now_iso()
+        for sp in tracer.spans:
+            self.conn.execute(
+                "INSERT INTO stage_metrics (video_id, stage, wall_ms, counters, caps, recorded_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (video_id, sp.stage, sp.wall_ms,
+                 json.dumps(sp.counters, sort_keys=True),
+                 json.dumps(sp.caps, sort_keys=True), recorded),
+            )
+        self.conn.commit()
+
+    def stage_metrics(self, video_id: str) -> List[dict]:
+        rows = self.conn.execute(
+            "SELECT stage, wall_ms, counters, caps, recorded_at FROM stage_metrics "
+            "WHERE video_id = ? ORDER BY rowid", (video_id,)
+        ).fetchall()
+        return [
+            {"stage": r["stage"], "wall_ms": r["wall_ms"],
+             "counters": json.loads(r["counters"]), "caps": json.loads(r["caps"]),
+             "recorded_at": r["recorded_at"]}
+            for r in rows
+        ]
+
+    def bump_ledger(self, updates: Dict[str, float]) -> None:
+        """Accumulate cumulative, monotonic lifetime counters (conflict-safe upsert)."""
+        for metric, delta in updates.items():
+            self.conn.execute(
+                "INSERT INTO metrics_ledger (metric, value) VALUES (?, ?) "
+                "ON CONFLICT(metric) DO UPDATE SET value = value + excluded.value",
+                (metric, float(delta)),
+            )
+        self.conn.commit()
+
+    def metrics_ledger(self) -> Dict[str, float]:
+        rows = self.conn.execute(
+            "SELECT metric, value FROM metrics_ledger ORDER BY metric"
+        ).fetchall()
+        return {r["metric"]: r["value"] for r in rows}
 
     # -- videos ------------------------------------------------------------
 

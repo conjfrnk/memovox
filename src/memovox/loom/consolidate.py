@@ -11,7 +11,7 @@ polarity flips ("X holds" vs "X does not hold") for free.
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional
 
 from ..backends.base import NLIBackend
@@ -206,6 +206,7 @@ class ConsolidationReport:
     supports: int = 0
     consensus_clusters: int = 0
     superseded: int = 0
+    metrics: dict = field(default_factory=dict)  # M0.1 per-stage trace (volatile wall_ms)
 
     def to_dict(self) -> dict:
         return dict(self.__dict__)
@@ -258,4 +259,5 @@ def consolidate(
     return ConsolidationReport(
         topics=len(topics), contradictions=contradictions, supports=supports,
         consensus_clusters=consensus_clusters, superseded=superseded,
+        metrics=tracer.to_dict(),
     )

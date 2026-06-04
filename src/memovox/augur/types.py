@@ -30,6 +30,7 @@ class Answer:
     citations: List[Citation] = field(default_factory=list)
     strategy: str = "hybrid"
     low_evidence: bool = False
+    metrics: dict = field(default_factory=dict)  # M0.1 per-stage trace (volatile wall_ms)
 
     def to_dict(self) -> dict:
         return {
@@ -37,4 +38,5 @@ class Answer:
             "strategy": self.strategy,
             "low_evidence": self.low_evidence,
             "citations": [c.to_dict() for c in self.citations],
+            "metrics": self.metrics,
         }

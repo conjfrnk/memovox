@@ -94,7 +94,8 @@ def ask(
         )
         _sp.add_counter("results", len(fused))
     if not fused:
-        return Answer(text=_LOW_EVIDENCE_MSG, citations=[], strategy=qp.strategy, low_evidence=True)
+        return Answer(text=_LOW_EVIDENCE_MSG, citations=[], strategy=qp.strategy,
+                      low_evidence=True, metrics=tracer.to_dict())
 
     with tracer.span("synthesize") as _sp:
         moment_ids = [mid for mid, _ in fused]
@@ -156,4 +157,5 @@ def ask(
         if low_evidence:
             text = _LOW_EVIDENCE_MSG
         _sp.add_counter("citations", len(citations))
-    return Answer(text=text, citations=citations, strategy=qp.strategy, low_evidence=low_evidence)
+    return Answer(text=text, citations=citations, strategy=qp.strategy,
+                  low_evidence=low_evidence, metrics=tracer.to_dict())
