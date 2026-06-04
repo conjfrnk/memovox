@@ -16,7 +16,7 @@ from ..loom.models import make_provenance
 from ..loom.store import LoomStore
 from ..observe import Tracer
 from ..util import split_sentences, tokenize, truncate
-from .planner import decompose
+from .planner import decompose, llm_decompose
 from .retrieve import retrieve
 from .types import Answer, Citation
 
@@ -106,7 +106,14 @@ def ask(
 ) -> Answer:
     settings = settings or Settings()
     tracer = tracer or Tracer("ask", otel_enabled=settings.otel_enabled)
-    qp = decompose(query)  # multi-part decomposition (single-clause => one verbatim sub-query)
+    # Decompose the query (single-clause => one verbatim sub-query). The LLM
+    # decomposer is opt-in (planner_agentic + a generative LLM) with a guaranteed
+    # deterministic fallback; the free path is always the deterministic decompose.
+    if getattr(settings, "planner_agentic", False) and llm is not None and \
+            getattr(llm, "is_generative", False):
+        qp = llm_decompose(llm, query)
+    else:
+        qp = decompose(query)
     multi = len(qp.subqueries) > 1
     plan_dicts = [sq.to_dict() for sq in qp.subqueries]
     # The VISUAL leg (M1.1) turns on when the plan routes to visual OR the caller

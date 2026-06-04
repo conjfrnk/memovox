@@ -608,6 +608,11 @@ class TestFrozenSettingsSnapshot(unittest.TestCase):
         for flag in ("asr_device", "asr_compute_type", "asr_allow_cpu"):
             self.assertIn(flag, _DEFAULT_OFF_FLAGS)
 
+    def test_snapshot_pins_planner_agentic(self):
+        from eval.harness import _DEFAULT_OFF_FLAGS
+        self.assertIn("planner_agentic", _DEFAULT_OFF_FLAGS)
+        self.assertFalse(_DEFAULT_OFF_FLAGS["planner_agentic"])
+
     def test_snapshot_pins_feature_toggles(self):
         from eval.harness import _DEFAULT_OFF_FLAGS
 

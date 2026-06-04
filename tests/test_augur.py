@@ -56,6 +56,32 @@ class TestDecompose(unittest.TestCase):
         self.assertEqual(qp.subqueries[0].strategy, "temporal")
         self.assertEqual(qp.subqueries[1].strategy, "contradiction")
 
+    def test_llm_decomposer_falls_back_on_error(self):
+        from memovox.augur.planner import llm_decompose
+
+        class _BoomLLM:
+            is_generative = True
+
+            def complete(self, *a, **k):
+                raise RuntimeError("llm down")
+
+        # any error -> the deterministic decomposition, no exception escapes
+        qp = llm_decompose(_BoomLLM(), "What is the chunk size, and which model reused Chinchilla?")
+        self.assertEqual(len(qp.subqueries), 2)
+
+    def test_llm_decomposer_parses_json_array(self):
+        from memovox.augur.planner import llm_decompose
+
+        class _JsonLLM:
+            is_generative = True
+
+            def complete(self, *a, **k):
+                return 'Here you go: ["first sub question", "second sub question"]'
+
+        qp = llm_decompose(_JsonLLM(), "anything")
+        self.assertEqual([sq.text for sq in qp.subqueries],
+                         ["first sub question", "second sub question"])
+
 
 class TestRRF(unittest.TestCase):
     def test_fusion_prefers_consensus(self):

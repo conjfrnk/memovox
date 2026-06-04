@@ -95,3 +95,32 @@ def decompose(query: str) -> QueryPlan:
     return QueryPlan(strategy=first.strategy, modality=first.modality,
                      contradiction=first.contradiction, temporal=first.temporal,
                      subqueries=subs)
+
+
+_DECOMPOSE_SYSTEM = (
+    "Split the user's question into its minimal independent sub-questions. Return "
+    "ONLY a JSON array of strings (one per sub-question); a single-part question "
+    "returns a 1-element array with the question verbatim."
+)
+
+
+def llm_decompose(llm, query: str) -> QueryPlan:
+    """LLM query decomposer (opt-in, spec §5) with a guaranteed DETERMINISTIC
+    fallback: any transport/parse error or empty result returns ``decompose(query)``
+    so the planner can never fail or become non-deterministic on the free path."""
+    import json
+
+    try:
+        raw = llm.complete(f"QUESTION: {query}", system=_DECOMPOSE_SYSTEM, temperature=0.0)
+        start, end = raw.find("["), raw.rfind("]")
+        parts = json.loads(raw[start:end + 1]) if 0 <= start < end else []
+        parts = [str(p).strip() for p in parts if str(p).strip()]
+        if not parts:
+            return decompose(query)
+        subs = [_classify(p) for p in parts]
+        first = subs[0]
+        return QueryPlan(strategy=first.strategy, modality=first.modality,
+                         contradiction=first.contradiction, temporal=first.temporal,
+                         subqueries=subs)
+    except Exception:
+        return decompose(query)

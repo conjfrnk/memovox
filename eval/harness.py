@@ -89,6 +89,7 @@ _DEFAULT_OFF_FLAGS = dict(
     asr_compute_type="default",
     asr_allow_cpu=False,
     captions_as_prior=True,      # M0.3: §9 cost lever default pinned
+    planner_agentic=False,       # M2.2: LLM query decomposer OFF on the gate
 )
 
 # Settings fields deliberately NOT pinned (M-X W1): backend selectors (pinned by
@@ -121,7 +122,7 @@ EVAL_SETTINGS_SNAPSHOT = {
     "keyframe_min_gain": 0.12, "keyframe_per_scene_cap": 8, "llm_backend": "auto",
     "moment_gap_sec": 2.5, "moment_max_sec": 90.0, "moment_min_sec": 8.0,
     "nli_backend": "auto", "ocr_backend": "auto", "otel_enabled": False,
-    "rerank_backend": "auto", "rrf_k": 60,
+    "planner_agentic": False, "rerank_backend": "auto", "rrf_k": 60,
     "salience_floor": 0.0, "scene_threshold": 0.3, "top_k": 8, "topic_min_size": 1,
     "topic_similarity": 0.5, "vector_prefilter_fts": False, "visual_embed_backend": "signature",
     "visual_enabled": True, "visual_retrieval": False, "visual_workers": 1,
