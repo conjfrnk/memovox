@@ -360,6 +360,15 @@ class TestThresholdGates(unittest.TestCase):
         self.assertTrue(any("entity_f1" in f for f in fails))
         self.assertTrue(any("der" in f for f in fails))
 
+    def test_incremental_gate_enforced(self):
+        # M3.2: batch==incremental + idempotent re-sync gated (exact).
+        rpt = self._report(1.0, 1.0, 1.0)
+        rpt["incremental"] = {"equivalent": True, "idempotent_resync": True}
+        self.assertFalse(any("incremental.eq" in f or "incremental.idem" in f
+                             for f in _check_thresholds(rpt)))
+        rpt["incremental"] = {"equivalent": False, "idempotent_resync": True}
+        self.assertTrue(any("incremental.equivalent" in f for f in _check_thresholds(rpt)))
+
     def test_decay_gate_enforced(self):
         # M3.1: decay structural invariants gated (exact). True passes, False trips.
         rpt = self._report(1.0, 1.0, 1.0)
@@ -479,6 +488,12 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         self.assertEqual(p["subquery_recall"], 1.0)
         self.assertFalse(any("plan" in f for f in _check_thresholds(self.report)))
 
+    def test_incremental_block_equivalent(self):
+        # M3.2: incremental-ingest produces the same persisted graph as batch.
+        inc = self.report["incremental"]
+        self.assertTrue(inc["equivalent"])
+        self.assertTrue(inc["idempotent_resync"])
+
     def test_clip_block_coverage_and_invariants(self):
         # M2.3 W6: clip coverage >= 0.3 over the golden clip items, invariants hold.
         c = self.report["clip"]
@@ -582,6 +597,7 @@ class TestThinFixtureDiscipline(unittest.TestCase):
             "contradiction": {"f1": 0.0}, "synthesis": {"groundedness": 0.0},
             "entity_f1": 0.0, "der": 0.0, "clip": {"coverage": 0.0},
             "decay": {"recent_first_ordering": False, "superseded_excluded": False},
+            "incremental": {"equivalent": False, "idempotent_resync": False},
             "parity": {"score": 0.0}, "incremental_equivalence": 0.0,
             "span_unchanged": {"score": 0.0},
         }

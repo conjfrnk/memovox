@@ -1069,6 +1069,58 @@ def clip_coverage(found_clips, gold_clip) -> float:
     return max((span_iou(c, tuple(gold_clip)) for c in found_clips), default=0.0)
 
 
+def _corpus_signature(store) -> dict:
+    """A persisted-graph fingerprint (committed claims, entities, CONTRADICTS edges,
+    canonical speakers) — equal fingerprints ⇒ equal gated report. M3.2."""
+    claims = sorted(c.claim_id for c in store.list_claims(status="committed"))
+    entities = sorted(r["entity_id"] for r in store.conn.execute("SELECT entity_id FROM entities"))
+    edges = sorted((e["src"], e["dst"]) for e in store.edges(rel="CONTRADICTS"))
+    speakers = sorted(
+        (r["canonical_id"] or r["speaker_id"])
+        for r in store.conn.execute("SELECT speaker_id, canonical_id FROM speakers")
+    )
+    return {"claims": claims, "entities": entities, "contradicts": edges, "speakers": speakers}
+
+
+def _build_corpus(golden_dir: Path, store_dir: str, *, deferred: bool):
+    """Ingest the golden corpus either as a batch (resolve per video, today's path)
+    or incrementally (resolve_corpus=False per video + ONE resolve_corpus_pass), then
+    one consolidation. Returns (signature, idempotent_reingest). M3.2."""
+    from memovox import pipeline
+    from memovox.loom.store import LoomStore
+    from memovox.sdk import Memovox
+
+    mv = Memovox(store=store_dir, **_FREE_BACKENDS)
+    vtts = sorted(v for v in golden_dir.glob("*.en.vtt")
+                  if v.name.split(".")[0] not in _NON_CORPUS_STEMS)
+    for vtt in vtts:
+        mv.ingest(str(vtt), resolve_corpus=not deferred)
+    if deferred:
+        with LoomStore(mv.config) as store:
+            pipeline.resolve_corpus_pass(mv.config, store)
+    mv.consolidate()
+    with LoomStore(mv.config) as store:
+        sig = _corpus_signature(store)
+    before = len(sig["claims"])
+    for vtt in vtts:  # idempotent re-ingest: a 2nd pass commits no new claims
+        mv.ingest(str(vtt), resolve_corpus=not deferred)
+    with LoomStore(mv.config) as store:
+        after = len(_corpus_signature(store)["claims"])
+    return sig, (before == after)
+
+
+def _incremental_metrics(golden_dir: Path) -> dict:
+    """UNGATED→GATED (M3.2): batch-ingest and incremental-ingest (deferred resolve)
+    produce the SAME persisted graph (⇒ same gated report), and a re-ingest of seen
+    videos commits nothing (idempotent re-sync)."""
+    with tempfile.TemporaryDirectory(prefix="mv-batch-") as b, \
+            tempfile.TemporaryDirectory(prefix="mv-incr-") as i:
+        batch_sig, batch_idem = _build_corpus(golden_dir, b, deferred=False)
+        incr_sig, incr_idem = _build_corpus(golden_dir, i, deferred=True)
+    return {"equivalent": batch_sig == incr_sig,
+            "idempotent_resync": bool(batch_idem and incr_idem)}
+
+
 def _decay_metrics() -> dict:
     """UNGATED (M3.1): decay behaviors on a SELF-CONTAINED dated fixture (kept out
     of the scored golden corpus so it cannot perturb the default gates). Two
@@ -1259,6 +1311,7 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
     plan = _plan_metrics(ing, qa)
     clip = _clip_metrics(ing)
     decay = _decay_metrics()
+    incremental = _incremental_metrics(GOLDEN_DIR)
 
     return {
         "retrieval": {
@@ -1289,6 +1342,7 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
         "plan": plan,                                # M2.2 agentic subquery_recall (UNGATED)
         "clip": clip,                                # M2.3 clip coverage + invariants
         "decay": decay,                              # M3.1 recency ordering + supersede demotion (GATED: exact)
+        "incremental": incremental,                  # M3.2 batch==incremental + idempotent re-sync
     }
 
 
@@ -1363,6 +1417,9 @@ _GATE_DECLARATIONS = {
     # M3.1: deterministic structural invariants on a synthetic dated fixture (exact).
     "decay.recent_first_ordering": {"kind": "exact"},
     "decay.superseded_excluded": {"kind": "exact"},
+    # M3.2: ingest-deferral equivalence + idempotent re-sync (exact invariants).
+    "incremental.equivalent": {"kind": "exact"},
+    "incremental.idempotent_resync": {"kind": "exact"},
     "parity": {"kind": "exact"},
     "incremental_equivalence": {"kind": "exact"},
     "span_unchanged": {"kind": "exact"},
@@ -1421,6 +1478,12 @@ def _check_thresholds(report: dict) -> List[str]:
         failures.append("decay.recent_first_ordering is False")
     if "superseded_excluded" in decay and not decay["superseded_excluded"]:
         failures.append("decay.superseded_excluded is False")
+    # M3.2: incremental-ingest equivalence + idempotent re-sync (exact invariants).
+    incr = report.get("incremental") or {}
+    if "equivalent" in incr and not incr["equivalent"]:
+        failures.append("incremental.equivalent is False (batch != incremental)")
+    if "idempotent_resync" in incr and not incr["idempotent_resync"]:
+        failures.append("incremental.idempotent_resync is False")
     # M0.2 exact-equivalence invariants — gated at 1.0 (correctness, not statistics).
     pscore = report.get("parity", {}).get("score", 1.0)
     if pscore < 1.0:
