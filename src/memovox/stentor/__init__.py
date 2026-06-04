@@ -11,7 +11,7 @@ from typing import List, Optional
 
 from ..backends.base import Segment
 from ..config import Config
-from .acquire import SourceMeta, acquire
+from .acquire import EnumeratedEntry, SourceMeta, acquire, enumerate_source
 from .asr import run_asr
 from .diarize import assign_speakers, speaker_names
 
@@ -59,4 +59,5 @@ def run(
     )
 
 
-__all__ = ["StentorResult", "run", "acquire", "run_asr", "SourceMeta"]
+__all__ = ["StentorResult", "run", "acquire", "run_asr", "SourceMeta",
+           "EnumeratedEntry", "enumerate_source"]

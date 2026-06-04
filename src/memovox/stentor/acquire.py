@@ -38,6 +38,54 @@ class SourceMeta:
     extra: dict = field(default_factory=dict)
 
 
+@dataclass
+class EnumeratedEntry:
+    """One child of a channel/playlist (M3.2) — metadata only, no media."""
+
+    video_id: str
+    url: str
+    title: Optional[str] = None
+
+
+def enumerate_source(config: Config, url: str) -> list:
+    """Expand a channel/playlist URL into its child videos via yt-dlp
+    ``--flat-playlist`` (metadata only — NEVER downloads). A bare video URL
+    enumerates to a single entry, so sync treats all sources uniformly. Raises
+    :class:`AcquisitionError` (with an install hint) when yt-dlp is absent."""
+    from ..util import make_video_id, youtube_id
+
+    if not shutil.which("yt-dlp"):
+        raise AcquisitionError(
+            "Subscription enumeration requires yt-dlp, which was not found.\n"
+            "Install it with: pip install 'memovox[acquire]'  (or `pip install yt-dlp`)."
+        )
+    cmd = ["yt-dlp", "--flat-playlist", "--dump-single-json", "--no-warnings", url]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise AcquisitionError(f"yt-dlp enumeration failed: {proc.stderr.strip()[:500]}")
+    try:
+        data = json.loads(proc.stdout)
+    except ValueError as exc:
+        raise AcquisitionError(f"yt-dlp returned unparseable JSON: {exc}") from exc
+
+    raw_entries = data.get("entries")
+    raw_entries = raw_entries if raw_entries is not None else [data]  # single video
+    out = []
+    for entry in raw_entries:
+        if not entry:
+            continue
+        eid = entry.get("id")
+        eurl = entry.get("url") or entry.get("webpage_url")
+        # A flat-playlist "url" is sometimes a bare video id -> build a watch URL.
+        if eid and (not eurl or not eurl.startswith("http")):
+            eurl = f"https://youtu.be/{eid}"
+        if not eurl:
+            continue
+        video_id = f"yt:{eid}" if eid else make_video_id(eurl)
+        out.append(EnumeratedEntry(video_id=video_id, url=eurl, title=entry.get("title")))
+    return out
+
+
 def _is_url(source: str) -> bool:
     return source.startswith(("http://", "https://"))
 
