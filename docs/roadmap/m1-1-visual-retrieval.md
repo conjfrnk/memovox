@@ -1,6 +1,6 @@
 # M1.1 — Visual retrieval leg + named visual defaults
 
-> **Wave:** 1 · **Effort:** L · **Status:** not started
+> **Wave:** 1 · **Effort:** L · **Status:** ✅ done (branch `phase4-visual-retrieval`, 7/7 workstreams + review fixes; 372 pass / 2 skip; 7 gates green + ungated multimodal lift 0.0→1.0). Open questions resolved: modality=routing; signature single-vector now (ColPali deferred to M3.4); heuristic classifier thresholds; visual leg OFF unless planner-routed AND visual_retrieval=True.
 > **Depends on:** M0.2 (storage-backend interface — `visual_search` is wrapped once, behind the `VectorIndex` ABC) · **Owns (single-owner concerns):** the visual golden fixtures + the `visual_result` injection seam on `pipeline.ingest` (M1.2 consumes both — do NOT duplicate) · **Blocks:** M1.2
 > **Spec:** §4.3 (Stage 3 visual track / Stage 6 triple write), §5 (hybrid retrieval + planner), §7 (named backends), §9 (throughput — the visual track is THE bottleneck), §11 (Phase 4: ColPali visual retrieval), §12 (ColPali storage cost; ToS posture)
 

@@ -5,7 +5,7 @@ Update a row when you start/finish a track; tick the detailed workstream checkli
 inside each track doc (its *Definition of done*) as you go. Keep this file and each
 doc's `Status:` line in sync.
 
-_Last updated: 2026-06-04 — Wave 0 COMPLETE (M0.1+M0.2+M0.3+M-X) merged to main (353 pass / 2 skip; 7 gates green)._
+_Last updated: 2026-06-04 — Wave 0 + M1.1 done & merged (372 pass / 2 skip; 7 gates + ungated multimodal/span_accuracy)._
 
 ## Baseline (keep green at every commit)
 
@@ -27,7 +27,7 @@ _Last updated: 2026-06-04 — Wave 0 COMPLETE (M0.1+M0.2+M0.3+M-X) merged to mai
 
 | Track | Status | Branch | W done | Notes |
 |-------|:------:|--------|:------:|-------|
-| M1.1 Visual retrieval + named defaults | ⬜ | — | 0/7 | owns visual fixtures + `visual_result` seam |
+| M1.1 Visual retrieval + named defaults | ✅ | phase4-visual-retrieval | 7/7 | merged; owns visual fixtures + `visual_result` seam |
 | M1.2 Eval expansion (talk_c, span/citation, gates) | ⬜ | — | 0/9 | owns the talk_c re-baseline (serialize) |
 
 ## Wave 2 — answer pipeline (build in this order; all touch `augur/answer.ask`)
