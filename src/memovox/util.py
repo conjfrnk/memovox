@@ -137,6 +137,20 @@ def deep_link(source_url: Optional[str], t_start: Optional[float]) -> Optional[s
     return f"{source_url}{sep}t={t}"
 
 
+def deep_link_range(source_url: Optional[str], t_start: Optional[float],
+                    t_end: Optional[float]) -> Optional[str]:
+    """A RANGED deep link (M2.3). YouTube → ``watch?v=<id>&start=<t0>&end=<t1>``
+    (integer seconds, the only host that honors the range); any other source has no
+    standard ranged fragment, so fall back to the start-only :func:`deep_link`."""
+    if not source_url:
+        return None
+    yt = youtube_id(source_url)
+    if yt:
+        return (f"https://www.youtube.com/watch?v={yt}"
+                f"&start={int(t_start or 0)}&end={int(t_end or 0)}")
+    return deep_link(source_url, t_start)
+
+
 # --------------------------------------------------------------------------- #
 # text
 # --------------------------------------------------------------------------- #

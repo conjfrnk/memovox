@@ -155,6 +155,7 @@ class MetricsPersistenceTest(unittest.TestCase):
         # the new keys are purely additive — removing them leaves today's exact shape
         d.pop("metrics")
         d.pop("plan")  # M2.2 additive plan key
+        d.pop("clips")  # M2.3 additive clips key
         self.assertEqual(set(d), {"text", "strategy", "low_evidence", "citations"})
 
     def test_consolidation_report_carries_metrics(self):
