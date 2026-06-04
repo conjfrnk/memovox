@@ -1070,16 +1070,21 @@ def clip_coverage(found_clips, gold_clip) -> float:
 
 
 def _corpus_signature(store) -> dict:
-    """A persisted-graph fingerprint (committed claims, entities, CONTRADICTS edges,
-    canonical speakers) — equal fingerprints ⇒ equal gated report. M3.2."""
+    """A COMPREHENSIVE persisted-graph fingerprint (M3.2) — equal fingerprints ⇒ the
+    batch and incremental ingest paths produced the identical graph. Covers committed
+    claims, entities, canonical speakers, AND every discourse/provenance edge type
+    (not just CONTRADICTS), so a divergence in MENTIONS/ELABORATES/CORRECTS/SAME_AS
+    between the two paths makes the equivalence gate FAIL rather than false-pass."""
     claims = sorted(c.claim_id for c in store.list_claims(status="committed"))
     entities = sorted(r["entity_id"] for r in store.conn.execute("SELECT entity_id FROM entities"))
-    edges = sorted((e["src"], e["dst"]) for e in store.edges(rel="CONTRADICTS"))
     speakers = sorted(
         (r["canonical_id"] or r["speaker_id"])
         for r in store.conn.execute("SELECT speaker_id, canonical_id FROM speakers")
     )
-    return {"claims": claims, "entities": entities, "contradicts": edges, "speakers": speakers}
+    edges = {}
+    for rel in ("CONTRADICTS", "SUPPORTS", "MENTIONS", "ELABORATES", "CORRECTS", "SAME_AS"):
+        edges[rel] = sorted((e["src"], e["dst"], e.get("video_id")) for e in store.edges(rel=rel))
+    return {"claims": claims, "entities": entities, "speakers": speakers, "edges": edges}
 
 
 def _build_corpus(golden_dir: Path, store_dir: str, *, deferred: bool):

@@ -82,7 +82,9 @@ def enumerate_source(config: Config, url: str) -> list:
         # A flat-playlist "url" is sometimes a bare video id -> build a watch URL.
         if eid and (not eurl or not eurl.startswith("http")):
             eurl = f"https://youtu.be/{eid}"
-        if not eurl:
+        # Skip an entry with no id AND no real URL — a bare-id url without an id would
+        # otherwise mint an unstable vid:<hash> the cursor could never match.
+        if not eurl or (not eid and not eurl.startswith("http")):
             continue
         video_id = f"yt:{eid}" if eid else make_video_id(eurl)
         out.append(EnumeratedEntry(video_id=video_id, url=eurl, title=entry.get("title")))
