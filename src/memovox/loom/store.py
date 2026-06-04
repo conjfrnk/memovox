@@ -455,7 +455,12 @@ class LoomStore:
         Given ANY id in the chain, walk predecessors (claims whose ``superseded_by``
         points here) back to the head, then follow ``superseded_by`` forward to the
         end. Nothing is deleted — superseded versions are returned alongside the
-        live one. Empty if the claim doesn't exist."""
+        live one. Empty if the claim doesn't exist.
+
+        Assumes a LINEAR lineage (the ``supersede_claim`` 1:1 contract): the
+        backward walk takes one predecessor per step, so a branching
+        ``superseded_by`` (only reachable via corrupt/out-of-band writes) yields
+        one branch, not the union. The cycle guards keep it terminating regardless."""
         if not self.get_claim(claim_id):
             return []
         head, seen = claim_id, set()

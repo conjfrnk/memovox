@@ -106,8 +106,10 @@ def _apply_decay(store: LoomStore, fused, settings: Settings):
     """Recency re-weight + fully-superseded demotion (M3.1, decay path only)."""
     from ..loom.consensus import recency_weight
 
-    vids = {_video_of(mid) for mid, _ in fused}
-    dates = {v: (store.get_video(v).published_at if store.get_video(v) else None) for v in vids}
+    dates = {}
+    for v in {_video_of(mid) for mid, _ in fused}:
+        vobj = store.get_video(v)  # one lookup per video (not two)
+        dates[v] = vobj.published_at if vobj else None
     reference_date = max((d for d in dates.values() if d), default=None)
 
     reweighted = []

@@ -1288,7 +1288,7 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
         "rerank": rerank,                            # M2.1 rerank mrr/ndcg vs no-rerank (UNGATED)
         "plan": plan,                                # M2.2 agentic subquery_recall (UNGATED)
         "clip": clip,                                # M2.3 clip coverage + invariants
-        "decay": decay,                              # M3.1 recency ordering + supersede demotion (UNGATED)
+        "decay": decay,                              # M3.1 recency ordering + supersede demotion (GATED: exact)
     }
 
 
