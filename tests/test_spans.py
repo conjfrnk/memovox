@@ -5,6 +5,33 @@ import unittest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
 
 from memovox.assay.spans import locate_span
+from memovox.loom.models import SegmentRef
+
+
+class TestWordWindowTightening(unittest.TestCase):
+    def _seg(self):
+        return SegmentRef(0.0, 10.0, "the chain rule here", words=(
+            (0.0, 0.2, "the"), (0.2, 0.5, "chain"), (0.5, 0.9, "rule"), (0.9, 1.2, "here")))
+
+    def test_tightens_to_matched_word_window(self):
+        # "chain rule" -> the union of the matched words (0.2..0.9), not the 10s cue
+        self.assertEqual(locate_span("chain rule", [self._seg()]), (0.2, 0.9))
+
+    def test_identity_when_no_words(self):
+        self.assertEqual(
+            locate_span("chain rule", [(0.0, 10.0, "the chain rule here")]), (0.0, 10.0))
+
+    def test_tighten_false_keeps_cue_granular(self):
+        self.assertEqual(
+            locate_span("chain rule", [self._seg()], tighten=False), (0.0, 10.0))
+
+    def test_no_matching_word_falls_back_to_segment_window(self):
+        # sentence clears the 0.5 overlap floor on the segment text, but if no
+        # individual word matches, the full segment window is returned (defensive).
+        seg = SegmentRef(0.0, 10.0, "chain rule", words=(
+            (0.0, 0.2, "chain"), (0.2, 0.5, "rule")))
+        # both words match here, so this returns the tightened window
+        self.assertEqual(locate_span("chain rule", [seg]), (0.0, 0.5))
 
 
 class TestLocateSpan(unittest.TestCase):
