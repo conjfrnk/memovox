@@ -424,6 +424,19 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         self.assertIn("span_accuracy", self.report)
         self.assertIn("tightened_fraction", self.report["span_accuracy"])
 
+    def test_multimodal_block_present_and_shows_lift(self):
+        # M1.1 W7: UNGATED multimodal block — the VISUAL leg surfaces an on-screen-
+        # only moment that transcript-only retrieval misses (tri_modal >= transcript).
+        mm = self.report["multimodal"]
+        self.assertIn("transcript_only", mm)
+        self.assertIn("tri_modal", mm)
+        self.assertGreaterEqual(mm["tri_modal"], mm["transcript_only"])
+
+    def test_multimodal_is_ungated(self):
+        # discipline (a): the multimodal block never participates in --assert-thresholds.
+        failures = _check_thresholds(self.report)
+        self.assertFalse(any("multimodal" in f for f in failures))
+
     def test_observability_is_ungated(self):
         # discipline (a): observability never participates in --assert-thresholds.
         failures = _check_thresholds(self.report)

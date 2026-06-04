@@ -1,0 +1,9 @@
+{
+  "description": "On-screen-only visual fixture (M1.1). The third moment's transcript is unrelated to the query; only its injected visual signature makes it the target. Ungated multimodal-lift block.",
+  "vtt": "talk_vis.en.vtt",
+  "source_url": "https://x/talk_vis",
+  "top_k": 2,
+  "visual_event": {"t_start_s": 26.0, "t_end_s": 36.0, "ocr_text": "", "caption": "",
+                   "embedding": [1.0, 0.0, 0.0, 0.0]},
+  "qa": {"q": "the loss curve chart", "visual_query": [0.97, 0.03, 0.0, 0.0]}
+}

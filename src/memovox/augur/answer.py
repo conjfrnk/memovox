@@ -78,8 +78,9 @@ def ask(
     # The VISUAL leg (M1.1) turns on when the plan routes to visual OR the caller
     # explicitly asks for modality="visual"; it only fires if a visual query vector
     # is supplied (e.g. an image query), so a plain text ask is byte-identical.
-    use_visual = (qp.modality == "visual" or qp.strategy == "visual"
-                  or modality == "visual")
+    use_visual = (settings.visual_retrieval
+                  and (qp.modality == "visual" or qp.strategy == "visual"
+                       or modality == "visual"))
     # Consume the plan: the strategy chooses the retrieval mode (and, below, the
     # citation ordering) — it is NOT decorative. Only the contradiction route
     # turns on the graph leg today, walking CONTRADICTS/SUPPORTS edges to surface

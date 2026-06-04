@@ -112,6 +112,29 @@ class TestEndToEnd(unittest.TestCase):
             "expected a fused speech+slide citation",
         )
 
+    def test_ingest_accepts_injected_visual_result(self):
+        # The visual_result= seam (M0.3-owned, M1.1-consumed) replaces the
+        # mock.patch("memovox.tessera.run") hack: inject a VisualResult directly and
+        # confirm the visual VECTOR is written and retrievable via visual_search.
+        from memovox.loom.store import LoomStore
+        from memovox.tessera import VisualEvent, VisualResult
+
+        vr = VisualResult(
+            available=True, n_frames=1, n_scenes=1, vlm_backend="fixed", ocr_backend="fixed",
+            events=[VisualEvent(t_start_s=10.0, t_end_s=20.0,
+                                ocr_text="loss curve", caption="a chart",
+                                embedding=[1.0, 0.0, 0.0, 0.0])],
+        )
+        vtt = write_vtt(self.dir, "vis2.en.vtt", VTT_RAG)
+        report = self.mv.ingest(vtt, source_url="https://youtu.be/vis2", visual_result=vr)
+        self.assertTrue(report.visual_available)
+        self.assertGreaterEqual(self.mv.stats()["visual_vectors"], 1)
+        # the slide moment is retrievable purely by its visual signature
+        with LoomStore(self.mv.config) as store:
+            ranked = store.visual_search([0.97, 0.03, 0.0, 0.0], top_k=3)
+            self.assertTrue(ranked)
+            self.assertTrue(ranked[0][0].startswith("yt:vis2"))
+
     def test_cross_corpus_contradiction(self):
         a = write_vtt(self.dir, "a.en.vtt",
                       "WEBVTT\n\n00:00:01.000 --> 00:00:09.000\n"

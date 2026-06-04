@@ -67,6 +67,8 @@ _FREE_BACKENDS = dict(
     vlm_backend="none",
     ocr_backend="none",
     entity_backend="none",
+    visual_embed_backend="signature",  # M1.1: free visual embedder pinned
+    visual_retrieval=False,            # M1.1: VISUAL leg OFF for the gate
 )
 
 # Frozen eval-settings snapshot (M0.1 W8 / review discipline (b)): the default-OFF
@@ -81,6 +83,7 @@ _DEFAULT_OFF_FLAGS = dict(
     budget_mode="soft",
     otel_enabled=False,
     vector_prefilter_fts=False,  # M0.2: opt-in FTS vector prefilter must stay OFF on the gate
+    visual_retrieval=False,      # M1.1: VISUAL leg master switch OFF on the gate
     asr_device="auto",           # M0.3: ASR device knobs pinned
     asr_compute_type="default",
     asr_allow_cpu=False,
@@ -260,6 +263,12 @@ class _Ingested:
         self.store_to_logical = {v: k for k, v in logical_to_store.items()}
 
 
+# The visual fixture lives in eval/golden/ (M1.1) but is NOT part of the SCORED
+# corpus — it feeds only the ungated `multimodal` block, so it must never enter the
+# retrieval/entity/speaker/contradiction/parity/span scorers.
+_NON_CORPUS_STEMS = {"talk_vis"}
+
+
 def _ingest_golden(golden_dir: Path, store_dir: str) -> _Ingested:
     from memovox import Memovox
 
@@ -267,6 +276,8 @@ def _ingest_golden(golden_dir: Path, store_dir: str) -> _Ingested:
     logical_to_store: Dict[str, str] = {}
     for vtt in sorted(golden_dir.glob("*.en.vtt")):
         logical_id = vtt.name.split(".")[0]  # filename stem before ".en.vtt"
+        if logical_id in _NON_CORPUS_STEMS:
+            continue
         report = mv.ingest(str(vtt))
         logical_to_store[logical_id] = report.video_id
     return _Ingested(mv, logical_to_store)
@@ -753,6 +764,47 @@ def _record_span_baseline(golden_dir: Path) -> Path:
     return out
 
 
+def _multimodal_metrics() -> dict:
+    """UNGATED (M1.1): transcript-only vs tri-modal hit_rate on an on-screen-only
+    item. With the VISUAL leg ON, a moment whose answer lives only in its visual
+    signature is retrieved; with it OFF it is missed. Gated in M1.2 at >=3 items."""
+    fixture = GOLDEN_DIR / "visual.json"
+    vtt = GOLDEN_DIR / "talk_vis.en.vtt"
+    if not fixture.exists() or not vtt.exists():
+        return {"transcript_only": None, "tri_modal": None, "delta": None}
+
+    from memovox import pipeline
+    from memovox.augur.retrieve import retrieve
+    from memovox.backends import get_embedder
+    from memovox.config import Config, Settings
+    from memovox.loom.store import LoomStore
+    from memovox.tessera import VisualEvent, VisualResult
+
+    spec = _load_json(fixture)
+    vr = VisualResult(available=True, n_frames=1, n_scenes=1,
+                      events=[VisualEvent(**spec["visual_event"])])
+    top_k = int(spec.get("top_k", 5))
+    qa = spec["qa"]
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg = Config(store=str(Path(tmp) / "store"), settings=Settings(
+            **_FREE_BACKENDS, top_k=top_k)).ensure()
+        rep = pipeline.ingest(cfg, str(vtt), source_url=spec["source_url"], visual_result=vr)
+        emb = get_embedder("hashing", config=cfg)
+        with LoomStore(cfg) as store:
+            # the on-screen-only TARGET is the moment carrying a visual vector.
+            target = {r["moment_id"] for r in store.conn.execute(
+                "SELECT v.moment_id AS moment_id FROM visual_vectors v "
+                "JOIN moments m ON m.moment_id = v.moment_id WHERE m.video_id = ?",
+                (rep.video_id,)).fetchall()}
+            transcript_only = [m for m, _ in retrieve(store, qa["q"], embedder=emb,
+                                                      settings=cfg.settings)]
+            tri = [m for m, _ in retrieve(store, qa["q"], embedder=emb, settings=cfg.settings,
+                                          use_visual=True, visual_query_vec=qa["visual_query"])]
+    hit_t = 1.0 if (target & set(transcript_only)) else 0.0
+    hit_tri = 1.0 if (target & set(tri)) else 0.0
+    return {"transcript_only": hit_t, "tri_modal": hit_tri, "delta": round(hit_tri - hit_t, 6)}
+
+
 def _incremental_equivalence() -> float:
     """1.0 iff incremental consolidation (batched, watermark) produces the IDENTICAL
     CONTRADICTS/SUPPORTS graph as a single full pass on the golden corpus (M0.2)."""
@@ -894,6 +946,7 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
     incremental_equiv = _incremental_equivalence()
     span_unchanged = _span_unchanged_block(ing)
     span_accuracy = _span_accuracy()
+    multimodal = _multimodal_metrics()
 
     return {
         "retrieval": {
@@ -916,6 +969,7 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
         "incremental_equivalence": incremental_equiv,  # exact-equivalence invariant (gated)
         "span_unchanged": span_unchanged,  # M0.3 free-path span byte-identity (gated)
         "span_accuracy": span_accuracy,    # M0.3 word-precision signal (UNGATED; M1.2 gates)
+        "multimodal": multimodal,          # M1.1 transcript-only vs tri-modal lift (UNGATED)
     }
 
 
