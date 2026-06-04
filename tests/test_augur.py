@@ -22,6 +22,41 @@ class TestPlanner(unittest.TestCase):
         self.assertEqual(plan("what is attention").strategy, "hybrid")
 
 
+class TestDecompose(unittest.TestCase):
+    def test_single_clause_yields_one_subquery(self):
+        from memovox.augur.planner import decompose
+        qp = decompose("what is attention")
+        self.assertEqual(len(qp.subqueries), 1)
+        self.assertEqual(qp.subqueries[0].text, "what is attention")
+        self.assertEqual(qp.subqueries[0].strategy, "hybrid")
+        self.assertEqual(qp.strategy, "hybrid")  # top-level mirrors the first sub-query
+
+    def test_multipart_splits_on_comma_and(self):
+        from memovox.augur.planner import decompose
+        qp = decompose("What was the optimal context length, and which model family "
+                       "reused the Chinchilla token ratio?")
+        self.assertEqual(len(qp.subqueries), 2)
+        self.assertIn("context length", qp.subqueries[0].text)
+        self.assertIn("model family", qp.subqueries[1].text)
+
+    def test_noun_phrase_and_is_not_split(self):
+        from memovox.augur.planner import decompose
+        # bare "X and Y" noun-phrase list must NOT split
+        qp = decompose("explain scaling laws and compute budgets")
+        self.assertEqual(len(qp.subqueries), 1)
+
+    def test_multiple_questions_split(self):
+        from memovox.augur.planner import decompose
+        qp = decompose("What is the chunk size? Which model reused Chinchilla?")
+        self.assertEqual(len(qp.subqueries), 2)
+
+    def test_per_clause_strategy(self):
+        from memovox.augur.planner import decompose
+        qp = decompose("What changed over time, and what does talk_b dispute?")
+        self.assertEqual(qp.subqueries[0].strategy, "temporal")
+        self.assertEqual(qp.subqueries[1].strategy, "contradiction")
+
+
 class TestRRF(unittest.TestCase):
     def test_fusion_prefers_consensus(self):
         a = [("x", 1.0), ("y", 0.5)]
