@@ -62,6 +62,9 @@ def plan(query: str) -> QueryPlan:
 # " and " (which joins noun-phrase lists like "scaling laws and compute").
 _BOUNDARY = re.compile(r",\s+(?:and|or)\s+|;\s*|(?<=[?.])\s+(?=\w)")
 _WH = ("what", "which", "who", "whom", "whose", "when", "where", "why", "how")
+# Leading imperative cues that open an independent request.
+_IMPERATIVE = ("explain", "describe", "compare", "list", "show", "find", "summarize",
+               "give", "tell", "what", "which", "who", "when", "where", "why", "how")
 
 
 def _classify(text: str) -> SubQuery:
@@ -71,9 +74,13 @@ def _classify(text: str) -> SubQuery:
 
 
 def _looks_like_query(fragment: str) -> bool:
+    """A fragment is an independent clause only if it CONTAINS a wh-word or OPENS
+    with an interrogative/imperative cue — not merely "two long words" (which would
+    over-split noun-phrase lists like "between accuracy, and inference speed")."""
     toks = fragment.lower().split()
-    return (any(w in toks for w in _WH)
-            or len([t for t in toks if len(t) > 3]) >= 2)
+    if not toks:
+        return False
+    return any(w in toks for w in _WH) or toks[0] in _IMPERATIVE
 
 
 def decompose(query: str) -> QueryPlan:

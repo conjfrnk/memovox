@@ -45,6 +45,20 @@ class TestDecompose(unittest.TestCase):
         qp = decompose("explain scaling laws and compute budgets")
         self.assertEqual(len(qp.subqueries), 1)
 
+    def test_comma_and_noun_list_is_not_split(self):
+        from memovox.augur.planner import decompose
+        # "between X, and Y" is a noun-phrase list, NOT two clauses — the RHS
+        # fragment is not a question, so this single-intent query must NOT split.
+        qp = decompose("What are the trade-offs between accuracy, and inference speed?")
+        self.assertEqual(len(qp.subqueries), 1)
+        qp2 = decompose("Tell me about scaling, and compute.")
+        self.assertEqual(len(qp2.subqueries), 1)
+
+    def test_imperative_multipart_splits(self):
+        from memovox.augur.planner import decompose
+        qp = decompose("explain the chunk size, and compare the Llama token ratio")
+        self.assertEqual(len(qp.subqueries), 2)
+
     def test_multiple_questions_split(self):
         from memovox.augur.planner import decompose
         qp = decompose("What is the chunk size? Which model reused Chinchilla?")
@@ -183,6 +197,25 @@ class TestAgenticAsk(unittest.TestCase):
         # [n] indices contiguous over the merged citation list
         self.assertEqual([c.index for c in ans.citations],
                          list(range(1, len(ans.citations) + 1)))
+
+
+class TestMergeRoundRobin(unittest.TestCase):
+    def test_round_robin_per_clause_coverage(self):
+        from memovox.augur.answer import _merge_round_robin
+        legs = [[("a", 0.9), ("b", 0.5)], [("c", 0.8), ("a", 0.4)]]
+        # rank-0 of each clause first, dedup, cap
+        self.assertEqual(_merge_round_robin(legs, 4), [("a", 0.9), ("c", 0.8), ("b", 0.5)])
+
+    def test_top_k_below_num_clauses_drops_later_clauses(self):
+        from memovox.augur.answer import _merge_round_robin
+        legs = [[("a", 0.9)], [("b", 0.8)], [("c", 0.7)]]
+        # top_k=2 with 3 clauses -> the 3rd clause is intentionally dropped
+        self.assertEqual(_merge_round_robin(legs, 2), [("a", 0.9), ("b", 0.8)])
+
+    def test_empty_leg_does_not_starve(self):
+        from memovox.augur.answer import _merge_round_robin
+        legs = [[], [("b", 0.8)], [("c", 0.7)]]
+        self.assertEqual(_merge_round_robin(legs, 5), [("b", 0.8), ("c", 0.7)])
 
 
 class TestGraphLegThroughAsk(unittest.TestCase):

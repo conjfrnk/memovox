@@ -74,7 +74,9 @@ def _apply_rerank(reranker, query, fused, store):
 def _merge_round_robin(legs, top_k):
     """Interleave per-sub-query fused lists (rank-0 of each, then rank-1, …),
     de-duplicating moments and capping at ``top_k`` — so every clause contributes
-    its top result(s) before any clause's deeper results (per-clause coverage)."""
+    its top result(s) before any clause's deeper results (per-clause coverage WHEN
+    ``top_k >= len(legs)``; with fewer slots than clauses the later clauses are
+    intentionally dropped, the deterministic cost of a small top_k)."""
     merged: List[Tuple[str, float]] = []
     seen = set()
     depth = 0
@@ -130,16 +132,17 @@ def ask(
     # following it never reaches a new moment. hybrid/procedure/visual keep the
     # dense+lexical baseline — which is what the (factual) eval queries route to,
     # so the retrieval gates stay green.
-    use_graph = qp.strategy == "contradiction"
-    # SUPPORTS is included alongside CONTRADICTS on purpose: a contradiction
-    # answer can then surface both the disagreement AND corroborating context.
-    # The extractive synthesizer cites every surfaced moment neutrally (it does
-    # not editorialize the relation), so adding SUPPORTS only widens evidence.
-    graph_rels = ["CONTRADICTS", "SUPPORTS"] if use_graph else None
+    # SUPPORTS is included alongside CONTRADICTS on purpose: a contradiction answer
+    # can then surface both the disagreement AND corroborating context. The
+    # extractive synthesizer cites every surfaced moment neutrally, so adding
+    # SUPPORTS only widens evidence. (Per-clause graph routing is derived inside the
+    # multi branch from each sub-query's strategy, NOT from qp.strategy.)
     with tracer.span("retrieve") as _sp:
         if not multi:
             # SINGLE-CLAUSE: the literal today's path (retrieve over the full query),
             # so the output stays byte-identical.
+            use_graph = qp.strategy == "contradiction"
+            graph_rels = ["CONTRADICTS", "SUPPORTS"] if use_graph else None
             fused = retrieve(
                 store, query, embedder=embedder, settings=settings, video_id=video_id,
                 use_graph=use_graph, graph_rels=graph_rels, span=_sp,
