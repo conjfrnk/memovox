@@ -1,6 +1,6 @@
 # M2.1 — Cross-encoder rerank stage
 
-> **Wave:** 2 · **Effort:** M · **Status:** not started
+> **Wave:** 2 · **Effort:** M · **Status:** ✅ done (branch `phase4-rerank`, 4/4 workstreams; 386 pass / 2 skip; 9 gates green). Free default = identity (byte-identical, proven off==today); cross-encoder opt-in. Confidence keeps RRF score.
 > **Depends on:** none (coordinate with M2.2 planner and M2.3 clips — all three touch `augur/answer.ask`; build order is **rerank → planner → clips**) · **Owns (single-owner concerns):** none · **Blocks:** none
 > **Spec:** §5 ("dense + sparse + graph … fuse with Reciprocal Rank Fusion; **rerank with a cross-encoder**"), §3 (the Augur diagram stage `plan → hybrid retrieve → **rerank** → grounded answer + timestamped clip citations`)
 
