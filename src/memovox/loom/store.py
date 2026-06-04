@@ -185,11 +185,10 @@ class LoomStore:
             return
         rows = self.conn.execute("SELECT moment_id, vec FROM vectors").fetchall()
         for r in rows:
-            vec = unpack_floats(r["vec"])
-            nv = normalize(vec)
-            if nv != vec:
+            packed = pack_floats(normalize(unpack_floats(r["vec"])))
+            if packed != r["vec"]:  # compare packed bytes, not float lists (float32 round-trip)
                 self.conn.execute("UPDATE vectors SET vec = ? WHERE moment_id = ?",
-                                  (pack_floats(nv), r["moment_id"]))
+                                  (packed, r["moment_id"]))
         self.set_meta("vectors_normalized", "1")  # commits
 
     # -- meta --------------------------------------------------------------
@@ -596,6 +595,9 @@ class LoomStore:
 
     def edges(self, *, rel: Optional[str] = None) -> List[dict]:
         return self.graph_store.edges(rel=rel)
+
+    def count_edges(self, *, rel: Optional[str] = None) -> int:
+        return self.graph_store.count_edges(rel=rel)
 
     # -- search ------------------------------------------------------------
 

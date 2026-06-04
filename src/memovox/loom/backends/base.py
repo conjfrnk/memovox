@@ -75,3 +75,7 @@ class GraphStore(StorageBackend):
     @abstractmethod
     def edges(self, *, rel: Optional[str] = None) -> List[dict]:
         raise NotImplementedError
+
+    @abstractmethod
+    def count_edges(self, *, rel: Optional[str] = None) -> int:
+        raise NotImplementedError

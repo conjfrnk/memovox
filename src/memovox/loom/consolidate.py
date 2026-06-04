@@ -90,6 +90,7 @@ def find_contradictions(
     seen_pairs = set()
     video_cache = {}
     results: List[ContradictionPair] = []
+    nli_calls = 0
 
     def link(claim: Claim):
         v = video_cache.get(claim.video_id)
@@ -120,6 +121,7 @@ def find_contradictions(
                     continue
                 seen_pairs.add(key)
 
+                nli_calls += 1
                 res = nli.classify(a.text, b.text)
                 # Stamp the cross-video edge with the (deterministic, since a<b by
                 # claim_id) source claim's video so the edges table's
@@ -141,6 +143,8 @@ def find_contradictions(
                     results.append(ContradictionPair(a, b, "SUPPORTS", round(res.entail, 4),
                                                      link(a), link(b)))
 
+    if span is not None:
+        span.add_counter("nli_calls", nli_calls)  # actual NLI work (sparse under scope)
     results.sort(key=lambda p: p.score, reverse=True)
     return results
 
@@ -245,6 +249,13 @@ def consolidate(
     to force a full pass. The ``max_claims`` cap is now *reported*
     (``claims_scanned``/``claims_skipped``/``capped``), never silent. This is the
     single owner of incremental consolidation — M3.2/M3.3 call it, never reimplement.
+
+    The report's ``contradictions``/``supports`` are TOTAL graph edge counts (stable
+    across idempotent re-runs — a second pass with no new claims reports the same
+    totals and does zero NLI work, surfaced as ``new_*`` span counters), not just
+    this-pass deltas. **Re-ingest note:** re-ingesting a video re-inserts its claims
+    at higher rowids, so they re-enter ``scope`` and that video is re-scanned vs all
+    others — correctness-safe (edges are ``UNIQUE``-guarded) but not free.
     """
     settings = settings or store.config.settings
     tracer = tracer or Tracer("consolidate", otel_enabled=settings.otel_enabled)
@@ -272,16 +283,22 @@ def consolidate(
             include_supports=True, write_edges=True, span=_sp,
             scope=scope, max_claims=max_claims,
         )
-        contradictions = sum(1 for p in pairs if p.relation == "CONTRADICTS")
-        supports = sum(1 for p in pairs if p.relation == "SUPPORTS")
-        _sp.add_counter("contradictions", contradictions)
-        _sp.add_counter("supports", supports)
-        # Reported paging derived from the cap event (M0.1) on this span.
+        # This pass's NEW findings (0 on an idempotent re-run); the report's totals
+        # below reflect the whole graph so a re-run never misreports "0".
+        _sp.add_counter("new_contradictions", sum(1 for p in pairs if p.relation == "CONTRADICTS"))
+        _sp.add_counter("new_supports", sum(1 for p in pairs if p.relation == "SUPPORTS"))
+        # Reported paging derived from the cap event (M0.1) on this span. Both this
+        # cap site AND cluster_claims below page the SAME list_claims[:max_claims]
+        # universe, so this single capped/skipped figure covers both.
         candidates_total = int(_sp.counters.get("candidates", 0))
         cap = next((c for c in _sp.caps if c["name"] == "max_claims"), None)
         claims_skipped = int(cap["dropped"]) if cap else 0
         claims_scanned = candidates_total - claims_skipped
         capped = claims_skipped > 0
+
+    # Totals over the whole consolidation graph (stable, idempotent-safe).
+    contradictions = store.count_edges(rel="CONTRADICTS")
+    supports = store.count_edges(rel="SUPPORTS")
 
     with tracer.span("consensus") as _sp:
         clusters = cluster_claims(store, write_edges=False, max_claims=max_claims)

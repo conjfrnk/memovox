@@ -175,3 +175,10 @@ class SqliteGraphStore(GraphStore):
             sql += " WHERE rel = ?"
             params.append(rel)
         return [_row_to_edge(r) for r in self.conn.execute(sql, tuple(params)).fetchall()]
+
+    def count_edges(self, *, rel: Optional[str] = None) -> int:
+        if rel:
+            row = self.conn.execute("SELECT COUNT(*) FROM edges WHERE rel = ?", (rel,)).fetchone()
+        else:
+            row = self.conn.execute("SELECT COUNT(*) FROM edges").fetchone()
+        return int(row[0])
