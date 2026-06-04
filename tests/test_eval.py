@@ -508,6 +508,27 @@ class TestFrozenSettingsSnapshot(unittest.TestCase):
         for flag in ("asr_device", "asr_compute_type", "asr_allow_cpu"):
             self.assertIn(flag, _DEFAULT_OFF_FLAGS)
 
+    def test_snapshot_pins_feature_toggles(self):
+        from eval.harness import _DEFAULT_OFF_FLAGS
+
+        # M-X W1: the feature toggles whose flip would move a gate must be pinned.
+        self.assertEqual(_DEFAULT_OFF_FLAGS.get("visual_enabled"), True)
+        self.assertEqual(_DEFAULT_OFF_FLAGS.get("salience_floor"), 0.0)
+
+    def test_every_settings_field_is_pinned_or_allow_listed(self):
+        # M-X W1 reflection completeness: a NEWLY ADDED Settings flag that is neither
+        # pinned in the snapshot nor explicitly allow-listed fails loudly, forcing a
+        # deliberate choice (pin it, or add to _INTENTIONALLY_UNPINNED with a reason).
+        import dataclasses
+
+        from eval.harness import _DEFAULT_OFF_FLAGS, _INTENTIONALLY_UNPINNED
+        from memovox.config import Settings
+
+        covered = set(_DEFAULT_OFF_FLAGS) | set(_INTENTIONALLY_UNPINNED)
+        missing = [f.name for f in dataclasses.fields(Settings) if f.name not in covered]
+        self.assertEqual(missing, [],
+                         f"unpinned/unlisted Settings flags (pin or allow-list them): {missing}")
+
 
 class TestNewExactGates(unittest.TestCase):
     """M0.2 W6: parity and incremental_equivalence gate immediately at 1.0 — they

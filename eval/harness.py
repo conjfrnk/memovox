@@ -76,6 +76,8 @@ _FREE_BACKENDS = dict(
 # metrics_enabled flag to pin.) When a later track adds a default-OFF flag, add it
 # here in the same commit.
 _DEFAULT_OFF_FLAGS = dict(
+    visual_enabled=True,         # M-X: feature toggle whose flip would move a gate
+    salience_floor=0.0,          # M-X: salience gate toggle (0.0 demotes nothing)
     budget_mode="soft",
     otel_enabled=False,
     vector_prefilter_fts=False,  # M0.2: opt-in FTS vector prefilter must stay OFF on the gate
@@ -84,6 +86,21 @@ _DEFAULT_OFF_FLAGS = dict(
     asr_allow_cpu=False,
     captions_as_prior=True,      # M0.3: §9 cost lever default pinned
 )
+
+# Settings fields deliberately NOT pinned (M-X W1): backend selectors (pinned by
+# name via _FREE_BACKENDS instead) and pure numeric tuning knobs whose value does
+# not toggle a feature on/off. A NEW flag must be pinned above or added here with a
+# reason — the reflection completeness meta-test (tests/test_eval.py) enforces it.
+_INTENTIONALLY_UNPINNED = frozenset({
+    # backend selectors (pinned by name in _FREE_BACKENDS)
+    "asr_backend", "embed_backend", "nli_backend", "llm_backend", "vlm_backend",
+    "ocr_backend", "entity_backend", "voiceprint_backend",
+    # numeric tuning knobs (not feature toggles)
+    "embed_dim", "frame_sample_fps", "frame_side", "frame_max", "scene_threshold",
+    "keyframe_min_gain", "keyframe_per_scene_cap", "moment_max_sec", "moment_min_sec",
+    "moment_gap_sec", "boundary_similarity", "entailment_threshold", "rrf_k", "top_k",
+    "contradiction_threshold", "topic_similarity", "topic_min_size", "consensus_jaccard",
+})
 
 # Default retrieval cutoff for hit_rate / nDCG.
 DEFAULT_K = 5
