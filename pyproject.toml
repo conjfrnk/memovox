@@ -43,6 +43,7 @@ nli = ["transformers>=4.40.0", "torch>=2.0.0"]       # Assay: DeBERTa entailment
 # and captioning to a local Ollama vision model (neither needs a Python package).
 # This extra is for future PySceneDetect / perceptual-hash scene-detection upgrades.
 vision = ["scenedetect>=0.6.4", "imagehash>=4.3.1", "pillow>=10.0.0"]  # Tessera (optional)
+visual = ["surya-ocr>=0.4.0", "transformers>=4.40.0", "qwen-vl-utils>=0.0.8"]  # M1.1: Surya OCR + Qwen2.5-VL
 vectors = ["lancedb>=0.6.0"]                          # Loom: embedded vector DB
 graph = ["kuzu>=0.4.0"]                               # Loom: embeddable graph DB
 serve = ["fastapi>=0.110.0", "uvicorn>=0.29.0"]      # Augur: REST API

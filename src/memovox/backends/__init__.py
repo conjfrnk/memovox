@@ -28,9 +28,9 @@ from .embed import HashingEmbedder, SentenceTransformerEmbedder
 from .entity_link import Canonical, EntityLinker, NullLinker, WikidataLinker
 from .llm import OllamaLLM
 from .nli import LexicalNLI, TransformersNLI
-from .ocr import NullOCR, TesseractOCR
+from .ocr import NullOCR, SuryaOCR, TesseractOCR
 from .visual_embed import ColPaliVisualEmbedder, SignatureVisualEmbedder
-from .vlm import NullVLM, OllamaVLM
+from .vlm import NullVLM, OllamaVLM, Qwen25VL
 
 _EMBEDDERS = {
     "hashing": HashingEmbedder,
@@ -46,10 +46,10 @@ _NLI_ALIASES = {"transformers": "deberta-nli", "deberta": "deberta-nli", "nli": 
 
 _LLMS = {"ollama": OllamaLLM}
 
-_VLMS = {"none": NullVLM, "ollama": OllamaVLM}
-_OCRS = {"none": NullOCR, "tesseract": TesseractOCR}
+_VLMS = {"none": NullVLM, "ollama": OllamaVLM, "qwen2.5-vl": Qwen25VL}
+_OCRS = {"none": NullOCR, "tesseract": TesseractOCR, "surya": SuryaOCR}
 _VISUAL_EMBEDDERS = {"signature": SignatureVisualEmbedder, "colpali": ColPaliVisualEmbedder}
-_OCR_ALIASES = {"surya": "tesseract"}  # graceful: Surya not yet wired, use tesseract
+_OCR_ALIASES = {}  # M1.1: the surya->tesseract placeholder is replaced by a real SuryaOCR
 
 _LINKERS = {"none": NullLinker, "wikidata": WikidataLinker}
 
@@ -207,10 +207,12 @@ def backend_status() -> dict:
         },
         "vlm": {
             "ollama": OllamaVLM.is_available(),
+            "qwen2.5-vl": Qwen25VL.is_available(),
             "none": True,
         },
         "ocr": {
             "tesseract": TesseractOCR.is_available(),
+            "surya": SuryaOCR.is_available(),
             "none": True,
         },
         "visual_embed": {

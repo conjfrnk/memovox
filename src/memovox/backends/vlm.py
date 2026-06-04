@@ -10,6 +10,7 @@ on-screen descriptions. The default real backend is an **Ollama** vision model
 from __future__ import annotations
 
 import base64
+import importlib.util
 import json
 import os
 import shutil
@@ -91,3 +92,24 @@ def _ping(host: str) -> bool:
             return resp.status == 200
     except Exception:
         return False
+
+
+class Qwen25VL(VLMBackend):
+    """Named §7 default: Qwen2.5-VL dense frame captioner (local, via transformers).
+    Opt-in [visual] extra; is_available-gated, falls back to NullVLM on a bare
+    machine — the free path is unchanged."""
+
+    name = "qwen2.5-vl"
+    is_generative = True
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return importlib.util.find_spec("transformers") is not None
+
+    def caption(self, image_path, *, ocr_text=None, prompt=None) -> str:  # pragma: no cover - needs transformers
+        from transformers import AutoModelForVision2Seq  # noqa: F401  (lazy; gated)
+
+        raise NotImplementedError(
+            "Qwen25VL is a named-default skeleton; wire the Qwen2.5-VL processor + "
+            "generate() here once the [visual] extra is installed (free path stays NullVLM)."
+        )

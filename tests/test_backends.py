@@ -43,6 +43,27 @@ class TestVisualEmbedder(unittest.TestCase):
         self.assertIn("visual_embed", backend_status())
 
 
+class TestNamedVisualDefaults(unittest.TestCase):
+    def test_surya_and_qwen_fall_back_to_free_when_absent(self):
+        from memovox.backends import get_ocr, get_vlm
+        from memovox.backends.base import OCRBackend, VLMBackend
+        from memovox.backends.ocr import SuryaOCR
+        from memovox.backends.vlm import Qwen25VL
+
+        # auto never raises (free Null/Tesseract fallback), and never resolves Surya/Qwen
+        self.assertIsInstance(get_ocr("auto"), OCRBackend)
+        self.assertNotIsInstance(get_ocr("auto"), SuryaOCR)
+        self.assertIsInstance(get_vlm("auto"), VLMBackend)
+        self.assertNotIsInstance(get_vlm("auto"), Qwen25VL)
+        # a forced request for the named default raises when its dep is absent
+        if not SuryaOCR.is_available():
+            with self.assertRaises(BackendUnavailable):
+                get_ocr("surya")
+        if not Qwen25VL.is_available():
+            with self.assertRaises(BackendUnavailable):
+                get_vlm("qwen2.5-vl")
+
+
 def _cosine(a, b):
     dot = sum(x * y for x, y in zip(a, b))
     na = math.sqrt(sum(x * x for x in a))

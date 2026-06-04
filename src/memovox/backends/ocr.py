@@ -8,6 +8,7 @@ Python package required). Surya/PaddleOCR can slot in behind the same interface.
 
 from __future__ import annotations
 
+import importlib.util
 import shutil
 import subprocess
 from pathlib import Path
@@ -49,3 +50,22 @@ class TesseractOCR(OCRBackend):
         if proc.returncode != 0:
             return ""
         return " ".join(proc.stdout.split()).strip()
+
+
+class SuryaOCR(OCRBackend):
+    """Named §7 default: Surya OCR (layout-aware, multilingual). Opt-in [visual]
+    extra; is_available-gated, falls back to tesseract→Null on a bare machine."""
+
+    name = "surya"
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return importlib.util.find_spec("surya") is not None
+
+    def extract(self, image_path) -> str:  # pragma: no cover - needs surya
+        from surya.ocr import run_ocr  # noqa: F401  (lazy; gated by is_available)
+
+        raise NotImplementedError(
+            "SuryaOCR is a named-default skeleton; wire surya.run_ocr here once the "
+            "[visual] extra is installed (free path stays tesseract→Null)."
+        )
