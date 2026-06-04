@@ -238,6 +238,14 @@ def cmd_metrics(args, mv: Memovox) -> int:
     return 0
 
 
+def cmd_extract(args, mv: Memovox) -> int:
+    import json
+
+    doc = mv.extract(args.video, use_llm=getattr(args, "use_llm", False))
+    print(json.dumps(doc, indent=2, sort_keys=True, ensure_ascii=False))
+    return 0
+
+
 def cmd_backends(args, mv: Memovox) -> int:
     status = mv.backends()
     for slot, opts in status.items():
@@ -343,6 +351,12 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("metrics", help="per-stage observability metrics + cumulative ledger.")
     s.add_argument("--video", help="restrict to one video_id.")
     s.set_defaults(func=cmd_metrics)
+
+    s = sub.add_parser("extract", help="emit a schema-validated structured extraction document (JSON).")
+    s.add_argument("video")
+    s.add_argument("--use-llm", action="store_true", help="use the LLM extractor (default: free rule-based).")
+    s.add_argument("--json", action="store_true", help="(default) JSON output.")
+    s.set_defaults(func=cmd_extract)
 
     s = sub.add_parser("backends", help="list backend availability.")
     s.set_defaults(func=cmd_backends)

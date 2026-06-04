@@ -147,6 +147,17 @@ class Memovox:
                 "provenance": prov.to_dict() if prov else None,
             }
 
+    def extract(self, video_id: str, *, use_llm: bool = False) -> dict:
+        """Structured-JSON extraction document for a video (spec §5, X.4):
+        typed claims + resolved entity surfaces, schema-validated, deterministic
+        on the free (rule-based) path. Distinct from ask()/synthesize() answers."""
+        from .assay.extract_output import extract_video_document
+
+        with LoomStore(self.config) as store:
+            moments = store.moments_for_video(video_id)
+            llm = get_llm(self.settings.llm_backend, config=self.config) if use_llm else None
+            return extract_video_document(moments, llm=llm)
+
     def stats(self) -> dict:
         with LoomStore(self.config) as store:
             return store.stats()
