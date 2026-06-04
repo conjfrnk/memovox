@@ -124,11 +124,15 @@ class RenderClipTest(unittest.TestCase):
                 out = render_clip(self.video, self.clip, media_path=str(media), out_dir=out_dir)
             cmd = captured["cmd"]
             self.assertEqual(cmd[0], "/usr/bin/ffmpeg")
-            self.assertIn("-ss", cmd)
             self.assertIn("10.0", cmd)   # t_start
-            self.assertIn("-to", cmd)
             self.assertIn("40.0", cmd)   # t_end
+            # -ss AND -to MUST precede -i: as input options they seek to an ABSOLUTE
+            # input timestamp, so the cut spans [t0, t1] of the source. Moving -to
+            # after -i silently makes it output-relative (wrong, huge duration).
+            self.assertLess(cmd.index("-ss"), cmd.index("-i"))
+            self.assertLess(cmd.index("-to"), cmd.index("-i"))
             self.assertEqual(captured["kwargs"]["stdout"], __import__("subprocess").DEVNULL)
+            self.assertIn("timeout", captured["kwargs"])  # never hangs CI
             self.assertIsNotNone(out)
 
 

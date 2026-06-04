@@ -70,6 +70,7 @@ _FREE_BACKENDS = dict(
     visual_embed_backend="signature",  # M1.1: free visual embedder pinned
     visual_retrieval=False,            # M1.1: VISUAL leg OFF for the gate
     rerank_backend="none",            # M2.1: identity reranker pinned (off==today)
+    clip_merge_gap_s=2.5,             # M2.3: pin the stitch gap so the clip gate can't be env-perturbed
 )
 
 # Frozen eval-settings snapshot (M0.1 W8 / review discipline (b)): the default-OFF
@@ -1090,7 +1091,11 @@ def _clip_metrics(ing: _Ingested) -> dict:
             for (a0, a1), (b0, b1) in zip(ordered, ordered[1:]):
                 if b0 < a1:
                     non_overlap = False
-        # invariant: idempotence — re-stitching the clip spans reproduces them
+        # invariant: idempotence of the SPAN MATH — re-stitching reproduces the same
+        # (t_start, t_end, video_id). videos={} intentionally drops deep_link/title
+        # (not under test) and citation_indices are re-enumerated; only spans are
+        # compared. Do NOT add deep_link/citation_indices to the comparison without
+        # passing the real videos map + original indices.
         restitch = stitch_clips(
             [Citation(index=i, video_id=c.video_id, moment_id=f"{c.video_id}#r{i}",
                       t_start_s=c.t_start_s, t_end_s=c.t_end_s, title=c.title)
