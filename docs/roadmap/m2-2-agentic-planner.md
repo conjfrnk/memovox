@@ -1,6 +1,6 @@
 # M2.2 — Agentic multi-step query planner
 
-> **Wave:** 2 · **Effort:** M · **Status:** not started
+> **Wave:** 2 · **Effort:** M · **Status:** ✅ done (branch `phase4-agentic-planner`, 5/5 + review fix; 403 pass / 2 skip; 9 gates). Single-clause byte-identical; deterministic decompose default (LLM decomposer opt-in via planner_agentic); round-robin merge; plan.subquery_recall ungated (1.0).
 > **Depends on:** M2.1 (coordinate citation-build changes) · **Owns (single-owner concerns):** none · **Blocks:** M2.3
 > **Spec:** §5 ("Query planner (agentic): decompose the question, then choose the retrieval strategy and modality"; "Multi-hop traversal … for synthesis questions"; "every sentence carries a citation").
 

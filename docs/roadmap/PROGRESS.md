@@ -5,7 +5,7 @@ Update a row when you start/finish a track; tick the detailed workstream checkli
 inside each track doc (its *Definition of done*) as you go. Keep this file and each
 doc's `Status:` line in sync.
 
-_Last updated: 2026-06-04 — Wave 0+1 done + M2.1 rerank merged (386 pass / 2 skip; 9 gates)._
+_Last updated: 2026-06-04 — Wave 0+1 + M2.1 rerank + M2.2 planner merged (403 pass / 2 skip; 9 gates)._
 
 ## Baseline (keep green at every commit)
 
@@ -35,7 +35,7 @@ _Last updated: 2026-06-04 — Wave 0+1 done + M2.1 rerank merged (386 pass / 2 s
 | Track | Status | Branch | W done | Notes |
 |-------|:------:|--------|:------:|-------|
 | M2.1 Cross-encoder rerank | ✅ | phase4-rerank | 4/4 | merged; identity default byte-identical, cross-encoder opt-in |
-| M2.2 Agentic planner | ⬜ | — | 0/5 | after rerank |
+| M2.2 Agentic planner | ✅ | phase4-agentic-planner | 5/5 | merged; decompose + round-robin merge + plan in Answer |
 | M2.3 Answer-with-video clips | ⬜ | — | 0/7 | after planner; needs M0.3 spans |
 
 ## Wave 3 — library ops, deployment, measurement
