@@ -104,9 +104,12 @@ class JobStore:
         return dict(row) if row else None
 
     def claim_next(self) -> Optional[dict]:
-        """Atomically flip the oldest due queued job to running and return it."""
+        """Atomically flip the oldest due queued job to running and return it. The
+        UPDATE is guarded by ``state='queued'`` + a rowcount check so two workers
+        (concurrency>1) can never both claim the same job — only the winner's
+        conditional UPDATE matches a row."""
         now = time.time()
-        with self.conn:  # transaction (busy_timeout serializes contending claimers)
+        with self.conn:  # busy_timeout serializes the conditional UPDATE across workers
             row = self.conn.execute(
                 "SELECT * FROM jobs WHERE state=? AND next_run_at<=? "
                 "ORDER BY created_at, job_id LIMIT 1",
@@ -114,10 +117,13 @@ class JobStore:
             ).fetchone()
             if not row:
                 return None
-            self.conn.execute(
-                "UPDATE jobs SET state=?, attempts=attempts+1, updated_at=? WHERE job_id=?",
-                (RUNNING, now, row["job_id"]),
+            cur = self.conn.execute(
+                "UPDATE jobs SET state=?, attempts=attempts+1, updated_at=? "
+                "WHERE job_id=? AND state=?",
+                (RUNNING, now, row["job_id"], QUEUED),
             )
+            if cur.rowcount != 1:
+                return None  # another worker won the race
         return self.get_job(row["job_id"])
 
     def mark_succeeded(self, job_id: str, result: dict) -> None:

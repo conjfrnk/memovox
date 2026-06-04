@@ -21,8 +21,9 @@ MARKDOWN = "text/markdown; charset=utf-8"
 
 def route_index(mv):
     return (HTTPStatus.OK, {"name": "memovox", "endpoints": [
-        "POST /ingest", "POST /query", "GET /clip", "GET /export/{id}",
-        "GET /graph/contradictions", "GET /timeline", "GET /videos"]}, JSON)
+        "POST /ingest", "POST /query", "POST /synthesize", "POST /consolidate",
+        "GET /clip", "GET /export/{id}", "GET /graph/contradictions",
+        "GET /timeline", "GET /videos", "GET /job/{id}"]}, JSON)
 
 
 def route_videos(mv):

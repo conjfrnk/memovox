@@ -70,6 +70,12 @@ class Memovox:
         any_new = False
         with LoomStore(self.config) as store:
             for src in self._load_sources():
+                # M3.3: local_only refuses remote enumeration too (not just ingest),
+                # so NO network egress happens for a URL source when private.
+                if self.settings.local_only and src.startswith(("http://", "https://")):
+                    print(f"sync: local_only set, skipping remote source {src}", file=sys.stderr)
+                    entries.append({"url": src, "status": "skipped_local_only"})
+                    continue
                 try:
                     enumerated = enumerate_source(self.config, src)
                 except Exception as exc:  # enumeration failure is per-source, not fatal

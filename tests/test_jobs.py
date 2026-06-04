@@ -51,6 +51,14 @@ class JobStoreTest(unittest.TestCase):
         b = self.jobs.enqueue("ingest", {"url": "y"})
         self.assertNotEqual(a, b)
 
+    def test_claim_next_never_double_claims(self):
+        self.jobs.enqueue("consolidate", {})
+        first = self.jobs.claim_next()
+        self.assertIsNotNone(first)
+        self.assertEqual(first["state"], "running")
+        # a second claim finds no due queued job (the only one is now running)
+        self.assertIsNone(self.jobs.claim_next())
+
     def test_reenqueue_after_terminal_creates_new_job(self):
         a = self.jobs.enqueue("consolidate", {})
         self.jobs.conn.execute("UPDATE jobs SET state='succeeded' WHERE job_id=?", (a,))
