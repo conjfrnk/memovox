@@ -44,7 +44,9 @@ def _make_moment(video_id: str, index: int, segs: List[Segment]) -> Moment:
         transcript=transcript,
         speaker_id=_dominant_speaker(segs),
         index=index,
-        segments=[SegmentRef(round(s.start, 3), round(s.end, 3), s.text.strip())
+        segments=[SegmentRef(round(s.start, 3), round(s.end, 3), s.text.strip(),
+                             tuple((round(w.start, 3), round(w.end, 3), w.word)
+                                   for w in (s.words or [])))
                   for s in segs if s.text.strip()],
     )
 

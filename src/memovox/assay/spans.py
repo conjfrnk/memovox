@@ -35,7 +35,7 @@ def locate_span(sentence, segments, *, default=None) -> Optional[Tuple[float, fl
     if not s or not segments:
         return default
     best, best_ov = None, 0.0
-    for (t0, t1, text) in segments:
+    for (t0, t1, text, *_rest) in segments:  # *_rest tolerates SegmentRef.words (M0.3)
         ov = len(set(tokenize(text)) & s) / len(s)
         if ov > best_ov:
             best, best_ov = (t0, t1), ov
@@ -55,5 +55,5 @@ def span_text(segments, t_start_s, t_end_s) -> str:
     are no segments (e.g. a store-reloaded Moment), letting callers fall back to
     the whole-Moment text and preserve legacy behaviour.
     """
-    parts = [text for (s0, s1, text) in segments if s0 < t_end_s and s1 > t_start_s]
+    parts = [text for (s0, s1, text, *_rest) in segments if s0 < t_end_s and s1 > t_start_s]
     return " ".join(p.strip() for p in parts if p and p.strip()).strip()

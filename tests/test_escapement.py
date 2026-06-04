@@ -95,7 +95,8 @@ class TestFusion(unittest.TestCase):
         )
         self.assertEqual([s.text for s in m.segments], ["alpha", "beta", "gamma"])
         # NamedTuple also supports positional unpacking (consumed by W1.2).
-        t0, t1, text = m.segments[0]
+        # M0.3 appended an optional `words` field, so unpack the first three.
+        t0, t1, text, *_ = m.segments[0]
         self.assertEqual((t0, t1, text), (0, 5, "alpha"))
 
 

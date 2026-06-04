@@ -16,13 +16,17 @@ class SegmentRef(NamedTuple):
     """A source-segment span a Moment was fused from (W1, spec §6).
 
     A build-time artifact retained on each Moment so later stages (Assay) can
-    bind a claim to its EXACT source span. Supports both attribute access
-    (``ref.t_start_s``) and positional unpacking (``t0, t1, text = ref``).
+    bind a claim to its EXACT source span. ``words`` (M0.3) optionally carries the
+    per-word ``(start, end, word)`` timings ASR emitted; it is the LAST field with
+    an empty-tuple default, so positional ``t0, t1, text = ref[:3]`` /
+    ``(t0, t1, text, *_) = ref`` unpacking stays valid and the free (captions) path
+    carries ``words == ()``.
     """
 
     t_start_s: float
     t_end_s: float
     text: str
+    words: tuple = ()
 
 # Claim epistemic types (spec §5).
 CLAIM_TYPES = (
