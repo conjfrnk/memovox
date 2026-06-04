@@ -36,16 +36,16 @@ _Last updated: 2026-06-04 — ALL 13 TRACKS DONE (Waves 0-3 complete): 480 pass 
 |-------|:------:|--------|:------:|-------|
 | M2.1 Cross-encoder rerank | ✅ | phase4-rerank | 4/4 | merged; identity default byte-identical, cross-encoder opt-in |
 | M2.2 Agentic planner | ✅ | phase4-agentic-planner | 5/5 | merged; decompose + round-robin merge + plan in Answer |
-| M2.3 Answer-with-video clips | ⬜ | — | 0/7 | after planner; needs M0.3 spans |
+| M2.3 Answer-with-video clips | ✅ | phase4-clips | 7/7 | merged; stitch + ranged links + clip.coverage gate |
 
 ## Wave 3 — library ops, deployment, measurement
 
 | Track | Status | Branch | W done | Notes |
 |-------|:------:|--------|:------:|-------|
-| M3.1 Decay & versioning | ⬜ | — | 0/5 | default-OFF; needs M0.3 published_at |
-| M3.2 Subscriptions & incremental sync | ⬜ | — | 0/7 | owns sync rewrite; consumes M0.2 |
-| M3.3 Serving & deployment | ⬜ | — | 0/8 | consumes M0.2 + M3.2 |
-| M3.4 Backend A/B benchmark | ⬜ | — | 0/6 | last; ranks M2.1/M1.1 slots |
+| M3.1 Decay & versioning | ✅ | phase4-decay | 5/5 | merged; recency decay + claim_history + timeline + decay gate |
+| M3.2 Subscriptions & incremental sync | ✅ | phase4-subscriptions | 7/7 | merged; sync engine + cursor + incremental gate |
+| M3.3 Serving & deployment | ✅ | phase4-serving | 8/8 | merged; job runner + FastAPI + worker + local_only + serving gate |
+| M3.4 Backend A/B benchmark | ✅ | phase4-benchmark | 6/6 | merged; BackendConfig + ranking table + no-regression gate |
 
 ## Open questions awaiting a human decision
 
