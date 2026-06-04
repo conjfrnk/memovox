@@ -296,6 +296,15 @@ def cmd_mcp(args, mv: Memovox) -> int:
 
 
 def cmd_serve(args, mv: Memovox) -> int:
+    if getattr(args, "fastapi", False):
+        from .server import fastapi_app
+        if not fastapi_app.is_available():
+            print("FastAPI is not installed. Install it with: pip install 'memovox[serve]'.",
+                  file=sys.stderr)
+            return 1
+        import uvicorn  # type: ignore
+        uvicorn.run(fastapi_app.build_app(mv), host=args.host, port=args.port)
+        return 0
     from .server.rest import serve
 
     try:
@@ -411,6 +420,8 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("serve", help="run the REST API.")
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8808)
+    s.add_argument("--fastapi", action="store_true",
+                   help="use the FastAPI/uvicorn server ([serve] extra) instead of stdlib.")
     s.set_defaults(func=cmd_serve)
 
     return p
