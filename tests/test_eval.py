@@ -455,6 +455,13 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         for k in ("topic_f1", "keyframe", "claim_granularity", "span_accuracy"):
             self.assertFalse(any(k in f for f in failures))
 
+    def test_plan_block_subquery_recall(self):
+        # M2.2 W5: the agentic planner covers every clause of the 2-part golden item.
+        p = self.report["plan"]
+        self.assertEqual(p["multipart_items"], 1)
+        self.assertEqual(p["subquery_recall"], 1.0)
+        self.assertFalse(any("plan" in f for f in _check_thresholds(self.report)))
+
     def test_rerank_block_off_equals_today(self):
         # M2.1 W4: the free identity reranker is a no-op — rerank mrr/ndcg equal both
         # the no-rerank baseline AND the retrieval block (the off==today guard).
@@ -506,6 +513,14 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         self.assertIn("groundedness", syn)
         self.assertGreaterEqual(syn["groundedness"], 0.8)  # the gated value
         self.assertTrue(syn["contradiction_surfaced"])
+
+
+class TestSubqueryRecall(unittest.TestCase):
+    def test_subquery_recall(self):
+        from eval.harness import subquery_recall
+        self.assertEqual(subquery_recall([(["a", "b"], {"a"}), (["c"], {"c"})]), 1.0)
+        self.assertEqual(subquery_recall([(["a"], {"z"}), (["c"], {"c"})]), 0.5)
+        self.assertEqual(subquery_recall([]), 0.0)
 
 
 class TestSpanIou(unittest.TestCase):

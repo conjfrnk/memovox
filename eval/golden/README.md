@@ -79,3 +79,11 @@ are stripped from the knowledge text.
 - **`talk_vis.en.vtt` / `visual.json`** (M1.1) — the on-screen-only visual fixture;
   EXCLUDED from the scored corpus (`_NON_CORPUS_STEMS`), feeds only the ungated
   `multimodal` block.
+
+## M2.2 additions
+
+- **Multi-part `qa.json` items** carry a `subqueries` array (each with its own
+  `q` + `relevant_moment_substrings`); the top-level `relevant_moment_substrings`
+  is the union so `hit_rate` still credits the item. The agentic planner
+  decomposes the question, retrieves each clause, and merges — `plan.subquery_recall`
+  (ungated) is the fraction of clauses covered in the single composed answer.

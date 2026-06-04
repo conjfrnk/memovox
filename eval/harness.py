@@ -191,6 +191,17 @@ def ndcg(per_query: Iterable[PerQuery], *, k: int = DEFAULT_K) -> float:
     return total / len(queries)
 
 
+def subquery_recall(per_subquery: Iterable[PerQuery]) -> float:
+    """Fraction of sub-queries whose relevant moment is in the composed answer's
+    citations (M2.2). 0.0 on empty input. The agentic-planner coverage metric."""
+    subs = list(per_subquery)
+    if not subs:
+        return 0.0
+    hits = sum(1 for retrieved, relevant in subs
+               if relevant and any(rid in relevant for rid in retrieved))
+    return hits / len(subs)
+
+
 def groundedness(answer_sentences: Sequence[str], cited_spans, nli, *,
                  threshold: float = 0.5) -> float:
     """Fraction of answer sentences entailed by the cited spans.
@@ -1044,6 +1055,30 @@ def _claim_granularity(ing: _Ingested) -> dict:
     }
 
 
+def _plan_metrics(ing: _Ingested, qa) -> dict:
+    """UNGATED (M2.2): for each multi-part golden item, the fraction of its
+    sub-queries whose gold moment appears in the SINGLE composed answer's citations,
+    averaged over multi-part items. Proves the agentic planner covers every clause."""
+    from memovox.loom.store import LoomStore
+
+    store_vids = list(ing.logical_to_store.values())
+    item_scores = []
+    with LoomStore(ing.mv.config) as store:
+        for item in qa:
+            subs = item.get("subqueries")
+            if not subs:
+                continue
+            cited = {c.moment_id for c in ing.mv.ask(item["q"]).citations}
+            per_sub = []
+            for sq in subs:
+                gold = _relevant_moment_ids(store, store_vids,
+                                            sq.get("relevant_moment_substrings", []))
+                per_sub.append((list(cited), gold))
+            item_scores.append(subquery_recall(per_sub))
+    return {"subquery_recall": round(sum(item_scores) / len(item_scores), 6) if item_scores else None,
+            "multipart_items": len(item_scores)}
+
+
 def _rerank_metrics(ing: _Ingested, qa, *, k: int) -> dict:
     """UNGATED (M2.1): mrr/ndcg of the free (identity) reranked retrieval vs the
     no-rerank baseline. With the identity default they are EQUAL (off==today) — the
@@ -1115,6 +1150,7 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
     keyframe_efficiency = _keyframe_efficiency()
     claim_granularity = _claim_granularity(ing)
     rerank = _rerank_metrics(ing, qa, k=k)
+    plan = _plan_metrics(ing, qa)
 
     return {
         "retrieval": {
@@ -1142,6 +1178,7 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
         "keyframe_efficiency": keyframe_efficiency,  # M1.2 adaptive vs uniform (UNGATED)
         "claim_granularity": claim_granularity,      # M1.2 §12 granularity curve (UNGATED)
         "rerank": rerank,                            # M2.1 rerank mrr/ndcg vs no-rerank (UNGATED)
+        "plan": plan,                                # M2.2 agentic subquery_recall (UNGATED)
     }
 
 

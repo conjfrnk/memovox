@@ -94,5 +94,21 @@
       "talk_a#m0006",
       "talk_a#m0001"
     ]
+  },
+  "What was the optimal context length for retrieval, and which model family reused the Chinchilla token ratio?": {
+    "vector": [
+      "talk_a#m0004",
+      "talk_b#m0003",
+      "talk_a#m0001",
+      "talk_a#m0002",
+      "talk_c#m0001"
+    ],
+    "lexical": [
+      "talk_a#m0004",
+      "talk_b#m0003",
+      "talk_a#m0003",
+      "talk_a#m0002",
+      "talk_b#m0006"
+    ]
   }
 }

@@ -53,5 +53,30 @@
    "Transformer architecture remains the foundation"
   ],
   "note": "contradiction-routed; exercises consolidation + the contradiction strategy"
+ },
+ {
+  "q": "What was the optimal context length for retrieval, and which model family reused the Chinchilla token ratio?",
+  "subqueries": [
+   {
+    "q": "optimal context length for retrieval",
+    "relevant_moment_substrings": [
+     "the optimal context length for retrieval was 512 tokens"
+    ]
+   },
+   {
+    "q": "which model family reused the Chinchilla token ratio",
+    "relevant_moment_substrings": [
+     "The Llama family of models reused the Chinchilla token ratio"
+    ]
+   }
+  ],
+  "relevant_moment_substrings": [
+   "the optimal context length for retrieval was 512 tokens",
+   "The Llama family of models reused the Chinchilla token ratio"
+  ],
+  "answer_substrings": [
+   "512 tokens",
+   "Llama family"
+  ]
  }
 ]
