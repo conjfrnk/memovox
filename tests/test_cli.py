@@ -70,6 +70,30 @@ class TestCLI(unittest.TestCase):
         code, out = run(["--store", self.store, "export", "--video", "yt:abc123", "--format", "md"])
         self.assertIn("youtu.be/abc123", out)
 
+    def test_subscribe_list_unsubscribe(self):
+        url = "https://www.youtube.com/@chan"
+        code, out = run(["--store", self.store, "subscribe", url])
+        self.assertEqual(code, 0)
+        self.assertIn("Subscribed", out)
+        # idempotent
+        run(["--store", self.store, "subscribe", url])
+        code, out = run(["--store", self.store, "subscriptions"])
+        self.assertEqual(out.count(url), 1)  # listed once, no dup
+        run(["--store", self.store, "unsubscribe", url])
+        code, out = run(["--store", self.store, "subscriptions"])
+        self.assertIn("No subscriptions", out)
+
+    def test_sync_prints_structured_summary(self):
+        from unittest import mock
+        from memovox.stentor.acquire import EnumeratedEntry
+        run(["--store", self.store, "subscribe", "https://www.youtube.com/@chan"])
+        entry = EnumeratedEntry("yt:abc123", str(self.vtt), "talk")
+        with mock.patch("memovox.stentor.enumerate_source", return_value=[entry]):
+            code, out = run(["--store", self.store, "--llm", "none", "sync"])
+        self.assertEqual(code, 0)
+        self.assertIn("1 new", out)
+        self.assertIn("[new]", out)
+
     def test_metrics_command(self):
         self._ingest()
         code, out = run(["--store", self.store, "metrics"])

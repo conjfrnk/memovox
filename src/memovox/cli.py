@@ -77,12 +77,38 @@ def cmd_ask(args, mv: Memovox) -> int:
 
 
 def cmd_sync(args, mv: Memovox) -> int:
-    reports = mv.sync()
-    if not reports:
-        print("No subscriptions found (write sources to subscriptions.json).")
+    if not mv.list_subscriptions():
+        print("No subscriptions (add one with: memovox subscribe <url>).")
         return 0
-    for r in reports:
-        print(f"[{r.status}] {r.video_id} — {r.title}")
+    report = mv.sync()
+    print(f"sync: {report.n_new} new, {report.n_skipped} skipped, {report.n_failed} failed")
+    for e in report.entries:
+        line = f"  [{e['status']}] {e.get('video_id') or e.get('url')}"
+        if e.get("error"):
+            line += f" — {e['error']}"
+        print(line)
+    return 0
+
+
+def cmd_subscribe(args, mv: Memovox) -> int:
+    mv.subscribe(args.url)
+    print(f"Subscribed: {args.url}")
+    return 0
+
+
+def cmd_unsubscribe(args, mv: Memovox) -> int:
+    mv.unsubscribe(args.url)
+    print(f"Unsubscribed: {args.url}")
+    return 0
+
+
+def cmd_subscriptions(args, mv: Memovox) -> int:
+    subs = mv.list_subscriptions()
+    if not subs:
+        print("No subscriptions.")
+        return 0
+    for url in subs:
+        print(url)
     return 0
 
 
@@ -319,6 +345,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("sync", help="ingest new items from subscriptions.json.")
     s.set_defaults(func=cmd_sync)
+
+    s = sub.add_parser("subscribe", help="add a channel/playlist/video URL to subscriptions.")
+    s.add_argument("url")
+    s.set_defaults(func=cmd_subscribe)
+
+    s = sub.add_parser("unsubscribe", help="remove a source from subscriptions.")
+    s.add_argument("url")
+    s.set_defaults(func=cmd_unsubscribe)
+
+    s = sub.add_parser("subscriptions", help="list subscribed sources.")
+    s.set_defaults(func=cmd_subscriptions)
 
     s = sub.add_parser("contradictions", help="surface cross-corpus disagreements.")
     s.add_argument("--topic", help="restrict to a topic.")
