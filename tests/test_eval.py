@@ -401,6 +401,13 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         self.assertGreater(obs["forced_cap_dropped"], 0)  # forced-small cap fires
         self.assertTrue(obs["ok"])
 
+    def test_parity_block_present_and_perfect(self):
+        # M0.2 W2: free-path retrieval is byte/rank-identical to the recorded golden.
+        p = self.report["parity"]
+        self.assertTrue(p["recorded"])      # eval/golden/parity.json exists
+        self.assertEqual(p["score"], 1.0)   # every query's vector+lexical top-k matches
+        self.assertEqual(p["mismatches"], [])
+
     def test_observability_is_ungated(self):
         # discipline (a): observability never participates in --assert-thresholds.
         failures = _check_thresholds(self.report)
@@ -442,6 +449,22 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         self.assertIn("groundedness", syn)
         self.assertGreaterEqual(syn["groundedness"], 0.8)  # the gated value
         self.assertTrue(syn["contradiction_surfaced"])
+
+
+class TestParityHelper(unittest.TestCase):
+    def test_parity_detects_reordering(self):
+        from eval.harness import parity
+
+        rec = {"q1": {"vector": ["a", "b"], "lexical": ["x"]}}
+        same = {"q1": {"vector": ["a", "b"], "lexical": ["x"]}}
+        reordered = {"q1": {"vector": ["b", "a"], "lexical": ["x"]}}  # ULP flip / tie change
+        self.assertEqual(parity(same, rec), 1.0)
+        self.assertLess(parity(reordered, rec), 1.0)  # the gate has teeth
+
+    def test_parity_empty_recorded_is_perfect(self):
+        from eval.harness import parity
+
+        self.assertEqual(parity({}, {}), 1.0)
 
 
 class TestFrozenSettingsSnapshot(unittest.TestCase):

@@ -595,6 +595,73 @@ def run_eval(golden_dir=GOLDEN_DIR, *, store: Optional[_Ingested] = None,
                                gold_contradictions, k=k)
 
 
+# Free-path retrieval parity (M0.2 W2). A fixed query set whose vector+lexical
+# top-k is recorded (as path-independent LOGICAL moment ids) in
+# eval/golden/parity.json; any reordering by a later refactor (W1) or the
+# cosine->dot optimization (W3) trips this tripwire. RRF keys off rank, so rank
+# stability is the real invariant — we compare the full ordered id list.
+_PARITY_K = 5
+
+
+def _parity_queries() -> List[str]:
+    return [item["q"] for item in _load_json(GOLDEN_DIR / "qa.json")]
+
+
+def _logicalize(ing: _Ingested, moment_id: str) -> str:
+    vid, sep, rest = moment_id.partition("#")
+    return f"{ing.store_to_logical.get(vid, vid)}{sep}{rest}"
+
+
+def _compute_parity_results(ing: _Ingested) -> dict:
+    from memovox.backends import get_embedder
+    from memovox.loom.store import LoomStore
+
+    emb = get_embedder("hashing", config=ing.mv.config)
+    out: dict = {}
+    with LoomStore(ing.mv.config) as store:
+        for q in _parity_queries():
+            qv = emb.embed_one(q)
+            out[q] = {
+                "vector": [_logicalize(ing, m) for m, _ in store.vector_search(qv, _PARITY_K)],
+                "lexical": [_logicalize(ing, m) for m, _ in store.lexical_search(q, _PARITY_K)],
+            }
+    return out
+
+
+def parity(live: dict, recorded: dict) -> float:
+    """Fraction of queries whose live (vector, lexical) top-k exactly matches the
+    recorded golden. Order-sensitive — a single reordering drops the score."""
+    if not recorded:
+        return 1.0
+    matches = sum(1 for q, rec in recorded.items() if live.get(q) == rec)
+    return matches / len(recorded)
+
+
+def _parity_block(ing: _Ingested) -> dict:
+    path = GOLDEN_DIR / "parity.json"
+    if not path.exists():
+        return {"score": 1.0, "queries": 0, "recorded": False, "mismatches": []}
+    recorded = _load_json(path)
+    live = _compute_parity_results(ing)
+    mismatches = [q for q in recorded if live.get(q) != recorded[q]]
+    return {
+        "score": round(parity(live, recorded), 6),
+        "queries": len(recorded),
+        "recorded": True,
+        "mismatches": mismatches,
+    }
+
+
+def _record_parity(golden_dir: Path) -> Path:
+    """Record the CURRENT free-path top-k as the parity golden (reproducible)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        ing = _ingest_golden(golden_dir, str(Path(tmp) / "store"))
+        results = _compute_parity_results(ing)
+    out = GOLDEN_DIR / "parity.json"
+    out.write_text(json.dumps(results, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return out
+
+
 def _observability_metrics(ing: _Ingested) -> dict:
     """Collect the corpus-size-INDEPENDENT structural facts the M0.1 spine emits.
 
@@ -693,6 +760,7 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
     # (its ingest runs in an isolated temp store; its cap probe uses
     # write_edges=False), so it cannot perturb any metric computed above.
     observability = _observability_metrics(ing)
+    parity_block = _parity_block(ing)
 
     return {
         "retrieval": {
@@ -711,6 +779,7 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
         },
         "synthesis": synthesis,
         "observability": observability,  # UNGATED (discipline (a)); structural only
+        "parity": parity_block,          # exact-equivalence invariant (gated in W6)
     }
 
 
@@ -786,7 +855,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="Exit non-zero if the retrieval.hit_rate, groundedness, "
              "contradiction.f1, or synthesis.groundedness gate fails.",
     )
+    parser.add_argument(
+        "--record-parity", action="store_true",
+        help="(maintenance) re-record eval/golden/parity.json from the CURRENT "
+             "free-path top-k, then exit. Use only after a deliberate, reviewed change.",
+    )
     args = parser.parse_args(argv)
+
+    if args.record_parity:
+        path = _record_parity(Path(args.golden_dir))
+        print(f"recorded parity golden -> {path}")
+        return 0
 
     _assert_default_off_flags()
     report = run_eval(args.golden_dir, k=args.k)
