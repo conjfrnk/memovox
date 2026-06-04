@@ -494,6 +494,10 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         self.assertTrue(inc["equivalent"])
         self.assertTrue(inc["idempotent_resync"])
 
+    def test_serving_block_equivalent(self):
+        # M3.3: a background-drained consolidate equals the inline consolidate.
+        self.assertTrue(self.report["serving"]["equivalent"])
+
     def test_clip_block_coverage_and_invariants(self):
         # M2.3 W6: clip coverage >= 0.3 over the golden clip items, invariants hold.
         c = self.report["clip"]
@@ -598,6 +602,7 @@ class TestThinFixtureDiscipline(unittest.TestCase):
             "entity_f1": 0.0, "der": 0.0, "clip": {"coverage": 0.0},
             "decay": {"recent_first_ordering": False, "superseded_excluded": False},
             "incremental": {"equivalent": False, "idempotent_resync": False},
+            "serving": {"equivalent": False},
             "parity": {"score": 0.0}, "incremental_equivalence": 0.0,
             "span_unchanged": {"score": 0.0},
         }

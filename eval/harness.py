@@ -1116,6 +1116,36 @@ def _build_corpus(golden_dir: Path, store_dir: str, *, deferred: bool):
     return sig, (before == after)
 
 
+def _serving_metrics(golden_dir: Path) -> dict:
+    """GATED (M3.3): a background-enqueued, worker-drained consolidation produces the
+    SAME counts as an inline Memovox.consolidate() on the identically-ingested
+    corpus — proving the async job path doesn't drift from the inline one."""
+    import json as _json
+
+    from memovox.sdk import Memovox
+    from memovox.serving.jobs import JobStore, JobWorker
+
+    def _ingest(store_dir):
+        mv = Memovox(store=store_dir, **_FREE_BACKENDS)
+        for vtt in sorted(golden_dir.glob("*.en.vtt")):
+            if vtt.name.split(".")[0] not in _NON_CORPUS_STEMS:
+                mv.ingest(str(vtt))
+        return mv
+
+    with tempfile.TemporaryDirectory(prefix="mv-inline-") as a, \
+            tempfile.TemporaryDirectory(prefix="mv-bg-") as b:
+        inline = _ingest(a).consolidate()
+        mv_b = _ingest(b)
+        jobs = JobStore(mv_b.config)
+        jid = jobs.enqueue("consolidate", {})
+        JobWorker(mv_b, once=True).drain()
+        background = _json.loads(jobs.get_job(jid)["result_json"] or "{}")
+        jobs.close()
+    # Compare the COUNTS, not the volatile per-stage timing trace (wall_ms).
+    drop = lambda d: {k: v for k, v in d.items() if k != "metrics"}
+    return {"equivalent": drop(inline) == drop(background)}
+
+
 def _incremental_metrics(golden_dir: Path) -> dict:
     """UNGATED→GATED (M3.2): batch-ingest and incremental-ingest (deferred resolve)
     produce the SAME persisted graph (⇒ same gated report), and a re-ingest of seen
@@ -1319,6 +1349,7 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
     clip = _clip_metrics(ing)
     decay = _decay_metrics()
     incremental = _incremental_metrics(GOLDEN_DIR)
+    serving = _serving_metrics(GOLDEN_DIR)
 
     return {
         "retrieval": {
@@ -1350,6 +1381,7 @@ def _compute_report(ing: _Ingested, qa, gold_entities, gold_speakers,
         "clip": clip,                                # M2.3 clip coverage + invariants
         "decay": decay,                              # M3.1 recency ordering + supersede demotion (GATED: exact)
         "incremental": incremental,                  # M3.2 batch==incremental + idempotent re-sync
+        "serving": serving,                          # M3.3 background==inline consolidate (GATED: exact)
     }
 
 
@@ -1427,6 +1459,8 @@ _GATE_DECLARATIONS = {
     # M3.2: ingest-deferral equivalence + idempotent re-sync (exact invariants).
     "incremental.equivalent": {"kind": "exact"},
     "incremental.idempotent_resync": {"kind": "exact"},
+    # M3.3: background==inline consolidate (exact invariant).
+    "serving.equivalent": {"kind": "exact"},
     "parity": {"kind": "exact"},
     "incremental_equivalence": {"kind": "exact"},
     "span_unchanged": {"kind": "exact"},
@@ -1491,6 +1525,10 @@ def _check_thresholds(report: dict) -> List[str]:
         failures.append("incremental.equivalent is False (batch != incremental)")
     if "idempotent_resync" in incr and not incr["idempotent_resync"]:
         failures.append("incremental.idempotent_resync is False")
+    # M3.3: background-drained consolidate == inline consolidate (exact invariant).
+    serving = report.get("serving") or {}
+    if "equivalent" in serving and not serving["equivalent"]:
+        failures.append("serving.equivalent is False (background != inline consolidate)")
     # M0.2 exact-equivalence invariants — gated at 1.0 (correctness, not statistics).
     pscore = report.get("parity", {}).get("score", 1.0)
     if pscore < 1.0:
