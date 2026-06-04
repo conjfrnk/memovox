@@ -88,6 +88,37 @@ class TestSearch(LoomTestBase):
         # A 4-dim query cannot match 256-dim stored vectors -> no results, no crash.
         self.assertEqual(self.store.vector_search([0.1, 0.2, 0.3, 0.4]), [])
 
+    def test_stored_vectors_are_unit_normalized(self):
+        from memovox.vectormath import norm
+
+        m = Moment("yt:abc#m0002", "yt:abc", 60.0, 90.0, "x", "spk_0", index=2)
+        self.store.add_moment(m, [3.0, 4.0])  # non-unit input; stored must be unit
+        stored = dict(self.store.moment_vectors())["yt:abc#m0002"]
+        self.assertAlmostEqual(norm(stored), 1.0, places=5)
+        self.assertAlmostEqual(stored[0], 0.6, places=5)
+        self.assertAlmostEqual(stored[1], 0.8, places=5)
+
+    def test_zero_vector_not_normalized_and_search_guarded(self):
+        m = Moment("yt:abc#m0003", "yt:abc", 90.0, 120.0, "z", "spk_0", index=3)
+        self.store.add_moment(m, [0.0, 0.0])  # zero vector survives (no div-by-zero)
+        stored = dict(self.store.moment_vectors())["yt:abc#m0003"]
+        self.assertEqual(stored, [0.0, 0.0])
+        self.assertEqual(self.store.vector_search([0.0, 0.0]), [])  # zero-query guard
+
+    def test_vector_search_matches_legacy_cosine_topk(self):
+        # The new normalized+dot path must rank identically to legacy per-row
+        # cosine over the ORIGINAL (raw) embeddings.
+        from memovox.vectormath import cosine
+
+        raw = {
+            "yt:abc#m0000": self.emb.embed_one(self.m1.text_for_embedding()),
+            "yt:abc#m0001": self.emb.embed_one(self.m2.text_for_embedding()),
+        }
+        q = self.emb.embed_one("deep learning neural network gradients")
+        ref = sorted(raw, key=lambda mid: cosine(q, raw[mid]), reverse=True)
+        new_ids = [mid for mid, _ in self.store.vector_search(q, top_k=2)]
+        self.assertEqual(new_ids, ref)
+
 
 class TestClaimsGraph(LoomTestBase):
     def test_claim_roundtrip(self):

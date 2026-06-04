@@ -27,6 +27,18 @@ def cosine(a: Sequence[float], b: Sequence[float]) -> float:
     return dot(a, b) / (na * nb)
 
 
+def normalize(vec: Sequence[float]) -> List[float]:
+    """Return the unit vector; a zero vector is returned unchanged (no div-by-0).
+
+    For unit vectors ``dot(normalize(q), v) == cosine(q, v)``, so storing vectors
+    normalized lets retrieval skip the per-row ``norm()`` recompute.
+    """
+    n = norm(vec)
+    if n == 0.0:
+        return list(vec)
+    return [x / n for x in vec]
+
+
 def pack_floats(vec: Sequence[float]) -> bytes:
     """Pack a float vector into a compact little-endian float32 blob."""
     return struct.pack(f"<{len(vec)}f", *vec)

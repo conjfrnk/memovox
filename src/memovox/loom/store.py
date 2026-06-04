@@ -20,7 +20,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from ..config import Config
 from ..observe import Tracer
 from ..util import now_iso
-from ..vectormath import pack_floats, unpack_floats
+from ..vectormath import normalize, pack_floats, unpack_floats
 from .backends import get_graph_store, get_lexical_index, get_vector_index
 from .models import (
     STATUS_COMMITTED,
@@ -174,6 +174,23 @@ class LoomStore:
             )
         self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         self.conn.commit()
+        self._backfill_normalized_vectors()
+
+    def _backfill_normalized_vectors(self) -> None:
+        """One-time (M0.2 W3): unit-normalize any pre-existing main vectors so the
+        dot-product retrieval path is exact. Guarded by a meta flag (idempotent);
+        visual_vectors live in a different space and are deliberately untouched.
+        """
+        if self.get_meta("vectors_normalized") == "1":
+            return
+        rows = self.conn.execute("SELECT moment_id, vec FROM vectors").fetchall()
+        for r in rows:
+            vec = unpack_floats(r["vec"])
+            nv = normalize(vec)
+            if nv != vec:
+                self.conn.execute("UPDATE vectors SET vec = ? WHERE moment_id = ?",
+                                  (pack_floats(nv), r["moment_id"]))
+        self.set_meta("vectors_normalized", "1")  # commits
 
     # -- meta --------------------------------------------------------------
 

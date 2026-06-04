@@ -14,7 +14,7 @@ import sqlite3
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from ...util import tokenize
-from ...vectormath import cosine, norm, pack_floats, unpack_floats
+from ...vectormath import dot, norm, normalize, pack_floats, unpack_floats
 from .base import GraphStore, LexicalIndex, VectorIndex
 
 
@@ -41,9 +41,13 @@ class SqliteVectorIndex(VectorIndex):
         self.conn = conn
 
     def add(self, moment_id: str, embedding: Sequence[float]) -> None:
+        # Store unit-normalized so retrieval can score by dot product (== cosine
+        # for unit vectors) without recomputing norm() per row. Zero vectors are
+        # stored unchanged (normalize is a no-op on them).
+        vec = normalize(embedding)
         self.conn.execute(
             "INSERT OR REPLACE INTO vectors (moment_id, dim, vec) VALUES (?, ?, ?)",
-            (moment_id, len(embedding), pack_floats(embedding)),
+            (moment_id, len(vec), pack_floats(vec)),
         )
 
     def search(
@@ -56,6 +60,7 @@ class SqliteVectorIndex(VectorIndex):
     ) -> List[Tuple[str, float]]:
         if not query_vec or norm(query_vec) == 0.0:
             return []
+        q = normalize(query_vec)  # cosine == dot once both sides are unit vectors
         if video_id:
             rows = self.conn.execute(
                 "SELECT v.moment_id AS moment_id, v.vec AS vec FROM vectors v "
@@ -64,13 +69,13 @@ class SqliteVectorIndex(VectorIndex):
             ).fetchall()
         else:
             rows = self.conn.execute("SELECT moment_id, vec FROM vectors").fetchall()
-        qlen = len(query_vec)
+        qlen = len(q)
         scored: List[Tuple[str, float]] = []
         for r in rows:
             vec = unpack_floats(r["vec"])
             if len(vec) != qlen:
                 continue
-            scored.append((r["moment_id"], cosine(query_vec, vec)))
+            scored.append((r["moment_id"], dot(q, vec)))  # no per-row norm() recompute
         scored.sort(key=lambda x: x[1], reverse=True)
         return scored[:top_k]
 
