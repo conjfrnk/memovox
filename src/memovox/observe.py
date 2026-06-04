@@ -185,10 +185,13 @@ class Tracer:
         if self.otel_enabled and not _OTEL_AVAILABLE:
             global _otel_warned
             if not _otel_warned:
-                self._logger.warning(
-                    "otel_enabled is set but opentelemetry is not installed; "
-                    "install the [otel] extra. Using the stdlib no-op tracer."
-                )
+                try:
+                    self._logger.warning(
+                        "otel_enabled is set but opentelemetry is not installed; "
+                        "install the [otel] extra. Using the stdlib no-op tracer."
+                    )
+                except Exception:
+                    pass
                 _otel_warned = True
         return _NullOtelSpan()
 
@@ -210,7 +213,13 @@ class Tracer:
                 self._log_span(sp)
 
     def _log_span(self, sp: Span) -> None:
-        self._logger.info("span", extra={"span": sp.to_dict()})
+        # Observability logging must never break — nor, in the error path, mask —
+        # the traced operation. Swallow any logging failure (a closed stream, an
+        # exotic counter value, a custom logger) so the original control flow wins.
+        try:
+            self._logger.info("span", extra={"span": sp.to_dict()})
+        except Exception:
+            pass
 
     def find(self, stage: str) -> Optional[Span]:
         """Return the most recent span for ``stage`` (or ``None``)."""

@@ -143,6 +143,10 @@ class RetrieveCapTest(unittest.TestCase):
         cap = _cap(span, "top_k")
         self.assertIsNotNone(cap)
         self.assertEqual(cap["limit"], settings.top_k)
+        # 40 moments => fused candidates exceed top_k, so the cap genuinely fires.
+        # Asserting dropped>0 proves the truncation actually happened (a broken
+        # rrf_fuse that returned everything would record dropped==0 and fail here).
+        self.assertGreater(cap["dropped"], 0)
 
 
 if __name__ == "__main__":

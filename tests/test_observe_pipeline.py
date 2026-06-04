@@ -91,14 +91,19 @@ class AskConsolidateTracerTest(unittest.TestCase):
         self.assertIn("synthesize", stages)
 
     def test_consolidate_emits_span_with_max_claims_cap(self):
+        # This is a *wiring* test: it proves consolidate() threads its span into
+        # find_contradictions so the max_claims cap is recorded on the trace.
+        # The cap's dropped-count semantics (byte-identity + dropped>0 when the
+        # corpus exceeds the limit) are exercised in test_caps.FindContradictionsCapTest.
         tracer = Tracer("consolidate")
         with LoomStore(self.config) as store:
             nli = get_nli("lexical", config=self.config)
             consolidate(store, nli=nli, settings=self.config.settings, tracer=tracer)
         contra = tracer.find("contradictions")
         self.assertIsNotNone(contra)
-        names = {c["name"] for c in contra.caps}
-        self.assertIn("max_claims", names)
+        cap = next((c for c in contra.caps if c["name"] == "max_claims"), None)
+        self.assertIsNotNone(cap)
+        self.assertEqual(cap["limit"], 600)  # the live default threaded through
 
 
 class MetricsPersistenceTest(unittest.TestCase):

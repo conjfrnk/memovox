@@ -86,6 +86,25 @@ class StructuredLoggingTest(unittest.TestCase):
         # keys are emitted in sorted order
         self.assertEqual(lines[0], json.dumps(payload, sort_keys=True, ensure_ascii=False))
 
+    def test_logging_failure_never_breaks_or_masks(self):
+        # Observability logging must never break the traced op, and in the error
+        # path must never mask the ORIGINAL exception with a logging exception.
+        class _BoomLogger:
+            def info(self, *a, **k):
+                raise RuntimeError("log boom")
+
+            def warning(self, *a, **k):
+                raise RuntimeError("log boom")
+
+        tracer = Tracer(logger=_BoomLogger())
+        with tracer.span("ok") as sp:  # clean exit must not raise despite log boom
+            sp.add_counter("x", 1)
+        self.assertEqual(sp.status, "ok")
+
+        with self.assertRaises(ValueError):  # the real error, not RuntimeError
+            with tracer.span("err"):
+                raise ValueError("real error")
+
     def test_logging_never_writes_to_stdout(self):
         out = io.StringIO()
         with redirect_stdout(out):
