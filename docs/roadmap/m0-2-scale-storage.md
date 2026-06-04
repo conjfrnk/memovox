@@ -1,6 +1,6 @@
 # M0.2 — Scale & storage core (free-path) + incremental consolidation
 
-> **Wave:** 0 · **Effort:** XL · **Status:** not started
+> **Wave:** 0 · **Effort:** XL · **Status:** ✅ done (branch `phase4-scale-storage`, 7/7 workstreams; 309 pass / 2 skip; 6 gates green incl. parity==1.0 + incremental_equivalence==1.0). Watermark cursor = claims **rowid** (monotonic, replace-safe — chosen over `max(claim_id)` which is lexicographically unsafe across videos).
 > **Depends on:** M0.1 (observability spine — uses the logging/event hook to report caps & paging) · **Owns (single-owner concerns):** INCREMENTAL CONSOLIDATION (single owner — Subscriptions M3.2 & Serving M3.3 *consume* this, never reimplement it); the storage-backend interface extraction (`VectorIndex` / `LexicalIndex` / `GraphStore` ABCs) · **Blocks:** M3.2 subscriptions-sync, M3.3 serving-deployment
 > **Spec:** §6 (the four-index store), §7 (named backends behind a common interface), §9 (throughput / scale / observability)
 
