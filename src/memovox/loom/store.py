@@ -19,8 +19,9 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from ..config import Config
 from ..observe import Tracer
-from ..util import now_iso, tokenize
-from ..vectormath import cosine, norm, pack_floats, unpack_floats
+from ..util import now_iso
+from ..vectormath import pack_floats, unpack_floats
+from .backends import get_graph_store, get_lexical_index, get_vector_index
 from .models import (
     STATUS_COMMITTED,
     STATUS_SUPERSEDED,
@@ -130,13 +131,6 @@ def _fts5_available(conn: sqlite3.Connection) -> bool:
         return False
 
 
-def _fts_query(query: str) -> str:
-    tokens = [t for t in tokenize(query) if t]
-    if not tokens:
-        return '""'
-    return " OR ".join(f'"{t}"*' for t in tokens)
-
-
 class LoomStore:
     def __init__(self, config: Config) -> None:
         self.config = config
@@ -147,6 +141,12 @@ class LoomStore:
         self.conn.execute("PRAGMA journal_mode = WAL")
         self.fts = _fts5_available(self.conn)
         self._migrate()
+        # The four-index store composes pluggable backends (M0.2); the SQLite
+        # defaults below share this connection and are the always-available free
+        # path. Public LoomStore methods delegate to them.
+        self.vector_index = get_vector_index("auto", conn=self.conn)
+        self.lexical_index = get_lexical_index("auto", conn=self.conn, fts=self.fts)
+        self.graph_store = get_graph_store("auto", conn=self.conn)
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -305,17 +305,9 @@ class LoomStore:
                 moment.visual_caption, moment.ocr_text, moment.topic_id,
             ),
         )
-        if self.fts:
-            self.conn.execute("DELETE FROM moments_fts WHERE moment_id = ?", (moment.moment_id,))
-            self.conn.execute(
-                "INSERT INTO moments_fts (moment_id, text) VALUES (?, ?)",
-                (moment.moment_id, moment.text_for_embedding()),
-            )
+        self.lexical_index.add(moment.moment_id, moment.text_for_embedding())
         if embedding is not None:
-            self.conn.execute(
-                "INSERT OR REPLACE INTO vectors (moment_id, dim, vec) VALUES (?, ?, ?)",
-                (moment.moment_id, len(embedding), pack_floats(embedding)),
-            )
+            self.vector_index.add(moment.moment_id, embedding)
         if visual_embedding is not None:
             self.conn.execute(
                 "INSERT OR REPLACE INTO visual_vectors (moment_id, dim, vec) VALUES (?, ?, ?)",
@@ -558,81 +550,29 @@ class LoomStore:
         t_start_s: float = 0.0, t_end_s: float = 0.0, modality: str = "speech",
         confidence: float = 1.0, props: Optional[dict] = None,
     ) -> None:
-        self.conn.execute(
-            """
-            INSERT OR IGNORE INTO edges
-            (src, rel, dst, src_type, dst_type, video_id, t_start_s, t_end_s,
-             modality, confidence, props)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (src, rel, dst, src_type, dst_type, video_id, t_start_s, t_end_s,
-             modality, confidence, json.dumps(props or {})),
+        self.graph_store.add_edge(
+            src, rel, dst, src_type=src_type, dst_type=dst_type, video_id=video_id,
+            t_start_s=t_start_s, t_end_s=t_end_s, modality=modality,
+            confidence=confidence, props=props,
         )
-        self.conn.commit()
 
     def neighbors(self, node: str, *, rel: Optional[str] = None, direction: str = "out") -> List[dict]:
-        col = "src" if direction == "out" else "dst"
-        sql = f"SELECT * FROM edges WHERE {col} = ?"
-        params: List[object] = [node]
-        if rel:
-            sql += " AND rel = ?"
-            params.append(rel)
-        return [_row_to_edge(r) for r in self.conn.execute(sql, tuple(params)).fetchall()]
+        return self.graph_store.neighbors(node, rel=rel, direction=direction)
 
     def edges(self, *, rel: Optional[str] = None) -> List[dict]:
-        sql = "SELECT * FROM edges"
-        params: List[object] = []
-        if rel:
-            sql += " WHERE rel = ?"
-            params.append(rel)
-        return [_row_to_edge(r) for r in self.conn.execute(sql, tuple(params)).fetchall()]
+        return self.graph_store.edges(rel=rel)
 
     # -- search ------------------------------------------------------------
 
     def lexical_search(self, query: str, top_k: int = 20) -> List[Tuple[str, float]]:
-        query = (query or "").strip()
-        if not query:
-            return []
-        if self.fts:
-            try:
-                rows = self.conn.execute(
-                    "SELECT moment_id, rank FROM moments_fts WHERE moments_fts MATCH ? "
-                    "ORDER BY rank LIMIT ?",
-                    (_fts_query(query), top_k),
-                ).fetchall()
-                # FTS5 rank: lower is better -> convert to descending score.
-                return [(r["moment_id"], -float(r["rank"])) for r in rows]
-            except sqlite3.OperationalError:
-                pass
-        like = f"%{query}%"
-        rows = self.conn.execute(
-            "SELECT moment_id FROM moments WHERE transcript LIKE ? OR ocr_text LIKE ? LIMIT ?",
-            (like, like, top_k),
-        ).fetchall()
-        return [(r["moment_id"], 1.0) for r in rows]
+        return self.lexical_index.search(query, top_k)
 
     def vector_search(
-        self, query_vec: Sequence[float], top_k: int = 20, *, video_id: Optional[str] = None
+        self, query_vec: Sequence[float], top_k: int = 20, *,
+        video_id: Optional[str] = None, query_text: Optional[str] = None,
     ) -> List[Tuple[str, float]]:
-        if not query_vec or norm(query_vec) == 0.0:
-            return []
-        if video_id:
-            rows = self.conn.execute(
-                "SELECT v.moment_id AS moment_id, v.vec AS vec FROM vectors v "
-                "JOIN moments m ON m.moment_id = v.moment_id WHERE m.video_id = ?",
-                (video_id,),
-            ).fetchall()
-        else:
-            rows = self.conn.execute("SELECT moment_id, vec FROM vectors").fetchall()
-        qlen = len(query_vec)
-        scored: List[Tuple[str, float]] = []
-        for r in rows:
-            vec = unpack_floats(r["vec"])
-            if len(vec) != qlen:
-                continue
-            scored.append((r["moment_id"], cosine(query_vec, vec)))
-        scored.sort(key=lambda x: x[1], reverse=True)
-        return scored[:top_k]
+        return self.vector_index.search(query_vec, top_k, video_id=video_id,
+                                        query_text=query_text)
 
     # -- stats -------------------------------------------------------------
 
@@ -729,10 +669,3 @@ def _row_to_entity(r: sqlite3.Row) -> Entity:
     )
 
 
-def _row_to_edge(r: sqlite3.Row) -> Dict:
-    return {
-        "src": r["src"], "rel": r["rel"], "dst": r["dst"],
-        "src_type": r["src_type"], "dst_type": r["dst_type"], "video_id": r["video_id"],
-        "t_start_s": r["t_start_s"], "t_end_s": r["t_end_s"], "modality": r["modality"],
-        "confidence": r["confidence"], "props": json.loads(r["props"] or "{}"),
-    }
