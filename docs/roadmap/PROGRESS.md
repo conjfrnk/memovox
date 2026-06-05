@@ -5,14 +5,23 @@ Update a row when you start/finish a track; tick the detailed workstream checkli
 inside each track doc (its *Definition of done*) as you go. Keep this file and each
 doc's `Status:` line in sync.
 
-_Last updated: 2026-06-04 — ALL 13 TRACKS DONE (Waves 0-3 complete): 480 pass / 2 skip; 15 gates._
+_Last updated: 2026-06-04 — ALL 13 TRACKS DONE (Waves 0-3 complete): 480 pass / 3 skip; 15 gates._
+_(Canonical test env = homebrew `python3` with NO optional ML deps. On a machine where
+sentence-transformers/torch/fastapi ARE installed but their models aren't cached and the
+network is offline, ~12 tests error on offline model loads — the documented "use homebrew
+python3, not miniconda" caveat — not a Phase-4 regression.)_
 
 ## Baseline (keep green at every commit)
 
-- `make test` → 353 pass / 2 skip (was 247 at Phase-3; +36 M0.1, +26 M0.2, +33 M0.3, +11 M-X)
-- `python -m eval.harness --assert-thresholds` → `hit_rate≥0.6`, `groundedness≥0.8`,
-  `contradiction.f1≥0.5`, `synthesis.groundedness≥0.8`, `parity==1.0`,
-  `incremental_equivalence==1.0`, `span_unchanged==1.0` (+ ungated `observability`, `span_accuracy`)
+- `make test` → 480 pass / 3 skip (was 247 at Phase-3; the 3rd skip is the FastAPI
+  parity test when fastapi is absent)
+- `python -m eval.harness --assert-thresholds` → 15 gates: `hit_rate≥0.6`,
+  `groundedness≥0.8`, `contradiction.f1≥0.5`, `synthesis.groundedness≥0.8`,
+  `entity_f1≥0.5`, `der≥0.5`, `clip.coverage≥0.3`, `parity==1.0`,
+  `incremental_equivalence==1.0`, `span_unchanged==1.0`, `decay.recent_first_ordering`,
+  `decay.superseded_excluded`, `incremental.equivalent`, `incremental.idempotent_resync`,
+  `serving.equivalent` (+ ungated `observability`/`span_accuracy`/`topic_f1`/`rerank`/
+  `plan`/`keyframe_efficiency`/`claim_granularity`/`multimodal`)
 
 ## Wave 0 — foundations
 
