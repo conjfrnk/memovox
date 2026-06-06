@@ -7,6 +7,9 @@ embed, top-*k*. memovox ingests video at the level of *meaning* and guarantees t
 **every assertion resolves to `(video, [t_start, t_end], modality, confidence)`**.
 If memovox can't say where it learned something, it doesn't claim it.
 
+> **New here?** Start with **[What is memovox? →](docs/EXPLAINER.md)** — a short,
+> plain-language overview of what it does and how it works.
+
 ## Local-first and free by default
 
 The core runs on the **Python standard library alone** — no GPU, no model downloads,
@@ -110,16 +113,8 @@ make lint                                    # ruff, if installed
 python -m eval.harness --assert-thresholds   # golden-corpus quality gates
 ```
 
-## Status
-
-Phases 0–4 of [`spec.md`](spec.md) are implemented and gated by a golden-corpus eval:
-the audio skeleton; the tri-modal visual track; a verified temporal knowledge graph
-(claim extraction → NLI gate → cross-corpus entity/speaker resolution → graph
-retrieval); cross-corpus synthesis (topic induction, consensus scoring,
-claim-evolution tracking, contradiction detection); and scale/polish (incremental
-subscriptions, answer-with-video clip stitching, async jobs, named production-backend
-slots). Optional ML backends are opt-in; the free stdlib path is the tested default.
-See [`spec.md`](spec.md) and [`docs/DESIGN.md`](docs/DESIGN.md).
+For design background, see [`docs/DESIGN.md`](docs/DESIGN.md) (how the pieces map to the
+code) and [`spec.md`](spec.md) (the full specification).
 
 ## License
 
