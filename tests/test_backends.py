@@ -148,5 +148,33 @@ class TestRegistry(unittest.TestCase):
         self.assertTrue(status["nli"]["lexical"])
 
 
+class TestOllamaAvailability(unittest.TestCase):
+    """Ollama is reached over HTTP, so availability must reflect a REACHABLE
+    server, not merely the binary on PATH. Otherwise `backends` reports it
+    available, auto-selects it, and every ask/synthesize/claim-extraction makes a
+    failing connect before degrading."""
+
+    def test_binary_present_but_server_down_is_unavailable(self):
+        from unittest import mock
+
+        from memovox.backends.llm import OllamaLLM
+        from memovox.backends.vlm import OllamaVLM
+
+        with mock.patch("shutil.which", return_value="/usr/local/bin/ollama"), \
+                mock.patch("memovox.backends.llm._ping", return_value=False), \
+                mock.patch("memovox.backends.vlm._ping", return_value=False):
+            self.assertFalse(OllamaLLM.is_available())
+            self.assertFalse(OllamaVLM.is_available())
+
+    def test_reachable_server_is_available(self):
+        from unittest import mock
+
+        from memovox.backends.llm import OllamaLLM
+
+        with mock.patch("shutil.which", return_value=None), \
+                mock.patch("memovox.backends.llm._ping", return_value=True):
+            self.assertTrue(OllamaLLM.is_available())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -13,7 +13,6 @@ import base64
 import importlib.util
 import json
 import os
-import shutil
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -54,8 +53,10 @@ class OllamaVLM(VLMBackend):
 
     @classmethod
     def is_available(cls) -> bool:
+        # Reachable server only (see OllamaLLM.is_available) — the binary on PATH
+        # does not mean the daemon is up, and memovox never starts it.
         host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
-        return bool(shutil.which("ollama")) or _ping(host)
+        return _ping(host)
 
     def caption(self, image_path, *, ocr_text=None, prompt=None) -> str:
         if not image_path or not Path(image_path).exists():

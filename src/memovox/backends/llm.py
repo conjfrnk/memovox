@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import urllib.error
 import urllib.request
 from typing import Optional
@@ -30,8 +29,11 @@ class OllamaLLM(LLMBackend):
 
     @classmethod
     def is_available(cls) -> bool:
-        if shutil.which("ollama"):
-            return True
+        # Ollama is reached over HTTP — availability means a REACHABLE server, not
+        # just the binary on PATH. memovox never starts the daemon, so a
+        # binary-present-but-server-down host must report unavailable; otherwise
+        # auto-selects ollama and every generate call fails (Connection refused)
+        # before degrading to the deterministic fallback.
         host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
         return _ping(host)
 
