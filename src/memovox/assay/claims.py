@@ -49,13 +49,46 @@ _ACRONYM_RE = re.compile(r"\b([A-Z][A-Z0-9]+(?:-[A-Z0-9]+)?)s?\b")
 _TITLECASE_RUN_RE = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b")
 
 # Common sentence-initial / function words: a single Title-case word matching
-# one of these is dropped (catches sentence-initial capitalization). Acronyms
-# are exempt from this stoplist.
+# one of these is dropped (catches sentence-initial capitalization, which is NOT
+# evidence of proper-noun-hood). Acronyms are exempt. Conversational speech (e.g.
+# a YouTube vlog) opens far more sentences with capitalized common words than the
+# academic register the original list targeted, so this is deliberately broad —
+# but it omits words that frequently LEAD a real multi-word entity run (months,
+# common first names like Will/May/Mark), since _strip_leading_common would shear
+# them off the front of e.g. "Will Smith".
 _COMMON_CAPS = {
-    "The", "This", "That", "These", "Those", "A", "An", "It", "We", "You",
-    "They", "He", "She", "I", "First", "Second", "Then", "Next", "Finally",
-    "Also", "However", "Therefore", "In", "On", "At", "For", "And", "Or",
-    "But", "So", "If", "When", "While", "Here", "There", "Now", "Today",
+    # determiners / articles / quantifiers
+    "The", "This", "That", "These", "Those", "A", "An", "All", "Both", "Each",
+    "Every", "Some", "Any", "Many", "Much", "Most", "Few", "Several", "Either",
+    "Neither", "Another", "Other", "Such", "Enough", "More", "Less", "Half", "No",
+    # pronouns / possessives
+    "It", "We", "You", "They", "He", "She", "I", "Me", "Him", "Them", "Us", "My",
+    "Your", "His", "Her", "Its", "Our", "Their", "Mine", "Yours", "Ours", "Theirs",
+    "Who", "Whom", "Whose", "What", "Which", "Whatever", "Whoever", "Anyone",
+    "Everyone", "Someone", "Nobody", "Everybody", "Somebody", "Anybody", "Nothing",
+    "Something", "Everything", "Anything",
+    # connectives / ordinals / discourse markers
+    "First", "Second", "Third", "Then", "Next", "Finally", "Also", "However",
+    "Therefore", "In", "On", "At", "For", "And", "Or", "But", "So", "If", "When",
+    "While", "Here", "There", "Now", "Today", "Tonight", "Tomorrow", "Yesterday",
+    "Yet", "Still", "Even", "Just", "Only", "Once", "Twice", "Again", "Always",
+    "Never", "Often", "Sometimes", "Usually", "Maybe", "Perhaps", "Probably",
+    "Actually", "Basically", "Honestly", "Literally", "Really", "Truly", "Clearly",
+    "Obviously", "Certainly", "Definitely", "Absolutely", "Anyway", "Anyways",
+    "Besides", "Instead", "Otherwise", "Meanwhile", "Thus", "Hence", "Moreover",
+    "Furthermore", "Although", "Though", "Because", "Since", "Before", "After",
+    "Until", "Unless", "Whereas", "Plus", "Why", "How", "Where", "Whether",
+    # interjections / conversational openers
+    "Yes", "Not", "Nope", "Yeah", "Yep", "Okay", "OK", "Oh", "Ah", "Uh", "Um",
+    "Hey", "Hi", "Hello", "Wow", "Well", "Sure", "Right", "Look", "Listen", "See",
+    "Watch", "Wait", "Hold", "Come", "Let", "Like", "Please", "Thanks", "Thank",
+    "Sorry", "Welcome",
+    # common auxiliary / light verbs (very common sentence starters in speech)
+    "Is", "Are", "Was", "Were", "Be", "Been", "Being", "Am", "Do", "Does", "Did",
+    "Done", "Have", "Has", "Had", "Can", "Could", "Would", "Should", "Might",
+    "Must", "Get", "Got", "Want", "Need", "Think", "Know", "Said", "Says", "Say",
+    "Go", "Goes", "Going", "Went", "Make", "Made", "Take", "Took", "Give", "Gave",
+    "Tell", "Told", "Want", "Want",
 }
 
 

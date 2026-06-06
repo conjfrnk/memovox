@@ -108,6 +108,23 @@ class TestEntityMentions(unittest.TestCase):
         c = self._claim("Vaswani's paper introduced attention")
         self.assertEqual(extract_mentions(c), ["Vaswani"])
 
+    def test_sentence_initial_conversational_words_dropped(self):
+        # Casual speech opens sentences with common capitalized words that are NOT
+        # entities. These must not become graph nodes (regression: a Casey-Neistat
+        # vlog linked "All"->"allative case", plus Like/See/Once/Thus/Truly).
+        for opener in ("All right here we go", "Like I said it works",
+                       "See the result clearly", "Once you are inside",
+                       "Thus the lab opened", "Truly it was great"):
+            self.assertEqual(extract_mentions(self._claim(opener)), [],
+                             msg=f"expected no entity from {opener!r}")
+
+    def test_real_entities_after_conversational_opener_kept(self):
+        # The expansion must not suppress a genuine mid-sentence proper noun.
+        self.assertEqual(extract_mentions(self._claim("We just left Dubai")), ["Dubai"])
+        self.assertEqual(
+            extract_mentions(self._claim("All right we are on Emirates now")), ["Emirates"]
+        )
+
 
 class TestClaimSourceSpan(unittest.TestCase):
     def test_claim_bound_to_exact_segment_span(self):
