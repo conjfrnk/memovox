@@ -13,6 +13,43 @@ from memovox.loom import LoomStore, Moment, Video
 from memovox.loom.models import Claim
 
 
+class TestCitationSnippet(unittest.TestCase):
+    """A cited snippet (and thus the LLM's synthesis context) must be grounded in
+    answerable CONTENT — the spoken transcript and literal on-screen OCR text — not
+    the VLM's prose description of the frame. Verbose captions ('The image shows a
+    man wearing sunglasses…') otherwise crowd out the speech and make the LLM answer
+    about the picture instead of what was said."""
+
+    def _moment(self, transcript="", ocr_text=None, visual_caption=None):
+        return Moment("yt:x#m0", "yt:x", 0.0, 10.0, transcript, speaker_id="spk_0",
+                      ocr_text=ocr_text, visual_caption=visual_caption)
+
+    def test_snippet_prefers_speech_over_verbose_caption(self):
+        from memovox.augur.answer import _best_sentence, _citation_text
+        m = self._moment(
+            transcript="See, you have to reserve the shower.",
+            visual_caption="The image shows a man wearing sunglasses and a gray shirt "
+                           "standing in an airplane.",
+        )
+        snippet = _best_sentence(_citation_text(m), "Did the seat have a shower?")
+        self.assertIn("reserve the shower", snippet)
+        self.assertNotIn("The image shows", snippet)
+
+    def test_ocr_text_is_answerable_content(self):
+        from memovox.augur.answer import _citation_text
+        m = self._moment(transcript="", ocr_text="GATE 21A  BOARDING",
+                         visual_caption="a photo of an airport sign")
+        text = _citation_text(m)
+        self.assertIn("GATE 21A", text)
+        self.assertNotIn("a photo of", text)
+
+    def test_pure_visual_moment_falls_back_to_caption(self):
+        from memovox.augur.answer import _citation_text
+        m = self._moment(transcript="", ocr_text=None,
+                         visual_caption="A man reclines in a flat-bed first-class suite.")
+        self.assertEqual(_citation_text(m), "A man reclines in a flat-bed first-class suite.")
+
+
 class TestPlanner(unittest.TestCase):
     def test_intents(self):
         self.assertEqual(plan("how did his view change over time?").strategy, "temporal")

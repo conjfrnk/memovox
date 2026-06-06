@@ -37,6 +37,22 @@ def _best_sentence(text: str, query: str) -> str:
     return best.strip()
 
 
+def _citation_text(moment) -> str:
+    """The answerable CONTENT of a moment for snippet selection + LLM synthesis:
+    the spoken transcript and any literal on-screen OCR text. The VLM's prose
+    *description* of the frame (``visual_caption``) is deliberately excluded — it is
+    a retrieval aid, not content, and a verbose caption ("The image shows a man
+    wearing sunglasses…") otherwise wins the snippet and makes the synthesizer
+    reason about the picture instead of what was said/shown. Falls back to the
+    caption only for a pure-visual moment with no transcript/OCR, so such a moment
+    still yields a non-empty citation."""
+    parts = [p for p in (getattr(moment, "transcript", None),
+                         getattr(moment, "ocr_text", None)) if p]
+    if parts:
+        return "\n".join(parts).strip()
+    return (getattr(moment, "visual_caption", None) or "").strip()
+
+
 def _synthesize_extractive(citations: List[Citation], *, limit: int = 4) -> str:
     parts = []
     for c in citations[:limit]:
@@ -195,7 +211,7 @@ def ask(
                 modality=moment.modality, speaker=moment.speaker_id,
                 confidence=round(min(1.0, score_by_id.get(moment.moment_id, 0.0) * 30), 4),
             ) if video else None
-            snippet = _best_sentence(moment.text_for_embedding(), query)
+            snippet = _best_sentence(_citation_text(moment), query)
             citations.append(
                 Citation(
                     index=i,
