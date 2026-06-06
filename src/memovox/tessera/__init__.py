@@ -146,14 +146,24 @@ def run(
     # §9 bottleneck: the per-keyframe OCR/VLM work is I/O-bound (ffmpeg + subprocess/
     # HTTP). visual_workers>1 runs it on a thread pool; results are reassembled by
     # position so the events list is byte-identical regardless of pool size.
+    #
+    # §9 graceful degradation: the visual track is OPTIONAL. A crashing OCR/VLM
+    # backend, an ffmpeg failure, or a decode error must NOT abort the whole ingest
+    # — degrade to an unavailable result (the audio/caption knowledge still lands).
     workers = max(1, getattr(settings, "visual_workers", 1))
-    if workers > 1 and len(kept) > 1:
-        from concurrent.futures import ThreadPoolExecutor
+    try:
+        if workers > 1 and len(kept) > 1:
+            from concurrent.futures import ThreadPoolExecutor
 
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            events: List[VisualEvent] = list(pool.map(_process_keyframe, range(len(kept))))
-    else:
-        events = [_process_keyframe(pos) for pos in range(len(kept))]
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                events: List[VisualEvent] = list(pool.map(_process_keyframe, range(len(kept))))
+        else:
+            events = [_process_keyframe(pos) for pos in range(len(kept))]
+    except Exception as exc:  # noqa: BLE001 - optional track must never abort ingest
+        import sys
+        print(f"memovox: visual track failed ({type(exc).__name__}: {exc}); "
+              "continuing without it.", file=sys.stderr)
+        return VisualResult(available=False, reason=f"visual track error: {type(exc).__name__}")
 
     return VisualResult(
         events=events,

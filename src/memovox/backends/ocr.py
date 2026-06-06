@@ -44,12 +44,17 @@ class TesseractOCR(OCRBackend):
             return ""
         cmd = ["tesseract", str(image_path), "stdout", "-l", self.lang, "--psm", "6"]
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        except (OSError, subprocess.SubprocessError):  # pragma: no cover
+            # errors="replace": tesseract can emit non-UTF-8 bytes on stderr (locale
+            # warnings, progress) which would otherwise raise UnicodeDecodeError on
+            # decode and abort the whole visual stage. OCR is best-effort, so a
+            # failure of any kind degrades to "" rather than propagating.
+            proc = subprocess.run(cmd, capture_output=True, text=True,
+                                  errors="replace", timeout=120)
+        except (OSError, subprocess.SubprocessError, ValueError, UnicodeError):  # pragma: no cover
             return ""
         if proc.returncode != 0:
             return ""
-        return " ".join(proc.stdout.split()).strip()
+        return " ".join((proc.stdout or "").split()).strip()
 
 
 class SuryaOCR(OCRBackend):

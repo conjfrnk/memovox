@@ -72,6 +72,45 @@ from memovox.tessera.keyframes import select_keyframes
 from memovox.tessera.scenes import frame_distance, segment_scenes
 
 
+class TestVisualResilience(unittest.TestCase):
+    """Spec §9: the visual track DEGRADES gracefully. An internal failure (a
+    crashing OCR/VLM backend, ffmpeg, a decode error) must yield an unavailable
+    VisualResult, never propagate and abort the whole ingest."""
+
+    def test_crashing_ocr_degrades_instead_of_aborting(self):
+        class BoomOCR(OCRBackend):
+            name = "boom"
+
+            def extract(self, image_path):
+                raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "boom")
+
+        class FakeVLM(VLMBackend):
+            name = "fake"
+            is_generative = True
+
+            def caption(self, image_path, *, ocr_text=None, prompt=None):
+                return "cap"
+
+        frames = [FrameSig(t=float(i), vec=[float(i % 2)] * 4) for i in range(8)]
+        res = run(None, None, settings=Settings(), frames=frames, vlm=FakeVLM(), ocr=BoomOCR())
+        self.assertFalse(res.available)
+        self.assertEqual(res.events, [])
+
+    def test_tesseract_nonutf8_stderr_does_not_raise(self):
+        # tesseract can emit non-UTF-8 bytes on stderr; decoding must not crash.
+        from unittest import mock
+
+        from memovox.backends.ocr import TesseractOCR
+
+        with tempfile.NamedTemporaryFile(suffix=".jpg") as img:
+            def _boom_run(*a, **k):
+                raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "bad stderr")
+
+            with mock.patch("subprocess.run", side_effect=_boom_run):
+                # must swallow the decode error and return "", not propagate
+                self.assertEqual(TesseractOCR().extract(img.name), "")
+
+
 def const_sig(t, level):
     """A FrameSig for a flat 16x16 frame at brightness ``level`` (0-255)."""
     return FrameSig(t=t, vec=bytes_to_signature(bytes([level] * 256)))
