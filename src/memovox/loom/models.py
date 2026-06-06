@@ -80,11 +80,16 @@ class Moment:
         return "+".join(mods)
 
     def text_for_embedding(self) -> str:
+        # Speech transcript + literal on-screen OCR text are answerable CONTENT and
+        # belong in the searchable text embedding. The VLM's prose DESCRIPTION of
+        # the frame (visual_caption) is intentionally excluded: it is a retrieval
+        # aid, and a verbose caption ("The image shows a man wearing sunglasses…")
+        # otherwise dominates the embedding and buries the transcript for text
+        # queries. The caption still drives the separate visual embedding
+        # (visual_vectors) and the human-readable digest.
         parts = [self.transcript]
         if self.ocr_text:
             parts.append(self.ocr_text)
-        if self.visual_caption:
-            parts.append(self.visual_caption)
         return "\n".join(p for p in parts if p).strip()
 
     def to_dict(self) -> dict:

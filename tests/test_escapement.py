@@ -131,6 +131,21 @@ class TestVisualFusion(unittest.TestCase):
         # On-screen text must flow into the embedded/searchable text.
         self.assertIn("Backpropagation", m.text_for_embedding())
 
+    def test_text_for_embedding_excludes_verbose_vlm_caption(self):
+        # Literal on-screen OCR text is answerable content and belongs in the text
+        # embedding; the VLM's prose DESCRIPTION of the frame does not — a verbose
+        # caption ("The image shows a man wearing sunglasses…") otherwise pollutes
+        # the speech embedding and buries the transcript for text queries. The
+        # caption still drives the separate visual embedding + the digest.
+        events = [vevent(2, 4, ocr="GATE 21A",
+                         caption="The image shows a man wearing sunglasses in a seat.")]
+        m = build_moments(VID, self._one_moment_segs(), visual_events=events)[0]
+        emb_text = m.text_for_embedding()
+        self.assertIn("GATE 21A", emb_text)                       # OCR kept
+        self.assertNotIn("man wearing sunglasses", emb_text)      # caption excluded
+        self.assertIn("man wearing sunglasses", m.visual_caption)  # still on the moment
+        self.assertEqual(m.modality, "speech+slide")               # still multimodal
+
     def test_nonoverlapping_event_does_not_bind(self):
         events = [vevent(100, 102, ocr="unrelated later slide")]
         moments = build_moments(VID, self._one_moment_segs(), visual_events=events)

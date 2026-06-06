@@ -240,7 +240,10 @@ _LLM_SYSTEM = (
     "You extract atomic factual claims from a transcript span. Return ONLY a JSON "
     "array; each item: {\"text\": str, \"subject\": str, \"predicate\": str, "
     "\"object\": str, \"type\": one of FACT|DEFINITION|OPINION|PROCEDURE|EXAMPLE|"
-    "PREDICTION|CORRECTION}. Extract only claims stated in the text; do not infer."
+    "PREDICTION|CORRECTION}. Extract only claims stated in the text; do not infer. "
+    "The \"text\" field MUST be an EXACT VERBATIM substring of the transcript "
+    "(copy the words as written; do not paraphrase, rephrase, or summarize) so it "
+    "stays grounded in its source span; subject/predicate/object may be normalized."
 )
 
 
