@@ -43,7 +43,11 @@ class SyncReport:
 
 
 class Memovox:
-    def __init__(self, store: str = "~/.memovox", settings: Optional[Settings] = None, **overrides):
+    def __init__(self, store: Optional[str] = None, settings: Optional[Settings] = None, **overrides):
+        # store=None (not "~/.memovox") so Config's resolution order holds:
+        # explicit arg > $MEMOVOX_STORE > ~/.memovox. A truthy literal default here
+        # shadowed the env lookup, so Memovox() ignored $MEMOVOX_STORE (the CLI
+        # passes None and worked). See tests/test_integration.TestSdkStoreResolution.
         self.config = Config(store=store, settings=settings)
         if overrides:
             self.config.settings = self.config.settings.merged(overrides)

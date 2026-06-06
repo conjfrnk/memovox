@@ -151,5 +151,37 @@ class TestEndToEnd(unittest.TestCase):
         self.assertNotEqual(pairs[0].claim_a.video_id, pairs[0].claim_b.video_id)
 
 
+class TestSdkStoreResolution(unittest.TestCase):
+    """Memovox() with no store arg must honor $MEMOVOX_STORE (parity with the CLI).
+    The old default store='~/.memovox' was truthy and shadowed Config's env lookup,
+    so a Python user following the docstring queried an empty store."""
+
+    def setUp(self):
+        import os
+        self._old = os.environ.get("MEMOVOX_STORE")
+
+    def tearDown(self):
+        import os
+        if self._old is None:
+            os.environ.pop("MEMOVOX_STORE", None)
+        else:
+            os.environ["MEMOVOX_STORE"] = self._old
+
+    def test_no_arg_constructor_respects_env_store(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["MEMOVOX_STORE"] = tmp
+            mv = Memovox()
+            self.assertEqual(str(mv.config.store), str(pathlib.Path(tmp).expanduser()))
+
+    def test_explicit_store_overrides_env(self):
+        import os
+        with tempfile.TemporaryDirectory() as envdir, \
+                tempfile.TemporaryDirectory() as explicit:
+            os.environ["MEMOVOX_STORE"] = envdir
+            mv = Memovox(store=explicit)
+            self.assertEqual(str(mv.config.store), str(pathlib.Path(explicit).expanduser()))
+
+
 if __name__ == "__main__":
     unittest.main()
