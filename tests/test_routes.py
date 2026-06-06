@@ -50,6 +50,12 @@ class RoutesTest(unittest.TestCase):
         st, payload, _ = routes.route_query(self.mv, {})  # missing query
         self.assertEqual(st, 400)
 
+        # 'question' is accepted as an alias for 'query' (CLI/SDK/MCP all phrase it
+        # as a question), so a client need not guess the field name.
+        st, payload, _ = routes.route_query(self.mv, {"question": "chunk size?"})
+        self.assertEqual(st, 200)
+        self.assertIn("citations", payload)
+
     def test_handler_adapter_matches_pure_function(self):
         # The stdlib handler is a thin adapter: driving do_GET must produce exactly
         # what the pure route returns (the refactor parity tripwire), no socket.

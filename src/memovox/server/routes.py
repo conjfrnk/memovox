@@ -114,9 +114,12 @@ def route_ingest(mv, body):
 
 
 def route_query(mv, body):
-    if not body.get("query"):
-        return (HTTPStatus.BAD_REQUEST, {"error": "missing 'query'"}, JSON)
-    answer = mv.ask(body["query"], video_id=body.get("video_id"))
+    # Accept 'question' as an alias for 'query' — the CLI (ask), SDK (.ask) and MCP
+    # (search_knowledge) all phrase it as a question, so a client need not guess.
+    query = body.get("query") or body.get("question")
+    if not query:
+        return (HTTPStatus.BAD_REQUEST, {"error": "missing 'query' (or 'question')"}, JSON)
+    answer = mv.ask(query, video_id=body.get("video_id"))
     return (HTTPStatus.OK, answer.to_dict(), JSON)
 
 
