@@ -167,11 +167,27 @@ def run_asr(
     if name == "whisper":
         audio_path = _prepare_audio(config, meta)
 
-    result = asr.transcribe(
-        audio_path=str(audio_path) if audio_path else None,
-        captions_path=str(meta.captions_path) if meta.captions_path else None,
-        language=language or meta.lang,
-    )
+    try:
+        result = asr.transcribe(
+            audio_path=str(audio_path) if audio_path else None,
+            captions_path=str(meta.captions_path) if meta.captions_path else None,
+            language=language or meta.lang,
+        )
+    except Exception as exc:  # noqa: BLE001
+        # Whisper model load / transcription can fail (offline/uncached weights, OOM,
+        # an unsupported compute_type). If captions exist, degrade to them rather than
+        # aborting ingest with an opaque faster-whisper error — captions are the §9
+        # priority lever. Otherwise the failure is genuine, so re-raise.
+        if name == "whisper" and meta.captions_path is not None:
+            import sys
+            print(f"memovox: whisper ASR failed ({type(exc).__name__}: {exc}); "
+                  "falling back to captions.", file=sys.stderr)
+            result = get_asr("captions", config=config).transcribe(
+                audio_path=None, captions_path=str(meta.captions_path),
+                language=language or meta.lang,
+            )
+        else:
+            raise
     result.segments = clean_segments(result.segments)
     if result.duration is None:
         result.duration = meta.duration

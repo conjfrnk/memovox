@@ -144,6 +144,33 @@ class EndToEndHostileEnvTest(unittest.TestCase):
             self.assertTrue(ans.citations)  # answered despite broken optional backends
 
 
+class AsrWhisperFallsBackToCaptionsTest(unittest.TestCase):
+    """A whisper model-load/transcription failure degrades to captions (when present)
+    instead of aborting ingest with an opaque faster-whisper error."""
+
+    def test_whisper_failure_uses_captions(self):
+        import pathlib
+        from memovox.backends.asr_whisper import WhisperASR
+        from memovox.config import Config
+        from memovox.stentor import asr as asr_mod
+        from memovox.stentor.acquire import SourceMeta
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Config(store=pathlib.Path(tmp) / "s").ensure()
+            vtt = pathlib.Path(tmp) / "c.vtt"
+            vtt.write_text("WEBVTT\n\n00:00:01.000 --> 00:00:05.000\nHello from captions.\n",
+                           encoding="utf-8")
+            meta = SourceMeta(source_url=None, title="t", media_path=pathlib.Path(tmp) / "m.mp4",
+                              captions_path=vtt)
+            with mock.patch.object(WhisperASR, "is_available", classmethod(lambda c: True)), \
+                    mock.patch.object(asr_mod, "_prepare_audio",
+                                      return_value=pathlib.Path(tmp) / "x.wav"), \
+                    mock.patch.object(WhisperASR, "transcribe",
+                                      side_effect=OSError("offline: whisper weights")):
+                result = asr_mod.run_asr(config, meta, backend="whisper")  # must not raise
+            self.assertTrue(result.segments)  # captions used
+            self.assertIn("captions", result.segments[0].text.lower())
+
+
 class BadInputFailsCleanTest(unittest.TestCase):
     """Bad inputs on the public API must fail with a CLEAR error, never a cryptic
     crash deep in the pipeline."""
