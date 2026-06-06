@@ -13,7 +13,8 @@ from .loom import LoomStore
 from .sdk import Memovox
 from .util import format_span, seconds_to_hms, truncate
 
-BACKEND_FLAGS = {"asr": "asr_backend", "embed": "embed_backend", "nli": "nli_backend", "llm": "llm_backend"}
+BACKEND_FLAGS = {"asr": "asr_backend", "embed": "embed_backend", "nli": "nli_backend",
+                 "llm": "llm_backend", "entity_link": "entity_backend"}
 
 
 def _make_memovox(args) -> Memovox:
@@ -382,6 +383,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--embed", help="embedder backend (auto/hashing/sentence-transformers).")
     p.add_argument("--nli", help="NLI backend (auto/lexical/deberta-nli).")
     p.add_argument("--llm", help="LLM backend (auto/ollama/none).")
+    p.add_argument("--entity-link", dest="entity_link",
+                   help="entity linker (auto=offline slug/none/wikidata). "
+                        "auto is offline by default; 'wikidata' opts into network egress.")
     p.add_argument("--allow-cpu", action="store_true",
                    help="allow a heavy ASR model to run on CPU (else it fails loud; spec §9).")
     sub = p.add_subparsers(dest="command", metavar="<command>")

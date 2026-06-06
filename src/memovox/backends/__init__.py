@@ -6,6 +6,7 @@ back to the always-available, dependency-free implementation.
 
 from __future__ import annotations
 
+import os
 import sys
 from typing import Optional
 
@@ -252,7 +253,18 @@ def get_entity_linker(name: str = "auto", *, config=None, **options) -> EntityLi
     if getattr(getattr(config, "settings", None), "local_only", False):
         return NullLinker(config=config, **options)
     if name == "auto":
-        return WikidataLinker(config=config, **options) if WikidataLinker.is_available() else NullLinker(config=config)
+        # Offline by default (README: "no network, fully offline default"). The
+        # network-egressing Wikidata linker is OPT-IN — it is NOT auto-selected
+        # merely because wikidata.org is reachable, since that silently sends every
+        # entity surface form to Wikidata. Enable it explicitly via
+        # ``--entity-link wikidata`` / ``entity_backend="wikidata"`` or the
+        # ``MEMOVOX_ENTITY_LINK=wikidata`` env var. The graph topology is identical
+        # either way (entity_id is always the slug); Wikidata only adds a QID/label.
+        opt_in = os.environ.get("MEMOVOX_ENTITY_LINK", "").strip().lower()
+        if opt_in in ("wikidata", "online"):
+            name = "wikidata"
+        else:
+            return NullLinker(config=config, **options)
     cls = _LINKERS.get(name)
     if cls is None:
         raise BackendUnavailable(f"Unknown entity linker {name!r}. Options: {list(_LINKERS)}, 'auto', or 'none'.")

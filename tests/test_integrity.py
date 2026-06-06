@@ -3,6 +3,7 @@ schema-version safety (from the hardening audit, data-integrity dimension)."""
 
 from __future__ import annotations
 
+import os
 import pathlib
 import sys
 import tempfile
@@ -76,6 +77,39 @@ class LocalOnlyEntityEgressTest(unittest.TestCase):
         cfg = Config(settings=Settings(local_only=True))
         self.assertIsInstance(get_entity_linker("auto", config=cfg), NullLinker)
         self.assertIsInstance(get_entity_linker("wikidata", config=cfg), NullLinker)
+
+
+class EntityLinkerDefaultOfflineTest(unittest.TestCase):
+    """'auto' must be offline by default (README: 'no network, fully offline
+    default') — the network-egressing Wikidata linker is OPT-IN, never auto-picked
+    just because wikidata.org happens to be reachable."""
+
+    def setUp(self):
+        from unittest import mock
+        # Pretend Wikidata IS reachable; auto must still NOT select it.
+        p = mock.patch(
+            "memovox.backends.entity_link.WikidataLinker.is_available", return_value=True
+        )
+        p.start()
+        self.addCleanup(p.stop)
+        os.environ.pop("MEMOVOX_ENTITY_LINK", None)
+        self.addCleanup(lambda: os.environ.pop("MEMOVOX_ENTITY_LINK", None))
+
+    def test_auto_is_offline_null_linker_by_default(self):
+        from memovox.backends import get_entity_linker
+        from memovox.backends.entity_link import NullLinker
+        self.assertIsInstance(get_entity_linker("auto"), NullLinker)
+
+    def test_env_opt_in_selects_wikidata(self):
+        from memovox.backends import get_entity_linker
+        from memovox.backends.entity_link import WikidataLinker
+        os.environ["MEMOVOX_ENTITY_LINK"] = "wikidata"
+        self.assertIsInstance(get_entity_linker("auto"), WikidataLinker)
+
+    def test_explicit_backend_still_selects_wikidata(self):
+        from memovox.backends import get_entity_linker
+        from memovox.backends.entity_link import WikidataLinker
+        self.assertIsInstance(get_entity_linker("wikidata"), WikidataLinker)
 
 
 class SchemaVersionGuardTest(unittest.TestCase):
