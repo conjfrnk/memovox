@@ -112,6 +112,20 @@ class JobWorkerTest(unittest.TestCase):
         self.assertEqual(job["state"], "failed")
         self.assertIn("boom", job["error"])
 
+    def test_auto_worker_is_single_and_stoppable(self):
+        # enqueue auto-spawns ONE worker; a 2nd enqueue reuses it (no duplicate
+        # thread under the lock); close() stops it cleanly.
+        self.mv.enqueue_consolidate()
+        w1 = self.mv._worker
+        self.assertIsNotNone(w1)
+        self.assertTrue(w1.is_alive())
+        self.mv._ensure_worker()  # idempotent
+        self.assertIs(self.mv._worker, w1)  # same worker, not a duplicate
+        self.mv.close()
+        self.assertIsNone(self.mv._worker)
+        w1.join(timeout=5)
+        self.assertFalse(w1.is_alive())  # stopped, thread + connection released
+
     def test_worker_resumable_resets_stuck_running(self):
         from memovox.serving.jobs import JobStore, JobWorker
         jobs = JobStore(self.mv.config)

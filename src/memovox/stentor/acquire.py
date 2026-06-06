@@ -63,7 +63,10 @@ def enumerate_source(config: Config, url: str) -> list:
             "Install it with: pip install 'memovox[acquire]'  (or `pip install yt-dlp`)."
         )
     cmd = ["yt-dlp", "--flat-playlist", "--dump-single-json", "--no-warnings", url]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+    except subprocess.TimeoutExpired:
+        raise AcquisitionError(f"yt-dlp enumeration timed out (>3 min) for {url}.")
     if proc.returncode != 0:
         raise AcquisitionError(f"yt-dlp enumeration failed: {proc.stderr.strip()[:500]}")
     try:
@@ -206,7 +209,10 @@ def _acquire_url(
     if cookies:
         cmd += ["--cookies", cookies]
     cmd.append(url)
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+    except subprocess.TimeoutExpired:
+        raise AcquisitionError(f"yt-dlp download timed out (>60 min) for {url}.")
     if proc.returncode != 0:
         raise AcquisitionError(f"yt-dlp failed: {proc.stderr.strip()[:500]}")
 

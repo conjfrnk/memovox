@@ -92,7 +92,10 @@ def demux_to_wav(src: "str | Path", dst: "str | Path", *, sample_rate: int = 160
         ffmpeg, "-y", "-loglevel", "error", "-i", str(src),
         "-vn", "-ac", "1", "-ar", str(sample_rate), "-f", "wav", str(dst),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+    except subprocess.TimeoutExpired:
+        raise DemuxError(f"ffmpeg demux timed out (>30 min) for {src}.")
     if proc.returncode != 0 or not dst.exists() or dst.stat().st_size == 0:
         raise DemuxError(f"ffmpeg demux failed for {src}: {proc.stderr.strip()[:400]}")
     return dst

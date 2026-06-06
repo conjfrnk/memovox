@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import sys
+import threading
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -46,6 +47,23 @@ class Memovox:
         self.config = Config(store=store, settings=settings)
         if overrides:
             self.config.settings = self.config.settings.merged(overrides)
+        self._worker = None
+        self._worker_lock = threading.Lock()
+
+    def close(self) -> None:
+        """Stop the auto-spawned background worker (if any) and release its resources.
+        Idempotent; safe to call even if no worker was spawned."""
+        worker = self._worker
+        if worker is not None:
+            worker.stop()
+            worker.join(timeout=5.0)
+            self._worker = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
 
     @property
     def settings(self) -> Settings:
@@ -196,10 +214,11 @@ class Memovox:
         single-process MCP/SDK caller drains its own queue without a separate
         memovox-worker. A deployed setup runs memovox-worker explicitly instead."""
         from .serving.jobs import JobWorker
-        worker = getattr(self, "_worker", None)
-        if worker is None or not worker.is_alive():
-            self._worker = JobWorker(self)
-            self._worker.start()
+        with self._worker_lock:  # guard the check-then-act so we never spawn duplicates
+            worker = self._worker
+            if worker is None or not worker.is_alive():
+                self._worker = JobWorker(self)
+                self._worker.start()
 
     def enqueue_consolidate(self) -> dict:
         """Enqueue an async consolidation; returns {job_id, state} immediately."""
