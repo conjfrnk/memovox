@@ -229,7 +229,10 @@ def ask(
         if llm is not None and getattr(llm, "is_generative", False):
             try:
                 text = _synthesize_llm(llm, query, citations)
-            except Exception:
+            except Exception as exc:  # noqa: BLE001 - graceful fallback, but visible
+                import sys
+                print(f"memovox: LLM answer synthesis failed ({type(exc).__name__}: "
+                      f"{exc}); using the extractive synthesizer.", file=sys.stderr)
                 text = _synthesize_extractive(citations)
         else:
             text = _synthesize_extractive(citations)

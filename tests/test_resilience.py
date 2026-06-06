@@ -144,5 +144,38 @@ class EndToEndHostileEnvTest(unittest.TestCase):
             self.assertTrue(ans.citations)  # answered despite broken optional backends
 
 
+class BadInputFailsCleanTest(unittest.TestCase):
+    """Bad inputs on the public API must fail with a CLEAR error, never a cryptic
+    crash deep in the pipeline."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = pathlib.Path(self._tmp.name)
+        from memovox import Memovox
+        self.mv = Memovox(store=self.dir / "store", llm_backend="none")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_empty_and_directory_paths_raise_acquisition_error(self):
+        from memovox.errors import AcquisitionError
+        for bad in ("", "   ", str(self.dir)):  # empty, whitespace, a directory
+            with self.assertRaises(AcquisitionError):
+                self.mv.ingest(bad)
+
+    def test_non_dict_subscriptions_does_not_crash(self):
+        (self.dir / "store").mkdir(parents=True, exist_ok=True)
+        self.mv.config.subscriptions_path.write_text("[1, 2, 3]", encoding="utf-8")  # a list
+        self.assertEqual(self.mv.list_subscriptions(), [])  # ignored, no AttributeError
+
+    def test_malformed_config_json_falls_back_to_defaults(self):
+        from memovox import Memovox
+        store = self.dir / "store2"
+        store.mkdir(parents=True, exist_ok=True)
+        (store / "config.json").write_text("{not json", encoding="utf-8")
+        mv = Memovox(store=store)  # must not crash
+        self.assertFalse(mv.settings.local_only)  # defaults applied
+
+
 if __name__ == "__main__":
     unittest.main()

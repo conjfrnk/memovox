@@ -31,7 +31,10 @@ def seen_ids(store, url: str) -> Set[str]:
         return set()
     try:
         return set(json.loads(raw))
-    except (ValueError, TypeError):
+    except (ValueError, TypeError) as exc:
+        import sys
+        print(f"memovox: corrupt sync cursor for {url} ({exc}); treating as empty "
+              "(the source will be re-checked).", file=sys.stderr)
         return set()
 
 

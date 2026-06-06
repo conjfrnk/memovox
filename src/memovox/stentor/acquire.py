@@ -132,9 +132,15 @@ def _acquire_local(
     title: Optional[str],
     captions: Optional[str],
 ) -> SourceMeta:
+    if not source or not str(source).strip():
+        raise AcquisitionError("Empty source path.")
     path = Path(source).expanduser()
     if not path.exists():
         raise AcquisitionError(f"No such file: {path}")
+    if not path.is_file():
+        # A directory (or other non-file) would crash later with a cryptic
+        # IsADirectoryError in content_hash_file — fail clean here instead.
+        raise AcquisitionError(f"Not a file: {path}")
     ext = path.suffix.lower()
     chash = content_hash_file(path)
     display_title = title or path.stem

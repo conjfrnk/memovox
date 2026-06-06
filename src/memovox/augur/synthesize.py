@@ -203,7 +203,10 @@ def synthesize(
     if llm is not None and getattr(llm, "is_generative", False):
         try:
             text = _synthesize_llm(llm, topic, citations, consensus_points, contradictions)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - graceful fallback, but visible
+            import sys
+            print(f"memovox: LLM topic synthesis failed ({type(exc).__name__}: {exc}); "
+                  "using the extractive synthesizer.", file=sys.stderr)
             text = extractive
 
     low_evidence = not text.strip()

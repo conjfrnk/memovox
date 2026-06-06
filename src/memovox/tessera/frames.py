@@ -12,6 +12,7 @@ deterministic *visual embedding* for retrieval until SigLIP/ColPali is wired.
 from __future__ import annotations
 
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
@@ -58,9 +59,19 @@ def sample_frame_signatures(
     ]
     try:
         proc = subprocess.run(cmd, capture_output=True, timeout=900)
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError) as exc:
+        print(f"tessera: frame sampling failed for {path.name} ({exc}); "
+              "visual track dropped.", file=sys.stderr)
         return []
     data = proc.stdout or b""
+    if proc.returncode != 0 and not data:
+        # This path is video-gated (caller checks is_video), so a non-zero ffmpeg
+        # exit on a real video is a genuine failure — surface it instead of silently
+        # dropping the whole visual track as if there were no video stream.
+        tail = (proc.stderr or b"").decode("utf-8", "replace").strip()[-200:]
+        print(f"tessera: ffmpeg exit {proc.returncode} for {path.name}; visual track "
+              f"dropped. {tail}", file=sys.stderr)
+        return []
     available = len(data) // cell if cell else 0
     n = min(available, max_frames) if cell else 0
     if span is not None and cell:

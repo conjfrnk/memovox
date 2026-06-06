@@ -137,9 +137,21 @@ class Config:
         if cfg.is_file():
             try:
                 data = json.loads(cfg.read_text(encoding="utf-8"))
-                return Settings().merged(data)
-            except (ValueError, OSError):
-                pass
+            except (ValueError, OSError) as exc:
+                # A malformed config.json silently reverting to defaults can flip
+                # privacy-relevant settings (e.g. local_only back to False). Warn on
+                # stderr so the operator notices instead of running with surprise
+                # defaults. (stderr, not stdout — MCP owns stdout.)
+                import sys
+                print(f"memovox: ignoring malformed {cfg} ({exc}); using defaults.",
+                      file=sys.stderr)
+                return Settings()
+            if not isinstance(data, dict):
+                import sys
+                print(f"memovox: {cfg} is not a JSON object; using defaults.",
+                      file=sys.stderr)
+                return Settings()
+            return Settings().merged(data)
         return Settings()
 
     # -- paths -------------------------------------------------------------

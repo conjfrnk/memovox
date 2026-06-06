@@ -115,12 +115,17 @@ class Memovox:
             return []
         try:
             subs = json.loads(path.read_text(encoding="utf-8"))
-        except (ValueError, OSError):
+        except (ValueError, OSError) as exc:
+            print(f"memovox: ignoring malformed {path} ({exc}).", file=sys.stderr)
             return []
+        if not isinstance(subs, dict):
+            print(f"memovox: {path} is not a JSON object; ignoring.", file=sys.stderr)
+            return []
+        sources = subs.get("sources")
         out = []
-        for entry in subs.get("sources", []):
+        for entry in sources if isinstance(sources, list) else []:
             url = entry.get("url") if isinstance(entry, dict) else entry
-            if url:
+            if url and isinstance(url, str):
                 out.append(url)
         return out
 
