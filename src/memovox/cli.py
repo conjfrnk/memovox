@@ -33,6 +33,7 @@ def cmd_ingest(args, mv: Memovox) -> int:
     report = mv.ingest(
         args.source, source_url=args.source_url, title=args.title, captions=args.captions,
         cookies=args.cookies, language=args.lang, glossary=args.glossary, force=args.force,
+        with_video=args.with_video,
     )
     print(f"[{report.status}] {report.video_id}  —  {report.title}")
     print(f"  moments: {report.n_moments}   claims: {report.n_claims_committed} committed, "
@@ -394,6 +395,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--lang")
     s.add_argument("--glossary", nargs="*", help="domain terms to bias ASR.")
     s.add_argument("--force", action="store_true", help="re-ingest even if unchanged.")
+    s.add_argument("--with-video", action="store_true",
+                   help="for URLs: download video+audio (not audio-only) so the "
+                        "visual track (keyframes/OCR/VLM) can be analyzed.")
     s.set_defaults(func=cmd_ingest)
 
     s = sub.add_parser("ask", help="ask a grounded, cited question.")

@@ -108,6 +108,7 @@ def ingest(
     visual_result: Optional[object] = None,
     modality: Optional[str] = None,
     resolve_corpus: bool = True,
+    with_video: bool = False,
 ) -> IngestReport:
     # CANONICAL ingest() signature (M0.3, single-owner). Keyword-only Phase-4 seams:
     #   published_at: override the source's publication date (local files have none).
@@ -134,6 +135,7 @@ def ingest(
             cookies=cookies, asr_backend=settings.asr_backend, language=language, glossary=glossary,
             asr_device=settings.asr_device, asr_compute_type=settings.asr_compute_type,
             asr_allow_cpu=settings.asr_allow_cpu, captions_as_prior=settings.captions_as_prior,
+            want_video=with_video,
         )
         _sp.add_counter("segments", len(st.segments))
     meta = st.meta

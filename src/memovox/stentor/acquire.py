@@ -106,10 +106,11 @@ def acquire(
     title: Optional[str] = None,
     captions: Optional[str] = None,
     cookies: Optional[str] = None,
+    want_video: bool = False,
 ) -> SourceMeta:
     config.ensure()
     if _is_url(source):
-        return _acquire_url(config, source, cookies=cookies, title=title)
+        return _acquire_url(config, source, cookies=cookies, title=title, want_video=want_video)
     return _acquire_local(source, source_url=source_url, title=title, captions=captions)
 
 
@@ -191,7 +192,8 @@ def _sibling_captions(media: Path) -> Optional[Path]:
 
 
 def _acquire_url(
-    config: Config, url: str, *, cookies: Optional[str], title: Optional[str]
+    config: Config, url: str, *, cookies: Optional[str], title: Optional[str],
+    want_video: bool = False,
 ) -> SourceMeta:
     if not shutil.which("yt-dlp"):
         raise AcquisitionError(
@@ -200,8 +202,14 @@ def _acquire_url(
             "Alternatively, download the file/captions yourself and ingest the local path."
         )
     out_tmpl = str(config.media_dir / "%(id)s.%(ext)s")
+    # Audio-only by default (cheap, and the free ASR path is captions/whisper).
+    # ``want_video`` (CLI --with-video) fetches video+audio so Tessera's visual
+    # track (keyframes/OCR/VLM) can run — otherwise the whole visual modality is
+    # unreachable from a URL. The downloaded stream is probed below, so is_video
+    # reflects reality regardless of what yt-dlp actually delivered.
+    fmt = "bv*+ba/b" if want_video else "bestaudio/best"
     cmd = [
-        "yt-dlp", "-f", "bestaudio/best", "-o", out_tmpl,
+        "yt-dlp", "-f", fmt, "-o", out_tmpl,
         "--write-info-json", "--write-subs", "--write-auto-subs",
         "--sub-format", "vtt", "--sub-langs", "en.*,en",
         "--no-playlist", "--restrict-filenames",
@@ -227,6 +235,11 @@ def _acquire_url(
     vid = meta_json.get("id", "")
     media_path = _find_media(config.media_dir, vid)
     captions_path = _find_captions(config.media_dir, vid)
+    # Probe the ACTUAL downloaded stream rather than assuming video. ``bestaudio``
+    # yields an audio-only container, so hardcoding is_video=True made Tessera shell
+    # ffmpeg onto a streamless file (a noisy "visual track dropped" error). A real
+    # probe means audio-only -> Tessera cleanly skips ("no video stream").
+    has_video = bool(media_path and audio.probe(media_path).get("has_video"))
     return SourceMeta(
         source_url=meta_json.get("webpage_url", url),
         title=title or meta_json.get("title") or (media_path.stem if media_path else url),
@@ -237,7 +250,7 @@ def _acquire_url(
         content_hash=content_hash_file(media_path) if media_path else sha1_hex(url),
         media_path=media_path,
         captions_path=captions_path,
-        is_video=True,
+        is_video=has_video,
         extra={"description": meta_json.get("description")},
     )
 

@@ -16,7 +16,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
 
 from memovox.config import Config
 from memovox.errors import AcquisitionError
-from memovox.stentor.acquire import EnumeratedEntry, enumerate_source
+from memovox.stentor.acquire import EnumeratedEntry, acquire, enumerate_source
 
 _PLAYLIST_JSON = json.dumps({
     "id": "PL123", "title": "My Playlist",
@@ -69,6 +69,52 @@ class EnumerateSourceTest(unittest.TestCase):
         with mock.patch("shutil.which", return_value=None):
             with self.assertRaises(AcquisitionError):
                 enumerate_source(self.config, "https://x/playlist")
+
+
+class AcquireUrlTest(unittest.TestCase):
+    """_acquire_url must (a) probe the real stream for is_video instead of
+    hardcoding True (so an audio-only download doesn't make Tessera shell ffmpeg
+    onto a streamless file), and (b) request a video format only on --with-video."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.config = Config(store=pathlib.Path(self._tmp.name) / "s").ensure()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _fake_download(self, *, ext="m4a"):
+        """Return a subprocess.run stub that writes a fake media file + info.json."""
+        def _run(cmd, **kwargs):
+            (self.config.media_dir / f"vid1.{ext}").write_bytes(b"\x00\x00")
+            (self.config.media_dir / "vid1.info.json").write_text(
+                json.dumps({"id": "vid1", "title": "T", "webpage_url": "https://youtu.be/vid1"})
+            )
+            self._cmd = cmd
+            return mock.Mock(returncode=0, stdout="", stderr="")
+        return _run
+
+    def _acquire(self, *, has_video, want_video=False):
+        with mock.patch("shutil.which", return_value="/usr/bin/yt-dlp"), \
+                mock.patch("subprocess.run", side_effect=self._fake_download()), \
+                mock.patch("memovox.audio.probe",
+                           return_value={"has_video": has_video, "has_audio": True,
+                                         "duration": 5.0, "codecs": []}):
+            return acquire(self.config, "https://youtu.be/vid1", want_video=want_video)
+
+    def test_audio_only_download_is_not_video(self):
+        meta = self._acquire(has_video=False)
+        self.assertFalse(meta.is_video)
+        # default (audio) request must NOT ask yt-dlp for video
+        self.assertIn("bestaudio/best", self._cmd)
+
+    def test_video_present_is_detected(self):
+        meta = self._acquire(has_video=True, want_video=True)
+        self.assertTrue(meta.is_video)
+        # --with-video must request a video+audio format, not bestaudio-only
+        joined = " ".join(self._cmd)
+        self.assertIn("bv", joined)
+        self.assertNotEqual(self._cmd[self._cmd.index("-f") + 1], "bestaudio/best")
 
 
 if __name__ == "__main__":
