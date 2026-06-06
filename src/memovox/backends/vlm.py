@@ -21,8 +21,11 @@ from typing import Optional
 from .base import VLMBackend
 
 _CAPTION_PROMPT = (
-    "Describe this video frame for a knowledge base: any slide title, bullet "
-    "text, code, equations, charts, diagrams, or UI shown. Be dense and factual."
+    "Describe this video frame for a knowledge base. Name the setting and the "
+    "salient objects, people, and actions visible in the scene, and transcribe any "
+    "on-screen text: slide titles, bullet text, code, equations, charts, diagrams, "
+    "UI, captions, or signage. Be dense and factual; describe only what is visible, "
+    "do not speculate."
 )
 
 
