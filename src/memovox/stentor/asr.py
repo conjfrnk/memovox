@@ -17,7 +17,7 @@ from ..backends.asr_whisper import WhisperASR
 from ..backends.base import ASRBackend, ASRResult, Segment
 from ..backends.diarize_turns import PyannoteTurns
 from ..config import Config
-from ..errors import BackendUnavailable, DemuxError
+from ..errors import BackendUnavailable, BudgetExceeded, DemuxError, DevicePlacementError
 from .acquire import SourceMeta
 from .transcript import clean_segments, load_transcript
 
@@ -173,11 +173,16 @@ def run_asr(
             captions_path=str(meta.captions_path) if meta.captions_path else None,
             language=language or meta.lang,
         )
+    except (DevicePlacementError, DemuxError, BudgetExceeded):
+        # DELIBERATE fail-loud signals (spec §9): a heavy model on CPU, no audio
+        # stream, a blown budget — these must surface their actionable message, NOT
+        # be silently downgraded to captions. Propagate.
+        raise
     except Exception as exc:  # noqa: BLE001
-        # Whisper model load / transcription can fail (offline/uncached weights, OOM,
-        # an unsupported compute_type). If captions exist, degrade to them rather than
-        # aborting ingest with an opaque faster-whisper error — captions are the §9
-        # priority lever. Otherwise the failure is genuine, so re-raise.
+        # A genuine whisper model-load / transcription failure (offline/uncached
+        # weights, OOM, an unsupported compute_type). If captions exist, degrade to
+        # them rather than aborting with an opaque faster-whisper error — captions are
+        # the §9 priority lever. Otherwise the failure is genuine, so re-raise.
         if name == "whisper" and meta.captions_path is not None:
             import sys
             print(f"memovox: whisper ASR failed ({type(exc).__name__}: {exc}); "

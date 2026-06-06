@@ -37,6 +37,10 @@ class DeleteVideoCompletenessTest(unittest.TestCase):
         # a CROSS-VIDEO contradiction edge stamped with yt:b (points INTO yt:a's claim)
         s.add_edge("yt:b#m0.c0", "CONTRADICTS", "yt:a#m0.c0",
                    src_type="Claim", dst_type="Claim", video_id="yt:b")
+        # a SAME_AS speaker edge stamped with yt:a whose endpoints are BOTH speakers
+        # (neither a moment nor a claim) — must still be removed on delete.
+        s.add_edge("yt:a:spk_0", "SAME_AS", "spk:alice",
+                   src_type="Speaker", dst_type="Speaker", video_id="yt:a")
         # entity mentioned only by yt:a, and a topic on yt:a's moment
         s.conn.execute("INSERT INTO entities (entity_id, canonical_name) VALUES ('ent:solo','Solo')")
         s.conn.execute("INSERT INTO mentions (claim_id, entity_id) VALUES ('yt:a#m0.c0','ent:solo')")
@@ -50,6 +54,8 @@ class DeleteVideoCompletenessTest(unittest.TestCase):
 
         # the cross-video edge into yt:a's deleted claim is gone (no dangle)
         self.assertEqual(self._count("SELECT COUNT(*) FROM edges WHERE dst='yt:a#m0.c0'"), 0)
+        # the SAME_AS speaker edge stamped with yt:a is gone (both endpoints speakers)
+        self.assertEqual(self._count("SELECT COUNT(*) FROM edges WHERE rel='SAME_AS' AND video_id='yt:a'"), 0)
         # the now-mention-less entity and member-less topic are GC'd
         self.assertEqual(self._count("SELECT COUNT(*) FROM entities WHERE entity_id='ent:solo'"), 0)
         self.assertEqual(self._count("SELECT COUNT(*) FROM topics WHERE topic_id='topic:z'"), 0)

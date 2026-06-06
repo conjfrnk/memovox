@@ -29,8 +29,21 @@ def _force_available(cls):
     return mock.patch.object(cls, "is_available", classmethod(lambda c: True))
 
 
+def _reset_degraded():
+    # The auto-fallback memoizes degraded backends process-globally; clear it so a
+    # test that forces degradation can't leak that decision into another test.
+    from memovox.backends import _DEGRADED
+    _DEGRADED.clear()
+
+
 class AutoFallsBackWhenModelUnloadableTest(unittest.TestCase):
     """auto + optional-present-but-broken -> a WORKING free backend, no crash."""
+
+    def setUp(self):
+        _reset_degraded()
+
+    def tearDown(self):
+        _reset_degraded()
 
     def test_embedder_auto_degrades_when_model_load_fails(self):
         with _force_available(embed_mod.SentenceTransformerEmbedder), \
@@ -118,6 +131,12 @@ class UnimplementedSkeletonsFailCleanTest(unittest.TestCase):
 class EndToEndHostileEnvTest(unittest.TestCase):
     """A full ingest+ask succeeds even when an optional backend is present-but-broken."""
 
+    def setUp(self):
+        _reset_degraded()
+
+    def tearDown(self):
+        _reset_degraded()
+
     def test_memovox_ingest_ask_survives_broken_optional_backends(self):
         import contextlib
 
@@ -169,6 +188,28 @@ class AsrWhisperFallsBackToCaptionsTest(unittest.TestCase):
                 result = asr_mod.run_asr(config, meta, backend="whisper")  # must not raise
             self.assertTrue(result.segments)  # captions used
             self.assertIn("captions", result.segments[0].text.lower())
+
+    def test_device_placement_error_is_not_swallowed(self):
+        # the §9 fail-loud guard must surface, NOT be downgraded to captions
+        import pathlib
+        from memovox.backends.asr_whisper import WhisperASR
+        from memovox.config import Config
+        from memovox.errors import DevicePlacementError
+        from memovox.stentor import asr as asr_mod
+        from memovox.stentor.acquire import SourceMeta
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Config(store=pathlib.Path(tmp) / "s").ensure()
+            vtt = pathlib.Path(tmp) / "c.vtt"
+            vtt.write_text("WEBVTT\n\n00:00:01.000 --> 00:00:05.000\nHi.\n", encoding="utf-8")
+            meta = SourceMeta(source_url=None, title="t", media_path=pathlib.Path(tmp) / "m.mp4",
+                              captions_path=vtt)
+            with mock.patch.object(WhisperASR, "is_available", classmethod(lambda c: True)), \
+                    mock.patch.object(asr_mod, "_prepare_audio",
+                                      return_value=pathlib.Path(tmp) / "x.wav"), \
+                    mock.patch.object(WhisperASR, "transcribe",
+                                      side_effect=DevicePlacementError("large model on CPU")):
+                with self.assertRaises(DevicePlacementError):  # propagates despite captions
+                    asr_mod.run_asr(config, meta, backend="whisper")
 
 
 class BadInputFailsCleanTest(unittest.TestCase):

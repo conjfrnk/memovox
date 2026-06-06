@@ -188,17 +188,17 @@ class JobWorker(threading.Thread):
         self.mv = mv
         self.once = once
         self.poll_interval = poll_interval
-        self._stop = threading.Event()
+        self._stop_event = threading.Event()
         self.jobs = JobStore(mv.config)
         self.jobs.requeue_stuck_running()
 
     def stop(self) -> None:
-        self._stop.set()
+        self._stop_event.set()
 
     def drain(self) -> int:
         """Run every currently-due job until none remain; return the count run."""
         ran = 0
-        while not self._stop.is_set():
+        while not self._stop_event.is_set():
             job = self.jobs.claim_next()
             if not job:
                 break
@@ -215,9 +215,9 @@ class JobWorker(threading.Thread):
             print(f"job {job['job_id']} ({job['kind']}) failed -> {state}: {exc}", file=sys.stderr)
 
     def run(self) -> None:
-        while not self._stop.is_set():
+        while not self._stop_event.is_set():
             self.drain()
             if self.once:
                 break
-            self._stop.wait(self.poll_interval)
+            self._stop_event.wait(self.poll_interval)
         self.jobs.close()

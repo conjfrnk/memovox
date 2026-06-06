@@ -313,13 +313,17 @@ class LoomStore:
         self.conn.commit()
 
     def delete_video(self, video_id: str) -> bool:
-        """Redaction primitive (§2/§12): delete a video and ALL its derived data
-        atomically — moments/claims/vectors/mentions/edges (via ON DELETE CASCADE),
-        the FTS rows (not FK-cascaded), cross-video edges that POINT AT the deleted
-        claims/moments (stamped with another video's id, so not cascaded), and any
-        entity/topic node left member-less. Also resets the consolidation watermark
-        (deleted rowids can be reused, which would otherwise make an incremental
-        re-scan skip genuinely new claims). One transaction; nothing dangles."""
+        """Redaction primitive (§2/§12): atomically delete a video and ALL its derived
+        data. The FK cascade (moments→claims→mentions/vectors) handles the per-video
+        rows; the ``edges`` table has NO foreign key (plain ``video_id`` column), so
+        edges are removed explicitly: (a) ALL edges stamped with this video_id —
+        including SAME_AS speaker edges whose endpoints are neither a moment nor a
+        claim; (b) cross-video edges that POINT AT the deleted moments/claims but are
+        stamped with ANOTHER video's id. Then GC entity/topic nodes left member-less
+        AND their now-dangling inbound MENTIONS/ABOUT edges, drop the FTS rows, and
+        reset the consolidation watermark (deleted rowids can be reused, which would
+        otherwise make an incremental re-scan skip genuinely new claims). One
+        transaction; nothing dangles."""
         moment_ids = [r["moment_id"] for r in self.conn.execute(
             "SELECT moment_id FROM moments WHERE video_id = ?", (video_id,)).fetchall()]
         claim_ids = [r["claim_id"] for r in self.conn.execute(
@@ -329,8 +333,11 @@ class LoomStore:
                                   [(i,) for i in moment_ids])
         cur = self.conn.execute("DELETE FROM videos WHERE video_id = ?", (video_id,))
         if cur.rowcount > 0:
-            # Cross-video edges referencing the (now-deleted) nodes from ANOTHER
-            # video's perspective are not cascaded by edges.video_id — remove them.
+            # (a) every edge stamped with this video (edges have no FK cascade) —
+            # catches SAME_AS speaker edges (both endpoints are Speaker nodes).
+            self.conn.execute("DELETE FROM edges WHERE video_id = ?", (video_id,))
+            # (b) cross-video edges (stamped with another video's id) pointing AT the
+            # now-deleted nodes.
             node_ids = moment_ids + claim_ids
             if node_ids:
                 ph = ",".join("?" * len(node_ids))
@@ -343,6 +350,13 @@ class LoomStore:
             self.conn.execute(
                 "DELETE FROM topics WHERE topic_id NOT IN "
                 "(SELECT topic_id FROM moments WHERE topic_id IS NOT NULL)")
+            # ...and inbound edges from SURVIVING videos that now point at a GC'd node.
+            self.conn.execute(
+                "DELETE FROM edges WHERE rel = 'MENTIONS' AND dst NOT IN "
+                "(SELECT entity_id FROM entities)")
+            self.conn.execute(
+                "DELETE FROM edges WHERE rel = 'ABOUT' AND dst NOT IN "
+                "(SELECT topic_id FROM topics)")
             # rowid reuse safety: force a full re-scan on the next consolidation.
             self.conn.execute(
                 "INSERT OR REPLACE INTO meta (key, value) VALUES ('consolidation_watermark', '0')")
