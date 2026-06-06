@@ -120,6 +120,25 @@ class TestRollingCaptions(unittest.TestCase):
         self.assertEqual(len(speech), 3)
         self.assertNotIn("<", " ".join(s.text for s in speech))
 
+    def test_turn_markers_yield_multiple_speakers(self):
+        # The CEA-608/broadcast convention: ">>" marks a speaker change. Captions
+        # that use it must surface as multiple (anonymous) speakers on the free path
+        # even without names, instead of collapsing everyone onto spk_0.
+        vtt = (
+            "WEBVTT\n\n"
+            "00:00:00.000 --> 00:00:03.000\n>> Want to see the seat?\n\n"
+            "00:00:03.000 --> 00:00:06.000\n>> Yes, it is incredible here.\n\n"
+            "00:00:06.000 --> 00:00:09.000\nIt reclines fully flat now.\n"
+        )
+        from memovox.stentor.diarize import assign_speakers
+        segs = assign_speakers(transcript.clean_segments(transcript.parse_cues(vtt)))
+        speakers = [s.speaker for s in segs if s.kind == "speech"]
+        # two turn markers -> at least two distinct speakers; ">>" stripped from text
+        self.assertGreaterEqual(len(set(speakers)), 2)
+        self.assertFalse(any(">>" in s.text for s in segs))
+        # the second turn persists onto the following unmarked line (same speaker)
+        self.assertEqual(speakers[1], speakers[2])
+
     def test_non_rolling_vtt_keeps_all_lines(self):
         # A normal (non-rolling) two-line cue is NOT touched by the rolling path:
         # both lines are joined, since neither carries inline <c> timing.

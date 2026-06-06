@@ -23,6 +23,11 @@ EVENT_RE = re.compile(
 _TAG_RE = re.compile(r"<[^>]+>")
 _SPEAKER_VTT_RE = re.compile(r"<v\s+([^>]+)>")
 _SPEAKER_PREFIX_RE = re.compile(r"^\s*([A-Z][A-Za-z0-9 ._-]{0,30}):\s+")
+#: ``>>`` (optionally ``>>>``) marks a speaker change in CEA-608 / broadcast-style
+#: captions. We strip it from the knowledge text and use it to start a new
+#: (anonymous) speaker turn so multi-speaker captions don't collapse onto spk_0.
+_TURN_START_RE = re.compile(r"^\s*>>+")
+_TURN_ANYWHERE_RE = re.compile(r">>+\s*")
 #: Inline word-level timestamp tag, e.g. ``<00:00:01.199>`` — the fingerprint of
 #: YouTube auto-generated "rolling" captions (Kind: captions). Their cues repeat
 #: the previous line as a carried-over scroll-up line plus a new line carrying
@@ -168,6 +173,7 @@ def clean_text(raw: str) -> Tuple[str, List[str]]:
     events = [e.lower() for e in EVENT_RE.findall(raw)]
     stripped = EVENT_RE.sub(" ", raw)
     stripped = _TAG_RE.sub(" ", stripped)
+    stripped = _TURN_ANYWHERE_RE.sub(" ", stripped)  # drop ">>" turn markers
     stripped = _SPEAKER_PREFIX_RE.sub("", stripped)
     words = [w for w in stripped.split() if _normalize_word(w) not in FILLERS]
     text = re.sub(r"\s+", " ", " ".join(words)).strip()
@@ -179,8 +185,17 @@ def _normalize_word(word: str) -> str:
 
 
 def clean_segments(segments: List[Segment]) -> List[Segment]:
-    """Strip fillers/events; emit cleaned speech segments + event markers."""
+    """Strip fillers/events; emit cleaned speech segments + event markers.
+
+    ``>>`` turn markers (when present) start a new anonymous speaker that PERSISTS
+    onto following unmarked lines, so a dialogue surfaces as multiple speakers
+    instead of a single ``spk_0``. A transcript with no markers/names is untouched
+    (speaker stays None -> :func:`assign_speakers` applies the single-speaker
+    default), so the free auto-caption path is unchanged."""
     out: List[Segment] = []
+    current: Optional[str] = None  # persistent speaker across ">>"-delimited turns
+    anon_idx = 0
+    saw_turn = False
     for seg in segments:
         text, events = clean_text(seg.text)
         speaker = seg.speaker
@@ -188,6 +203,20 @@ def clean_segments(segments: List[Segment]) -> List[Segment]:
             m = _SPEAKER_PREFIX_RE.match(seg.text)
             if m:
                 speaker = m.group(1).strip()
+        if speaker:
+            current = speaker
+        elif _TURN_START_RE.match(seg.text or ""):
+            # A ">>" with no name starts a new anonymous turn (the first one keeps
+            # spk_0 so a single-speaker ">>"-prefixed caption isn't bumped to spk_1).
+            if current is None:
+                current = "spk_0"
+            else:
+                anon_idx += 1
+                current = f"spk_{anon_idx}"
+            saw_turn = True
+        # Only propagate a tracked speaker once turns/names have actually appeared;
+        # otherwise leave None for assign_speakers' default (no behavior change).
+        speaker = current if (speaker or saw_turn) else None
         if text:
             out.append(
                 Segment(
