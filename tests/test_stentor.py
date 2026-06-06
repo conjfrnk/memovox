@@ -139,6 +139,23 @@ class TestRollingCaptions(unittest.TestCase):
         # the second turn persists onto the following unmarked line (same speaker)
         self.assertEqual(speakers[1], speakers[2])
 
+    def test_musical_note_lines_are_events_not_speech(self):
+        # Captions mark sung lyrics with musical notes; that is music, not spoken
+        # video content, so it must become a timeline event, never a claim.
+        vtt = (
+            "WEBVTT\nKind: captions\n\n"
+            "00:00:00.000 --> 00:00:05.000\n"
+            "♪ This is the heavy heavy monster sound ♪\n\n"
+            "00:00:05.000 --> 00:00:09.000\nThe TV here is enormous.\n"
+        )
+        clean = transcript.clean_segments(transcript.parse_cues(vtt))
+        speech = [s for s in clean if s.kind == "speech"]
+        events = [s for s in clean if s.kind == "event"]
+        self.assertFalse(any("monster sound" in s.text for s in speech))
+        self.assertTrue(any("music" in s.text.lower() for s in events))
+        # genuine speech is untouched
+        self.assertTrue(any("TV here is enormous" in s.text for s in speech))
+
     def test_non_rolling_vtt_keeps_all_lines(self):
         # A normal (non-rolling) two-line cue is NOT touched by the rolling path:
         # both lines are joined, since neither carries inline <c> timing.

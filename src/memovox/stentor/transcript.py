@@ -17,9 +17,17 @@ from ..util import split_sentences
 
 FILLERS = {"um", "uh", "erm", "uhh", "umm", "mm", "hmm", "mhm", "uhm", "ah", "er"}
 EVENT_RE = re.compile(
-    r"\[\s*(music|applause|laughter|silence|inaudible|noise|crosstalk|cheering|chuckles?)[^\]]*\]",
+    r"\[\s*(music|applause|laughter|silence|inaudible|noise|crosstalk|cheering|"
+    r"chuckles?|singing|humming|instrumental|sighs?|groans?|coughs?|gasps?|"
+    r"clears throat|beep|static|whistling)[^\]]*\]",
     re.IGNORECASE,
 )
+#: Musical-note markers wrap sung lyrics in captions. A line carrying one is music
+#: (a song), NOT spoken video content, so it becomes a timeline event rather than a
+#: claim. Unambiguous: these glyphs appear only for music, so there is no false
+#: positive. (Sung lyrics transcribed as PLAIN text with no marker -- e.g. some
+#: YouTube auto-captions -- can't be told apart from speech without audio.)
+_MUSIC_NOTE_RE = re.compile(r"[♪♫♬\U0001f3b5\U0001f3b6]")
 _TAG_RE = re.compile(r"<[^>]+>")
 _SPEAKER_VTT_RE = re.compile(r"<v\s+([^>]+)>")
 _SPEAKER_PREFIX_RE = re.compile(r"^\s*([A-Z][A-Za-z0-9 ._-]{0,30}):\s+")
@@ -197,6 +205,11 @@ def clean_segments(segments: List[Segment]) -> List[Segment]:
     anon_idx = 0
     saw_turn = False
     for seg in segments:
+        # A musical-note-marked line is song/lyrics, not spoken content — record it
+        # as a music event and emit no speech (so it never becomes a claim).
+        if seg.kind != "event" and _MUSIC_NOTE_RE.search(seg.text or ""):
+            out.append(Segment(start=seg.start, end=seg.start, text="[music]", kind="event"))
+            continue
         text, events = clean_text(seg.text)
         speaker = seg.speaker
         if not speaker:
