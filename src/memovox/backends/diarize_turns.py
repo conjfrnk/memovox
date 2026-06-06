@@ -22,11 +22,10 @@ class PyannoteTurns:
 
     @classmethod
     def is_available(cls) -> bool:
-        # find_spec raises (not returns None) when a *parent* package is missing.
-        try:
-            return importlib.util.find_spec("pyannote.audio") is not None
-        except (ImportError, ValueError):
-            return False
+        # Unimplemented skeleton (diarize() raises NotImplementedError): report
+        # UNAVAILABLE so an explicit request fails clean at the factory rather than
+        # crashing mid-pipeline. Restore the find_spec("pyannote.audio") gate when wired.
+        return False
 
     def diarize(self, audio_path: str) -> List:  # pragma: no cover - needs pyannote.audio
         """Return ``(t_start, t_end, speaker)`` turns for ``audio_path`` (skeleton, W7)."""

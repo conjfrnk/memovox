@@ -91,7 +91,7 @@ class BackendConfig:
     vlm_backend: str = "none"
     ocr_backend: str = "none"
     entity_backend: str = "none"
-    voiceprint_backend: str = "auto"      # free-safe: None unless pyannote installed
+    voiceprint_backend: str = "none"      # free = deterministic no-op (never loads optional pyannote)
     visual_embed_backend: str = "signature"
     rerank_backend: str = "none"
 

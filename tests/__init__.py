@@ -27,5 +27,13 @@ os.environ.setdefault("MEMOVOX_ASR_BACKEND", "captions")
 os.environ.setdefault("MEMOVOX_LLM_BACKEND", "none")
 os.environ.setdefault("MEMOVOX_VLM_BACKEND", "none")
 os.environ.setdefault("MEMOVOX_OCR_BACKEND", "none")
+# Slots added by later tracks (M1.1 visual_embed, M2.1 rerank, plus entity +
+# voiceprint) — pin them too so a machine that HAS the optional ML deps installed
+# (cross-encoder / colpali / wikidata / pyannote) but is offline/uncached stays
+# hermetic instead of attempting a model download. Must cover EVERY *_backend slot.
+os.environ.setdefault("MEMOVOX_RERANK_BACKEND", "none")
+os.environ.setdefault("MEMOVOX_VISUAL_EMBED_BACKEND", "signature")
+os.environ.setdefault("MEMOVOX_ENTITY_BACKEND", "none")
+os.environ.setdefault("MEMOVOX_VOICEPRINT_BACKEND", "none")
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")

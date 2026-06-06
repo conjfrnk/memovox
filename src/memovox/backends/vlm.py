@@ -104,10 +104,12 @@ class Qwen25VL(VLMBackend):
 
     @classmethod
     def is_available(cls) -> bool:
-        # Require the Qwen-VL helper specifically, not just transformers (which is
-        # commonly installed for other reasons) — so is_available means "usable".
-        return (importlib.util.find_spec("transformers") is not None
-                and importlib.util.find_spec("qwen_vl_utils") is not None)
+        # Unimplemented skeleton (caption() raises NotImplementedError): report
+        # UNAVAILABLE so `auto` never selects it and an explicit request fails clean
+        # with BackendUnavailable at the factory instead of crashing mid-ingest.
+        # Restore the find_spec(transformers)+find_spec(qwen_vl_utils) gate when the
+        # Qwen2.5-VL model wiring lands.
+        return False
 
     def caption(self, image_path, *, ocr_text=None, prompt=None) -> str:  # pragma: no cover - needs qwen
         from transformers import AutoModelForVision2Seq  # noqa: F401  (lazy; gated)

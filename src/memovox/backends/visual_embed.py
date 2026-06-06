@@ -47,7 +47,10 @@ class ColPaliVisualEmbedder(VisualEmbedder):
 
     @classmethod
     def is_available(cls) -> bool:
-        return importlib.util.find_spec("colpali_engine") is not None
+        # Unimplemented skeleton (embed_image() raises NotImplementedError): report
+        # UNAVAILABLE so explicit selection fails clean at the factory rather than
+        # crashing mid-ingest. Restore find_spec("colpali_engine") when wired.
+        return False
 
     def embed_image(self, image) -> List[float]:  # pragma: no cover - needs colpali_engine
         raise NotImplementedError(

@@ -6,9 +6,36 @@ back to the always-available, dependency-free implementation.
 
 from __future__ import annotations
 
+import sys
 from typing import Optional
 
 from ..errors import BackendUnavailable
+
+#: Optional backends whose MODEL failed to load this process (offline / uncached /
+#: OOM / corrupt). Memoized so ``auto`` selection neither retries the doomed load
+#: nor re-warns — it degrades straight to the free fallback. Cleared only on restart.
+_DEGRADED: set = set()
+
+
+def _try_optional(opt_cls, probe, *, config, options):
+    """For the ``auto`` path only: construct + PROBE the optional backend (the probe
+    must force the lazy model load). Return the instance, or ``None`` if it can't
+    load — degrading to the free fallback is the caller's job. The decision is
+    memoized in ``_DEGRADED`` and a one-time warning goes to STDERR (never stdout —
+    MCP owns stdout). Explicit (non-auto) selection never calls this, so opting into
+    an optional backend still fails loud."""
+    if opt_cls.name in _DEGRADED or not opt_cls.is_available():
+        return None
+    try:
+        inst = opt_cls(config=config, **options)
+        probe(inst)  # forces the model load; raises offline / uncached / OOM
+        return inst
+    except Exception as exc:  # noqa: BLE001 - ANY load/runtime failure -> free fallback
+        _DEGRADED.add(opt_cls.name)
+        print(f"memovox: optional backend {opt_cls.name!r} could not load "
+              f"({type(exc).__name__}: {str(exc)[:120]}); using the free fallback.",
+              file=sys.stderr)
+        return None
 from .base import (
     ASRBackend,
     ASRResult,
@@ -60,7 +87,9 @@ _LINKERS = {"none": NullLinker, "wikidata": WikidataLinker}
 
 def get_embedder(name: str = "auto", *, config=None, **options) -> Embedder:
     if name == "auto":
-        name = "sentence-transformers" if SentenceTransformerEmbedder.is_available() else "hashing"
+        inst = _try_optional(SentenceTransformerEmbedder, lambda e: e.embed_one("ok"),
+                             config=config, options=options)
+        return inst if inst is not None else HashingEmbedder(config=config, **options)
     name = _EMBED_ALIASES.get(name, name)
     cls = _EMBEDDERS.get(name)
     if cls is None:
@@ -74,7 +103,9 @@ def get_embedder(name: str = "auto", *, config=None, **options) -> Embedder:
 
 def get_nli(name: str = "auto", *, config=None, **options) -> NLIBackend:
     if name == "auto":
-        name = "deberta-nli" if TransformersNLI.is_available() else "lexical"
+        inst = _try_optional(TransformersNLI, lambda n: n.classify("ok", "ok"),
+                             config=config, options=options)
+        return inst if inst is not None else LexicalNLI(config=config, **options)
     name = _NLI_ALIASES.get(name, name)
     cls = _NLI.get(name)
     if cls is None:
@@ -135,7 +166,11 @@ def get_reranker(name: str = "auto", *, config=None, **options) -> Reranker:
     """Return a reranker; ``auto`` is the free IdentityReranker unless a cross-encoder
     is installed. ``none``/``""``/``identity`` -> IdentityReranker (spec §5)."""
     if name == "auto":
-        name = "cross-encoder" if CrossEncoderReranker.is_available() else "identity"
+        inst = _try_optional(
+            CrossEncoderReranker,
+            lambda r: r.rerank("ok", [("m", 1.0)], texts={"m": "ok"}),
+            config=config, options=options)
+        return inst if inst is not None else IdentityReranker(config=config, **options)
     name = _RERANK_ALIASES.get(name, name)
     cls = _RERANKERS.get(name)
     if cls is None:

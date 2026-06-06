@@ -60,7 +60,10 @@ class SuryaOCR(OCRBackend):
 
     @classmethod
     def is_available(cls) -> bool:
-        return importlib.util.find_spec("surya") is not None
+        # Unimplemented skeleton (extract() raises NotImplementedError): report
+        # UNAVAILABLE so explicit selection fails clean at the factory rather than
+        # crashing mid-ingest. Restore find_spec("surya") when the wiring lands.
+        return False
 
     def extract(self, image_path) -> str:  # pragma: no cover - needs surya
         from surya.ocr import run_ocr  # noqa: F401  (lazy; gated by is_available)

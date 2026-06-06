@@ -22,10 +22,10 @@ class WhisperXAlign:
 
     @classmethod
     def is_available(cls) -> bool:
-        try:
-            return importlib.util.find_spec("whisperx") is not None
-        except (ImportError, ValueError):
-            return False
+        # Unimplemented skeleton (align() raises NotImplementedError): report
+        # UNAVAILABLE so an explicit request fails clean at the factory rather than
+        # crashing mid-pipeline. Restore the find_spec("whisperx") gate when wired.
+        return False
 
     def align(self, segments: List, audio_path: str, *, language: Optional[str] = None):  # pragma: no cover - needs whisperx
         """Return ``segments`` with forced-aligned word timings (skeleton, W7)."""
