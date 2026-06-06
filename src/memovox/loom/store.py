@@ -276,6 +276,36 @@ class LoomStore:
         ).fetchall()
         return {r["metric"]: r["value"] for r in rows}
 
+    def _ledger_contribution(self, video_id: str) -> Dict[str, float]:
+        """The video's own contribution to the cumulative ledger, reconstructed
+        from its persisted stage metrics — the exact inverse of the bump in
+        ``pipeline.ingest``. Returns ``{}`` when the video has no stage metrics
+        (it was never recorded, so it never bumped the ledger): nothing to undo."""
+        metrics = self.stage_metrics(video_id)
+        if not metrics:
+            return {}
+        by_stage = {m["stage"]: m["counters"] for m in metrics}
+        moments = by_stage.get("moments", {})
+        claims = by_stage.get("claims", {})
+        visual = by_stage.get("visual", {})
+        return {
+            "videos": 1.0,
+            "moments": float(moments.get("moments", 0)),
+            "claims_committed": float(claims.get("committed", 0)),
+            "claims_unsupported": float(claims.get("unsupported", 0)),
+            "visual_events": float(visual.get("events", 0)),
+            "frames": float(visual.get("frames", 0)),
+        }
+
+    def _decrement_ledger(self, updates: Dict[str, float]) -> None:
+        """Subtract a (forgotten) video's contribution from the cumulative ledger,
+        clamped at 0 so redaction can never drive a lifetime counter negative."""
+        for metric, delta in updates.items():
+            self.conn.execute(
+                "UPDATE metrics_ledger SET value = MAX(0, value - ?) WHERE metric = ?",
+                (float(delta), metric),
+            )
+
     # -- videos ------------------------------------------------------------
 
     def get_video(self, video_id: str) -> Optional[Video]:
@@ -328,6 +358,10 @@ class LoomStore:
             "SELECT moment_id FROM moments WHERE video_id = ?", (video_id,)).fetchall()]
         claim_ids = [r["claim_id"] for r in self.conn.execute(
             "SELECT claim_id FROM claims WHERE video_id = ?", (video_id,)).fetchall()]
+        # Capture the ledger contribution BEFORE the cascade drops stage_metrics, so
+        # forget (redaction) leaves the cumulative ledger consistent with reality
+        # rather than still counting the deleted video's moments/claims.
+        ledger_delta = self._ledger_contribution(video_id)
         if self.fts and moment_ids:
             self.conn.executemany("DELETE FROM moments_fts WHERE moment_id = ?",
                                   [(i,) for i in moment_ids])
@@ -360,6 +394,8 @@ class LoomStore:
             # rowid reuse safety: force a full re-scan on the next consolidation.
             self.conn.execute(
                 "INSERT OR REPLACE INTO meta (key, value) VALUES ('consolidation_watermark', '0')")
+            # undo the video's contribution to the cumulative metrics ledger.
+            self._decrement_ledger(ledger_delta)
         self.conn.commit()
         return cur.rowcount > 0
 

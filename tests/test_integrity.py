@@ -79,6 +79,46 @@ class LocalOnlyEntityEgressTest(unittest.TestCase):
         self.assertIsInstance(get_entity_linker("wikidata", config=cfg), NullLinker)
 
 
+class ForgetDecrementsLedgerTest(unittest.TestCase):
+    """Redaction completeness: after forget, the cumulative metrics ledger must not
+    keep reporting the deleted video's videos/moments/claims (stats would show
+    videos=0 while the ledger still said videos=1)."""
+
+    _VTT = (
+        "WEBVTT\n\n00:00:00.000 --> 00:00:06.000\n"
+        "The Transformer architecture has 12 layers.\n\n"
+        "00:00:06.000 --> 00:00:12.000\n"
+        "Chinchilla is compute optimal at 70 billion parameters.\n"
+    )
+
+    def setUp(self):
+        from memovox.config import Settings
+        self._tmp = tempfile.TemporaryDirectory()
+        self.config = Config(store=pathlib.Path(self._tmp.name) / "s",
+                             settings=Settings(llm_backend="none")).ensure()
+        self.vtt = pathlib.Path(self._tmp.name) / "talk.en.vtt"
+        self.vtt.write_text(self._VTT, encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_ledger_zeroes_after_forgetting_the_only_video(self):
+        from memovox import pipeline
+        rep = pipeline.ingest(self.config, str(self.vtt), source_url="https://youtu.be/zz")
+        with LoomStore(self.config) as store:
+            led = store.metrics_ledger()
+            self.assertEqual(led.get("videos"), 1)
+            self.assertEqual(led.get("moments"), rep.n_moments)
+            self.assertEqual(led.get("claims_committed"), rep.n_claims_committed)
+
+            self.assertTrue(store.delete_video(rep.video_id))
+            led = store.metrics_ledger()
+            self.assertEqual(led.get("videos", 0), 0)
+            self.assertEqual(led.get("moments", 0), 0)
+            self.assertEqual(led.get("claims_committed", 0), 0)
+            self.assertEqual(led.get("claims_unsupported", 0), 0)
+
+
 class EntityLinkerDefaultOfflineTest(unittest.TestCase):
     """'auto' must be offline by default (README: 'no network, fully offline
     default') — the network-egressing Wikidata linker is OPT-IN, never auto-picked
