@@ -1,5 +1,8 @@
 PY ?= python3
 export PYTHONPATH := src
+# Pin hash randomization so any set/dict-iteration order is reproducible run-to-run
+# (defense-in-depth; the gated metric paths also carry explicit sort tiebreaks).
+export PYTHONHASHSEED := 0
 
 .PHONY: test eval benchmark lint install dev clean
 

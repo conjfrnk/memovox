@@ -60,6 +60,18 @@ class DeleteVideoCompletenessTest(unittest.TestCase):
         self.assertEqual(self._count("SELECT COUNT(*) FROM claims WHERE video_id='yt:b'"), 1)
 
 
+class LocalOnlyEntityEgressTest(unittest.TestCase):
+    def test_local_only_forces_offline_null_linker(self):
+        # under local_only, entity linking must NOT select the network-egressing
+        # WikidataLinker (whose is_available() probes wikidata.org).
+        from memovox.backends import get_entity_linker
+        from memovox.backends.entity_link import NullLinker
+        from memovox.config import Config, Settings
+        cfg = Config(settings=Settings(local_only=True))
+        self.assertIsInstance(get_entity_linker("auto", config=cfg), NullLinker)
+        self.assertIsInstance(get_entity_linker("wikidata", config=cfg), NullLinker)
+
+
 class SchemaVersionGuardTest(unittest.TestCase):
     def test_refuses_store_from_the_future(self):
         import sqlite3

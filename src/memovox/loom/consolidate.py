@@ -145,7 +145,10 @@ def find_contradictions(
 
     if span is not None:
         span.add_counter("nli_calls", nli_calls)  # actual NLI work (sparse under scope)
-    results.sort(key=lambda p: p.score, reverse=True)
+    # Stable tiebreak by (claim_a, claim_b) ids: candidate pairs are generated from a
+    # SET (hash-randomized iteration), so a score-only sort would order ties
+    # non-deterministically across PYTHONHASHSEED. The id tiebreak makes it reproducible.
+    results.sort(key=lambda p: (-p.score, p.claim_a.claim_id, p.claim_b.claim_id))
     return results
 
 

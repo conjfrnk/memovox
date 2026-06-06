@@ -231,6 +231,11 @@ def get_entity_linker(name: str = "auto", *, config=None, **options) -> EntityLi
     """Return an entity linker; falls back to the slug-based NullLinker."""
     if name in ("none", "off", "false", ""):
         return NullLinker(config=config, **options)
+    # Privacy posture: under local_only, never select a network-egressing linker
+    # (its is_available() would otherwise probe wikidata.org) — force the offline
+    # slug-based NullLinker. Same graph topology (entity_id is always the slug).
+    if getattr(getattr(config, "settings", None), "local_only", False):
+        return NullLinker(config=config, **options)
     if name == "auto":
         return WikidataLinker(config=config, **options) if WikidataLinker.is_available() else NullLinker(config=config)
     cls = _LINKERS.get(name)

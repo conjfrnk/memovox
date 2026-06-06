@@ -15,6 +15,10 @@ jobs:
   test:
     name: tests + eval (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    # Pin hash randomization so set/dict-iteration order is reproducible run-to-run
+    # (defense-in-depth; gated metric paths also carry explicit sort tiebreaks).
+    env:
+      PYTHONHASHSEED: "0"
     strategy:
       fail-fast: false
       matrix:

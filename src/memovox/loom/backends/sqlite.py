@@ -103,7 +103,9 @@ class SqliteVectorIndex(VectorIndex):
             if len(vec) != qlen:
                 continue
             scored.append((r["moment_id"], score(vec)))
-        scored.sort(key=lambda x: x[1], reverse=True)
+        # Stable tiebreak by moment_id: SQLite returns rows in no guaranteed order
+        # (no ORDER BY), so equal scores would otherwise rank non-deterministically.
+        scored.sort(key=lambda x: (-x[1], x[0]))
         return scored[:top_k]
 
     def _fts_candidate_ids(self, query_text: str) -> Optional[set]:
