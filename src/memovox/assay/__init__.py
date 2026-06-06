@@ -8,7 +8,7 @@ from ..backends.base import LLMBackend, NLIBackend
 from ..config import Settings
 from ..loom.models import STATUS_COMMITTED, STATUS_UNSUPPORTED, Claim, Moment
 from .claims import epistemic_type, extract_claims, salience_score
-from .spans import span_text
+from .spans import is_contiguous_in, premise_covers, span_text
 from .verify import verify_claim
 
 
@@ -40,6 +40,19 @@ def run(
         # verified; it can never drift narrower than the premise. Pinned in
         # tests/test_span_premise_invariant.py.
         premise = span_text(moment.segments, claim.t_start_s, claim.t_end_s) or moment.text_for_embedding()
+        # Rolling-caption sentences are split across two ~3s cues, so locate_span's
+        # single best cue can omit the claim's own tail — which a strict NLI model
+        # (DeBERTa) then rejects at ~0 entailment even though the claim is verbatim
+        # in the Moment. When the located premise doesn't cover the claim's content
+        # AND the claim is a CONTIGUOUS run of the Moment's words (a genuine split
+        # sentence — NOT a recombination of tokens scattered across spans), widen
+        # the premise to the whole Moment. This recovers the split sentence while
+        # still rejecting recombination hallucinations (their tokens never form a
+        # contiguous run) and true hallucinations (tokens nowhere in the Moment).
+        # The displayed citation window stays narrow, so the provenance invariant
+        # (window ⊆ verified premise) holds.
+        if not premise_covers(premise, claim.text) and is_contiguous_in(claim.text, moment.transcript):
+            premise = moment.transcript
         verify_claim(nli, claim, premise, threshold=settings.entailment_threshold)
         # Salience floor (spec §5): salience drives retrieval priority + summary
         # inclusion, so a low-salience claim is not worth committing to the

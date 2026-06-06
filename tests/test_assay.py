@@ -6,11 +6,58 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
 
 from memovox import assay
 from memovox.assay.claims import epistemic_type, extract_claims, extract_mentions
+from memovox.assay.spans import premise_covers
 from memovox.assay.verify import verify_claim
-from memovox.backends.base import LLMBackend
+from memovox.backends.base import LLMBackend, NLIBackend, NLIResult
 from memovox.backends.nli import LexicalNLI
 from memovox.config import Settings
-from memovox.loom.models import Claim, Moment, SegmentRef
+from memovox.loom.models import STATUS_COMMITTED, Claim, Moment, SegmentRef
+
+
+class _StrictContainsNLI(NLIBackend):
+    """Entails ONLY when the premise verbatim contains the hypothesis — mirrors how
+    a strict model (DeBERTa) rejects a claim whose premise omits half its text."""
+
+    name = "strict"
+
+    def classify(self, premise: str, hypothesis: str) -> NLIResult:
+        ok = hypothesis.lower().strip().rstrip(".!?") in premise.lower()
+        return NLIResult("entailment" if ok else "neutral",
+                         1.0 if ok else 0.0, 0.0 if ok else 1.0, 0.0)
+
+
+class TestCrossCuePremise(unittest.TestCase):
+    """A rolling-caption sentence is split across two ~2s cues. locate_span picks
+    the single best cue, so the NLI premise omits the claim's tail and a strict
+    model rejects a genuine claim. The premise must widen to cover the whole claim
+    (the full moment) so it isn't wrongly rejected — while the citation window
+    stays narrow (provenance invariant preserved)."""
+
+    def _cross_cue_moment(self):
+        segs = [SegmentRef(0.0, 2.0, "See, you have to reserve the"),
+                SegmentRef(2.0, 4.0, "shower for as close to landing as possible.")]
+        return Moment(
+            "v#m0", "v", 0.0, 4.0,
+            "See, you have to reserve the shower for as close to landing as possible.",
+            speaker_id="spk_0", segments=segs)
+
+    def test_premise_covers_detects_clipped_span(self):
+        full = "See, you have to reserve the shower for as close to landing as possible."
+        self.assertTrue(premise_covers(full, full))
+        # the first cue alone omits 'shower/landing/possible' -> does NOT cover it
+        self.assertFalse(premise_covers("See, you have to reserve the", full))
+
+    def test_cross_cue_claim_committed_under_strict_nli(self):
+        m = self._cross_cue_moment()
+        claims = assay.run(m, nli=_StrictContainsNLI())
+        target = [c for c in claims if "reserve the shower" in c.text]
+        self.assertTrue(target, "expected the full-sentence claim to be extracted")
+        # With the premise widened to the whole moment, the strict NLI sees the full
+        # claim text and commits it (pre-fix: premise was one cue -> rejected).
+        self.assertEqual(target[0].status, STATUS_COMMITTED)
+        # citation window stays narrow (⊆ the moment), provenance invariant intact.
+        self.assertLessEqual(0.0, target[0].t_start_s)
+        self.assertLessEqual(target[0].t_end_s, 4.0)
 
 
 class TestEpistemicTyping(unittest.TestCase):

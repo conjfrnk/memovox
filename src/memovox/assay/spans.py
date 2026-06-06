@@ -15,6 +15,45 @@ from typing import Optional, Tuple
 
 from ..util import tokenize
 
+#: Tiny stoplist so coverage is judged on content words, not function words a
+#: clipped cue trivially shares ("the", "to", "you").
+_STOP = {
+    "the", "a", "an", "of", "to", "in", "on", "at", "for", "and", "or", "is",
+    "are", "was", "were", "be", "been", "it", "this", "that", "these", "those",
+    "as", "by", "with", "from", "we", "you", "they", "he", "she", "i", "have",
+    "has", "had", "so",
+}
+
+
+def premise_covers(premise: str, hypothesis: str, *, floor: float = 0.8) -> bool:
+    """Does ``premise`` contain enough of ``hypothesis``'s CONTENT words to verify
+    it? Used to detect a claim whose located cue omits its own tail (a sentence
+    split across rolling-caption cues): when the fraction of the hypothesis's
+    content tokens present in the premise drops below ``floor``, the premise is
+    too narrow and the caller widens it to the whole moment. A hypothesis with no
+    content tokens trivially "covers" (nothing to check)."""
+    h = [t for t in tokenize(hypothesis) if t not in _STOP and len(t) > 1]
+    if not h:
+        return True
+    p = set(tokenize(premise))
+    return sum(1 for t in h if t in p) / len(h) >= floor
+
+
+def is_contiguous_in(hypothesis: str, source: str) -> bool:
+    """True if ``hypothesis`` appears as a CONTIGUOUS token run in ``source``.
+
+    This distinguishes a genuine sentence split across adjacent rolling-caption
+    cues (which IS a contiguous run of the Moment's words) from a recombination
+    hallucination that reuses tokens scattered across non-adjacent spans in a false
+    order (which is NOT) — so only the former is allowed to widen its NLI premise.
+    Compared on normalized tokens, so punctuation/case/whitespace don't matter."""
+    h = tokenize(hypothesis)
+    if not h:
+        return False
+    s = tokenize(source)
+    m = len(h)
+    return any(s[i:i + m] == h for i in range(len(s) - m + 1))
+
 
 def locate_span(sentence, segments, *, default=None, tighten=True) -> Optional[Tuple[float, float]]:
     """Return the ``(t_start_s, t_end_s)`` of the segment best containing
