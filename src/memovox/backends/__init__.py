@@ -11,24 +11,39 @@ from typing import Optional
 
 from ..errors import BackendUnavailable
 
-#: Optional backends whose MODEL failed to load this process (offline / uncached /
-#: OOM / corrupt). Memoized so ``auto`` selection neither retries the doomed load
-#: nor re-warns — it degrades straight to the free fallback. Cleared only on restart.
+#: Per-process auto-selection memo. A backend that PASSED its load probe is
+#: ``_VALIDATED`` (skip re-probing — and, crucially, never flip a working choice to
+#: the free fallback mid-session, which would mix two embedder spaces in one index).
+#: A backend that FAILED is ``_DEGRADED`` (don't retry the doomed load or re-warn).
+#: Both stick for the process; a restart re-probes. ``_reset_auto_memo()`` clears
+#: them (tests only).
+_VALIDATED: set = set()
 _DEGRADED: set = set()
+
+
+def _reset_auto_memo() -> None:
+    _VALIDATED.clear()
+    _DEGRADED.clear()
 
 
 def _try_optional(opt_cls, probe, *, config, options):
     """For the ``auto`` path only: construct + PROBE the optional backend (the probe
     must force the lazy model load). Return the instance, or ``None`` if it can't
     load — degrading to the free fallback is the caller's job. The decision is
-    memoized in ``_DEGRADED`` and a one-time warning goes to STDERR (never stdout —
-    MCP owns stdout). Explicit (non-auto) selection never calls this, so opting into
-    an optional backend still fails loud."""
+    memoized (``_VALIDATED``/``_DEGRADED``) and a one-time warning goes to STDERR
+    (never stdout — MCP owns stdout). Explicit (non-auto) selection never calls this,
+    so opting into an optional backend still fails loud. Once validated, the choice
+    is STABLE for the process: a later transient failure won't silently swap a working
+    optional backend for the free one mid-session (which would corrupt a vector index
+    by mixing embedding spaces) — such a runtime failure propagates instead."""
     if opt_cls.name in _DEGRADED or not opt_cls.is_available():
         return None
+    if opt_cls.name in _VALIDATED:
+        return opt_cls(config=config, **options)  # known-good: skip the probe, stay consistent
     try:
         inst = opt_cls(config=config, **options)
         probe(inst)  # forces the model load; raises offline / uncached / OOM
+        _VALIDATED.add(opt_cls.name)
         return inst
     except Exception as exc:  # noqa: BLE001 - ANY load/runtime failure -> free fallback
         _DEGRADED.add(opt_cls.name)

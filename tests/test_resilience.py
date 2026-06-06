@@ -30,10 +30,10 @@ def _force_available(cls):
 
 
 def _reset_degraded():
-    # The auto-fallback memoizes degraded backends process-globally; clear it so a
-    # test that forces degradation can't leak that decision into another test.
-    from memovox.backends import _DEGRADED
-    _DEGRADED.clear()
+    # The auto-fallback memoizes validated/degraded backends process-globally; clear
+    # it so a test that forces (de)gradation can't leak that decision into another.
+    from memovox.backends import _reset_auto_memo
+    _reset_auto_memo()
 
 
 class AutoFallsBackWhenModelUnloadableTest(unittest.TestCase):
