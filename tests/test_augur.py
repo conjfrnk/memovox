@@ -49,6 +49,32 @@ class TestCitationSnippet(unittest.TestCase):
                          visual_caption="A man reclines in a flat-bed first-class suite.")
         self.assertEqual(_citation_text(m), "A man reclines in a flat-bed first-class suite.")
 
+    def test_llm_synthesis_sees_full_moment_content_not_just_snippet(self):
+        # The LLM must receive each citation's FULL answerable content, not the
+        # one-sentence display snippet — otherwise an answer-bearing sentence with
+        # no query-token overlap ("Just left Dubai" for "where did it depart?") is
+        # invisible to the LLM and it wrongly abstains.
+        from memovox.augur.answer import _synthesize_llm
+        from memovox.augur.types import Citation
+
+        class EchoLLM:
+            is_generative = True
+
+            def complete(self, prompt, *, system=None, temperature=0.0):
+                return prompt  # echo so we can inspect what the LLM was shown
+
+        cit = Citation(index=1, video_id="v", moment_id="m", t_start_s=0.0, t_end_s=5.0,
+                       snippet="We're in the air.",
+                       source_text="We're in the air. Just left Dubai. I got my own doors.")
+        prompt = _synthesize_llm(EchoLLM(), "Where did the flight depart from?", [cit])
+        self.assertIn("Just left Dubai", prompt)
+
+    def test_source_text_is_not_serialized_into_the_api_payload(self):
+        from memovox.augur.types import Citation
+        c = Citation(index=1, video_id="v", moment_id="m", t_start_s=0.0, t_end_s=5.0,
+                     snippet="hi", source_text="full internal text")
+        self.assertNotIn("source_text", c.to_dict())
+
 
 class TestPlanner(unittest.TestCase):
     def test_intents(self):

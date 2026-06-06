@@ -72,7 +72,10 @@ _LLM_SYSTEM = (
 
 
 def _synthesize_llm(llm: LLMBackend, query: str, citations: List[Citation]) -> str:
-    sources = "\n".join(f"[{c.index}] {c.snippet}" for c in citations)
+    # Give the LLM each citation's FULL content (source_text) rather than the
+    # one-sentence display snippet, so an answer-bearing sentence with no
+    # query-token overlap is still visible. Falls back to the snippet if unset.
+    sources = "\n".join(f"[{c.index}] {c.source_text or c.snippet}" for c in citations)
     prompt = f"SOURCES:\n{sources}\n\nQUESTION: {query}\n\nANSWER (with [n] citations):"
     return llm.complete(prompt, system=_LLM_SYSTEM, temperature=0.0).strip()
 
@@ -211,7 +214,8 @@ def ask(
                 modality=moment.modality, speaker=moment.speaker_id,
                 confidence=round(min(1.0, score_by_id.get(moment.moment_id, 0.0) * 30), 4),
             ) if video else None
-            snippet = _best_sentence(_citation_text(moment), query)
+            content = _citation_text(moment)
+            snippet = _best_sentence(content, query)
             citations.append(
                 Citation(
                     index=i,
@@ -225,6 +229,7 @@ def ask(
                     deep_link=prov.deep_link if prov else None,
                     snippet=truncate(snippet, 240),
                     score=round(score_by_id.get(moment.moment_id, 0.0), 6),
+                    source_text=truncate(content, 600),
                 )
             )
 

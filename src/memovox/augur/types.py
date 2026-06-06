@@ -19,9 +19,16 @@ class Citation:
     deep_link: Optional[str] = None
     snippet: str = ""
     score: float = 0.0
+    #: Full answerable content of the cited moment (transcript + OCR), shown to the
+    #: LLM synthesizer so an answer-bearing sentence with no query-token overlap is
+    #: not lost. Internal only — excluded from the API payload (the short ``snippet``
+    #: is what clients display).
+    source_text: str = ""
 
     def to_dict(self) -> dict:
-        return dict(self.__dict__)
+        d = dict(self.__dict__)
+        d.pop("source_text", None)
+        return d
 
 
 @dataclass
