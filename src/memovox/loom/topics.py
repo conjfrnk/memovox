@@ -98,6 +98,7 @@ def induce_topics(store, *, settings: Optional[Settings] = None) -> List[Topic]:
         store.upsert_topic(topic)
         topics.append(topic)
         for m in moments:
+            store.clear_about_edges(m.moment_id)  # drop stale ABOUT edges to old topics
             store.set_moment_topic(m.moment_id, topic_id)
             store.add_edge(
                 m.moment_id, "ABOUT", topic_id,

@@ -167,6 +167,14 @@ class LoomStore:
         self.close()
 
     def _migrate(self) -> None:
+        # Refuse to open a store written by a NEWER memovox: silently down-stamping
+        # user_version + running older code against a future schema risks corruption.
+        current = self.conn.execute("PRAGMA user_version").fetchone()[0]
+        if current > SCHEMA_VERSION:
+            raise RuntimeError(
+                f"store schema version {current} is newer than this memovox "
+                f"(supports {SCHEMA_VERSION}); upgrade memovox or use a separate store."
+            )
         self.conn.executescript(_SCHEMA)
         # Idempotent column add for stores created before W4.1: executescript's
         # ``CREATE TABLE IF NOT EXISTS`` won't add a column to an existing table.
@@ -305,13 +313,39 @@ class LoomStore:
         self.conn.commit()
 
     def delete_video(self, video_id: str) -> bool:
-        ids = [r["moment_id"] for r in self.conn.execute(
-            "SELECT moment_id FROM moments WHERE video_id = ?", (video_id,)
-        ).fetchall()]
-        if self.fts and ids:
-            self.conn.executemany("DELETE FROM moments_fts WHERE moment_id = ?", [(i,) for i in ids])
-        self.conn.execute("DELETE FROM edges WHERE video_id = ?", (video_id,))
+        """Redaction primitive (§2/§12): delete a video and ALL its derived data
+        atomically — moments/claims/vectors/mentions/edges (via ON DELETE CASCADE),
+        the FTS rows (not FK-cascaded), cross-video edges that POINT AT the deleted
+        claims/moments (stamped with another video's id, so not cascaded), and any
+        entity/topic node left member-less. Also resets the consolidation watermark
+        (deleted rowids can be reused, which would otherwise make an incremental
+        re-scan skip genuinely new claims). One transaction; nothing dangles."""
+        moment_ids = [r["moment_id"] for r in self.conn.execute(
+            "SELECT moment_id FROM moments WHERE video_id = ?", (video_id,)).fetchall()]
+        claim_ids = [r["claim_id"] for r in self.conn.execute(
+            "SELECT claim_id FROM claims WHERE video_id = ?", (video_id,)).fetchall()]
+        if self.fts and moment_ids:
+            self.conn.executemany("DELETE FROM moments_fts WHERE moment_id = ?",
+                                  [(i,) for i in moment_ids])
         cur = self.conn.execute("DELETE FROM videos WHERE video_id = ?", (video_id,))
+        if cur.rowcount > 0:
+            # Cross-video edges referencing the (now-deleted) nodes from ANOTHER
+            # video's perspective are not cascaded by edges.video_id — remove them.
+            node_ids = moment_ids + claim_ids
+            if node_ids:
+                ph = ",".join("?" * len(node_ids))
+                self.conn.execute(
+                    f"DELETE FROM edges WHERE src IN ({ph}) OR dst IN ({ph})",
+                    node_ids + node_ids)
+            # GC corpus nodes this redaction left member-less.
+            self.conn.execute(
+                "DELETE FROM entities WHERE entity_id NOT IN (SELECT entity_id FROM mentions)")
+            self.conn.execute(
+                "DELETE FROM topics WHERE topic_id NOT IN "
+                "(SELECT topic_id FROM moments WHERE topic_id IS NOT NULL)")
+            # rowid reuse safety: force a full re-scan on the next consolidation.
+            self.conn.execute(
+                "INSERT OR REPLACE INTO meta (key, value) VALUES ('consolidation_watermark', '0')")
         self.conn.commit()
         return cur.rowcount > 0
 
@@ -375,6 +409,13 @@ class LoomStore:
         self.conn.execute(
             "UPDATE moments SET topic_id = ? WHERE moment_id = ?", (topic_id, moment_id)
         )
+        self.conn.commit()
+
+    def clear_about_edges(self, moment_id: str) -> None:
+        """Drop a moment's ABOUT->Topic edges so re-induction (which may re-cluster a
+        moment onto a different topic) leaves at most ONE current ABOUT edge instead
+        of accumulating stale edges to superseded topics. Idempotent."""
+        self.conn.execute("DELETE FROM edges WHERE src = ? AND rel = 'ABOUT'", (moment_id,))
         self.conn.commit()
 
     def moments_for_topic(self, topic_id: str) -> List[Moment]:
