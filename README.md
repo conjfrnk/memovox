@@ -53,6 +53,10 @@ without them. Or run without installing: `python -m memovox --help`.
 # Ingest a transcript with no models at all (fully free):
 memovox ingest ~/talks/scaling-laws.en.vtt --source-url https://youtu.be/abc123
 
+# Ingest from a URL ([acquire] extra). Audio-only by default; add --with-video
+# to also analyze the visual track (keyframes · OCR · captions):
+memovox ingest https://youtu.be/abc123 --with-video
+
 # Ask a grounded question — every answer sentence carries a citation:
 memovox ask "what chunk size did they recommend, and who said it?"
 
