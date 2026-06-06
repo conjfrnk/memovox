@@ -58,6 +58,80 @@ class TestTranscriptParsing(unittest.TestCase):
         self.assertLess(segs[0].start, segs[1].start)
 
 
+# YouTube auto-generated "rolling" captions: each visible window repeats the
+# previous line as a carried-over scroll-up line plus a new inline-<c>-timed
+# line, and tiny 10ms cues hold a pure carry-over. Naively joining every line of
+# every cue duplicates ~half the transcript. See parse_cues' rolling-format path.
+# Faithful to the real format: a whitespace-only line (" ") is an empty caption
+# row *inside* a cue; cues are separated by a truly-blank line.
+ROLLING_VTT = "\n".join(
+    [
+        "WEBVTT",
+        "Kind: captions",
+        "Language: en",
+        "",
+        "00:00:01.040 --> 00:00:02.310 align:start position:0%",
+        " ",
+        "Want<00:00:01.199><c> to</c><00:00:01.360><c> see</c><00:00:01.600><c> the</c>",
+        "",
+        "00:00:02.310 --> 00:00:02.320 align:start position:0%",
+        "Want to see the",
+        " ",
+        "",
+        "00:00:02.320 --> 00:00:05.000 align:start position:0%",
+        "Want to see the",
+        "coolest<00:00:02.399><c> thing</c><00:00:03.120><c> here.</c>",
+        "",
+        "00:00:05.000 --> 00:00:05.010 align:start position:0%",
+        "coolest thing here.",
+        " ",
+        "",
+        "00:00:05.010 --> 00:00:08.000 align:start position:0%",
+        "coolest thing here.",
+        "This<00:00:05.200><c> is</c><00:00:05.600><c> caviar.</c>",
+        "",
+    ]
+)
+
+
+class TestRollingCaptions(unittest.TestCase):
+    def test_rolling_captions_are_deduped(self):
+        # parse_cues returns raw cue text (inline tags stripped later by
+        # clean_segments); cleaning here lets us assert on the dedup result.
+        segs = transcript.clean_segments(transcript.parse_cues(ROLLING_VTT))
+        texts = [s.text for s in segs if s.kind == "speech"]
+        # Only the inline-timed "new" lines survive — pure carry-over cues drop.
+        self.assertEqual(
+            texts,
+            [
+                "Want to see the",
+                "coolest thing here.",
+                "This is caviar.",
+            ],
+        )
+        # The carried-over phrase must appear exactly once across the whole transcript.
+        joined = " ".join(texts)
+        self.assertEqual(joined.count("Want to see the"), 1)
+        self.assertEqual(joined.count("coolest thing here."), 1)
+
+    def test_rolling_inline_timestamps_are_stripped_on_clean(self):
+        clean = transcript.clean_segments(transcript.parse_cues(ROLLING_VTT))
+        speech = [s for s in clean if s.kind == "speech"]
+        self.assertEqual(len(speech), 3)
+        self.assertNotIn("<", " ".join(s.text for s in speech))
+
+    def test_non_rolling_vtt_keeps_all_lines(self):
+        # A normal (non-rolling) two-line cue is NOT touched by the rolling path:
+        # both lines are joined, since neither carries inline <c> timing.
+        plain = (
+            "WEBVTT\n\n00:00:00.000 --> 00:00:04.000\n"
+            "first line\nsecond line\n"
+        )
+        segs = transcript.parse_cues(plain)
+        self.assertEqual(len(segs), 1)
+        self.assertEqual(segs[0].text, "first line second line")
+
+
 class TestStentorRun(unittest.TestCase):
     def test_run_on_transcript_file(self):
         with tempfile.TemporaryDirectory() as tmp:

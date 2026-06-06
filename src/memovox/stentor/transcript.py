@@ -23,6 +23,12 @@ EVENT_RE = re.compile(
 _TAG_RE = re.compile(r"<[^>]+>")
 _SPEAKER_VTT_RE = re.compile(r"<v\s+([^>]+)>")
 _SPEAKER_PREFIX_RE = re.compile(r"^\s*([A-Z][A-Za-z0-9 ._-]{0,30}):\s+")
+#: Inline word-level timestamp tag, e.g. ``<00:00:01.199>`` — the fingerprint of
+#: YouTube auto-generated "rolling" captions (Kind: captions). Their cues repeat
+#: the previous line as a carried-over scroll-up line plus a new line carrying
+#: these inline tags; the carry-over lines (and tiny 10ms scroll cues) hold no new
+#: content and must be dropped or ~half the transcript duplicates.
+_INLINE_TS_RE = re.compile(r"<\d{1,2}:\d{2}:\d{2}[.,]\d{3}>")
 
 
 def _parse_ts(value: str) -> float:
@@ -42,9 +48,22 @@ def _parse_ts(value: str) -> float:
 
 
 def parse_cues(text: str) -> List[Segment]:
-    """Parse a VTT or SRT document into raw (uncleaned) segments."""
+    """Parse a VTT or SRT document into raw (uncleaned) segments.
+
+    YouTube auto-generated "rolling" captions are de-duplicated: when the document
+    carries inline word timestamps (``<00:00:01.199>``), each cue's carried-over
+    scroll-up line is dropped and only the lines bearing inline timing (the newly
+    revealed content) are kept. Without this, consecutive cues share ~half their
+    text and downstream moment-merging triplicates it. A normal VTT/SRT (no inline
+    timestamps) is parsed unchanged — every content line of every cue is kept.
+    """
     text = text.replace("\r\n", "\n").replace("\r", "\n")
-    blocks = re.split(r"\n\s*\n", text)
+    rolling = bool(_INLINE_TS_RE.search(text))
+    # Rolling captions put a whitespace-only line *inside* a cue (an empty caption
+    # row) and separate cues with a truly-blank line, so split only on truly-blank
+    # lines — otherwise the intra-cue space-line orphans the new inline-timed line
+    # from its timestamp. A normal transcript keeps the lenient ``\n\s*\n`` split.
+    blocks = re.split(r"\n\n+" if rolling else r"\n\s*\n", text)
     segments: List[Segment] = []
     for block in blocks:
         lines = [ln for ln in block.split("\n") if ln.strip()]
@@ -59,7 +78,15 @@ def parse_cues(text: str) -> List[Segment]:
             end = _parse_ts(right.strip().split(" ")[0])
         except ValueError:
             continue
-        raw = " ".join(lines[time_idx + 1:]).strip()
+        content_lines = lines[time_idx + 1:]
+        if rolling:
+            # Keep only lines that carry inline word timing (the new content);
+            # pure carry-over lines (and the tiny 10ms scroll cues that hold only
+            # carry-over) have none and are skipped — that is the dedup.
+            content_lines = [ln for ln in content_lines if _INLINE_TS_RE.search(ln)]
+            if not content_lines:
+                continue
+        raw = " ".join(content_lines).strip()
         if not raw:
             continue
         speaker = None
