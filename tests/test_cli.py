@@ -70,6 +70,29 @@ class TestCLI(unittest.TestCase):
         code, out = run(["--store", self.store, "export", "--video", "yt:abc123", "--format", "md"])
         self.assertIn("youtu.be/abc123", out)
 
+    def test_export_and_forget_accept_positional_video(self):
+        # Consistency with show/extract: the video id is a positional, while the
+        # legacy --video flag keeps working.
+        self._ingest()
+        code, out = run(["--store", self.store, "export", "yt:abc123", "--format", "md"])
+        self.assertEqual(code, 0)
+        self.assertIn("youtu.be/abc123", out)
+        # forget by positional id deletes the video
+        code, out = run(["--store", self.store, "forget", "yt:abc123"])
+        self.assertEqual(code, 0)
+        self.assertIn("Forgot yt:abc123", out)
+        code, out = run(["--store", self.store, "list"])
+        self.assertIn("No videos", out)
+
+    def test_export_requires_a_video_id(self):
+        # Neither positional nor --video -> a clean error (exit 2), not a crash.
+        self._ingest()
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code, _ = run(["--store", self.store, "export"])
+        self.assertEqual(code, 2)
+        self.assertIn("video", err.getvalue().lower())
+
     def test_subscribe_list_unsubscribe(self):
         url = "https://www.youtube.com/@chan"
         code, out = run(["--store", self.store, "subscribe", url])

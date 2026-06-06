@@ -17,6 +17,12 @@ BACKEND_FLAGS = {"asr": "asr_backend", "embed": "embed_backend", "nli": "nli_bac
                  "llm": "llm_backend", "entity_link": "entity_backend"}
 
 
+def _resolved_video(args) -> Optional[str]:
+    """Resolve the target video_id from either the positional or the legacy
+    --video flag (export/forget accept both, like show/extract take a positional)."""
+    return getattr(args, "video", None) or getattr(args, "video_opt", None)
+
+
 def _make_memovox(args) -> Memovox:
     overrides = {key: getattr(args, flag) for flag, key in BACKEND_FLAGS.items()
                  if getattr(args, flag, None)}
@@ -105,10 +111,14 @@ def cmd_unsubscribe(args, mv: Memovox) -> int:
 
 
 def cmd_forget(args, mv: Memovox) -> int:
-    if mv.delete_video(args.video):
-        print(f"Forgot {args.video} (video + derived moments/claims/edges deleted).")
+    video = _resolved_video(args)
+    if not video:
+        print("forget: a video_id is required (positional or --video).", file=sys.stderr)
+        return 2
+    if mv.delete_video(video):
+        print(f"Forgot {video} (video + derived moments/claims/edges deleted).")
         return 0
-    print(f"No such video: {args.video}", file=sys.stderr)
+    print(f"No such video: {video}", file=sys.stderr)
     return 1
 
 
@@ -196,7 +206,11 @@ def cmd_consolidate(args, mv: Memovox) -> int:
 
 
 def cmd_export(args, mv: Memovox) -> int:
-    content = mv.export(args.video, fmt=args.format)
+    video = _resolved_video(args)
+    if not video:
+        print("export: a video_id is required (positional or --video).", file=sys.stderr)
+        return 2
+    content = mv.export(video, fmt=args.format)
     if args.out:
         from pathlib import Path
 
@@ -443,7 +457,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(func=cmd_evolution)
 
     s = sub.add_parser("export", help="export a per-video digest.")
-    s.add_argument("--video", required=True)
+    s.add_argument("video", nargs="?", help="video_id (like show/extract; or use --video).")
+    s.add_argument("--video", dest="video_opt", help="video_id (legacy alias for the positional).")
     s.add_argument("--format", choices=["md", "json"], default="md")
     s.add_argument("--out")
     s.set_defaults(func=cmd_export)
@@ -483,7 +498,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(func=cmd_serve)
 
     s = sub.add_parser("forget", help="delete a video + all its derived data (redaction).")
-    s.add_argument("--video", required=True)
+    s.add_argument("video", nargs="?", help="video_id (like show/extract; or use --video).")
+    s.add_argument("--video", dest="video_opt", help="video_id (legacy alias for the positional).")
     s.set_defaults(func=cmd_forget)
 
     s = sub.add_parser("worker", help="run the background job worker (consolidate/sync/ingest).")
