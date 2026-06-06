@@ -39,13 +39,17 @@ def make_handler(mv: Memovox):
             self.wfile.write(body)
 
         def _body(self) -> dict:
-            length = int(self.headers.get("Content-Length", 0) or 0)
-            if not length:
+            try:
+                length = int(self.headers.get("Content-Length", 0) or 0)
+            except (TypeError, ValueError):
+                return {}  # malformed Content-Length -> empty body, never crash
+            if length <= 0:
                 return {}
             try:
-                return json.loads(self.rfile.read(length).decode("utf-8"))
-            except ValueError:
+                data = json.loads(self.rfile.read(length).decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
                 return {}
+            return data if isinstance(data, dict) else {}  # non-object body -> {}
 
         # -- adapter: parse → call the pure route → serialize ------------
 

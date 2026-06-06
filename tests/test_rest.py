@@ -56,6 +56,19 @@ class RestClipTest(unittest.TestCase):
         payload = self._get("/", {})
         self.assertIn("GET /timeline", payload["endpoints"])
 
+    def test_clip_rejects_bad_timestamps_with_400(self):
+        from memovox.server import routes
+        for bad in ("abc", "nan", "inf"):
+            st, payload, _ = routes.route_clip(self.mv, {"video": "yt:abc123", "t_start": bad})
+            self.assertEqual(st, 400, bad)
+        st, _, _ = routes.route_clip(self.mv, {})  # missing video
+        self.assertEqual(st, 400)
+
+    def test_timeline_requires_entity_or_topic(self):
+        from memovox.server import routes
+        st, payload, _ = routes.route_timeline(self.mv, {})
+        self.assertEqual(st, 400)
+
     def test_clip_endpoint_returns_stitched_superset(self):
         payload = self._clip({"video": ["yt:abc123"], "t_start": ["0"], "t_end": ["60"]})
         # legacy keys unchanged

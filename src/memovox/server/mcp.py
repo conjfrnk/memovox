@@ -107,6 +107,10 @@ class McpServer:
 
     def handle(self, request: dict) -> Optional[dict]:
         """Handle one JSON-RPC request; return a response, or None for notifications."""
+        if not isinstance(request, dict):
+            # A non-object JSON value (array/number/string/null) is an invalid
+            # request — answer with -32600 instead of crashing on ``.get``.
+            return _error(None, -32600, "Invalid Request: expected a JSON object")
         method = request.get("method")
         req_id = request.get("id")
         is_notification = "id" not in request
@@ -130,7 +134,11 @@ class McpServer:
                 if is_notification:
                     return None
                 return _error(req_id, -32601, f"Method not found: {method}")
-        except Exception as exc:  # surface tool errors as JSON-RPC errors
+        except KeyError as exc:  # a missing required tool argument -> Invalid params
+            if is_notification:
+                return None
+            return _error(req_id, -32602, f"Missing required parameter: {exc}")
+        except Exception as exc:  # surface other tool errors as JSON-RPC errors
             if is_notification:
                 return None
             return _error(req_id, -32603, str(exc))
@@ -218,8 +226,13 @@ def serve_stdio(mv: Memovox, *, stdin=None, stdout=None) -> None:
         try:
             request = json.loads(line)
         except ValueError:
-            continue
-        response = server.handle(request)
+            response = _error(None, -32700, "Parse error")
+        else:
+            try:
+                response = server.handle(request)
+            except Exception as exc:  # a handler bug must never kill the loop
+                print(f"mcp: unhandled error: {exc}", file=sys.stderr)
+                response = _error(None, -32603, "Internal error")
         if response is not None:
             stdout.write(json.dumps(response) + "\n")
             stdout.flush()

@@ -12,11 +12,26 @@ from __future__ import annotations
 import json as _json
 from http import HTTPStatus
 
+import math
+
 from ..loom import LoomStore
 from ..util import deep_link
 
 JSON = "application/json"
 MARKDOWN = "text/markdown; charset=utf-8"
+
+
+def _finite_float(value, default: float):
+    """Parse a query param to a FINITE float (rejecting nan/inf and junk). Returns
+    ``default`` when the value is None/empty, or ``None`` when it's unparseable —
+    so a route can answer 400 instead of crashing or accepting nan/inf."""
+    if value is None or value == "":
+        return default
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return None
+    return f if math.isfinite(f) else None
 
 
 def route_index(mv):
@@ -35,8 +50,12 @@ def route_clip(mv, params):
     from ..augur.types import Citation
 
     video_id = params.get("video")
-    t_start = float(params.get("t_start") or 0)
-    t_end = float(params.get("t_end") or t_start)
+    if not video_id:
+        return (HTTPStatus.BAD_REQUEST, {"error": "missing 'video'"}, JSON)
+    t_start = _finite_float(params.get("t_start"), 0.0)
+    t_end = _finite_float(params.get("t_end"), t_start)
+    if t_start is None or t_end is None:
+        return (HTTPStatus.BAD_REQUEST, {"error": "t_start/t_end must be finite numbers"}, JSON)
     with LoomStore(mv.config) as store:
         video = store.get_video(video_id) if video_id else None
         if not video:
@@ -57,8 +76,10 @@ def route_clip(mv, params):
 
 
 def route_timeline(mv, params):
-    return (HTTPStatus.OK, mv.evolution(entity=params.get("entity"),
-                                        topic=params.get("topic")), JSON)
+    entity, topic = params.get("entity"), params.get("topic")
+    if not entity and not topic:
+        return (HTTPStatus.BAD_REQUEST, {"error": "provide 'entity' or 'topic'"}, JSON)
+    return (HTTPStatus.OK, mv.evolution(entity=entity, topic=topic), JSON)
 
 
 def route_export(mv, video_id, params):

@@ -126,6 +126,29 @@ class TestMcp(unittest.TestCase):
         resp = self.server.handle({"jsonrpc": "2.0", "id": 9, "method": "bogus"})
         self.assertEqual(resp["error"]["code"], -32601)
 
+    def test_non_object_request_is_invalid_not_crash(self):
+        # a JSON array/number/string is -32600, never an AttributeError DoS
+        for bad in ([1, 2, 3], 42, "hello", None):
+            resp = self.server.handle(bad)
+            self.assertEqual(resp["error"]["code"], -32600)
+
+    def test_missing_required_arg_is_invalid_params(self):
+        # search_knowledge needs 'query' — a missing arg is -32602, not -32603
+        resp = self.server.handle({
+            "jsonrpc": "2.0", "id": 10, "method": "tools/call",
+            "params": {"name": "search_knowledge", "arguments": {}},
+        })
+        self.assertEqual(resp["error"]["code"], -32602)
+
+    def test_serve_stdio_survives_malformed_and_nonobject_lines(self):
+        import io
+        from memovox.server.mcp import serve_stdio
+        stdin = io.StringIO('not json\n[1,2,3]\n{"jsonrpc":"2.0","id":1,"method":"ping"}\n')
+        stdout = io.StringIO()
+        serve_stdio(self.mv, stdin=stdin, stdout=stdout)  # must not raise
+        lines = [l for l in stdout.getvalue().splitlines() if l.strip()]
+        self.assertEqual(len(lines), 3)  # parse-error, invalid-request, ping result
+
 
 if __name__ == "__main__":
     unittest.main()

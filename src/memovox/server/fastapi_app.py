@@ -65,21 +65,29 @@ def build_app(mv):
     def _job(job_id: str):
         return _respond(routes.route_job_status(mv, job_id))
 
+    async def _json_body(request: "Request") -> dict:
+        # Malformed / empty / non-object body -> {} (the route then answers a clean
+        # 400), matching the stdlib server's _body() — keeps JSON parity, never 500s.
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001 - any JSON decode failure
+            return {}
+        return body if isinstance(body, dict) else {}
+
     @app.post("/ingest")
     async def _ingest(request: Request):
-        return _respond(routes.route_ingest(mv, await request.json()))
+        return _respond(routes.route_ingest(mv, await _json_body(request)))
 
     @app.post("/query")
     async def _query(request: Request):
-        return _respond(routes.route_query(mv, await request.json()))
+        return _respond(routes.route_query(mv, await _json_body(request)))
 
     @app.post("/synthesize")
     async def _synthesize(request: Request):
-        return _respond(routes.route_synthesize(mv, await request.json()))
+        return _respond(routes.route_synthesize(mv, await _json_body(request)))
 
     @app.post("/consolidate")
     async def _consolidate(request: Request):
-        body = await request.json() if await request.body() else {}
-        return _respond(routes.route_consolidate(mv, body))
+        return _respond(routes.route_consolidate(mv, await _json_body(request)))
 
     return app
