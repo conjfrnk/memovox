@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "A multimodal video-to-knowledge engine: voice in, queryable, cited memory out. Local-first, no API keys required."
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "GPL-3.0-or-later" }
+license = { text = "AGPL-3.0-or-later" }
 authors = [{ name = "Connor", email = "conjfrnk@gmail.com" }]
 keywords = [
     "video", "knowledge-graph", "rag", "transcription", "whisper",
@@ -17,7 +17,7 @@ keywords = [
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
-    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Programming Language :: Python :: 3",
     "Topic :: Multimedia :: Sound/Audio :: Speech",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",

@@ -170,5 +170,13 @@ code) and [`spec.md`](spec.md) (the full specification).
 
 ## License
 
-GPL-3.0-or-later — see [LICENSE](LICENSE). Free and open source; note the GPL's copyleft
-terms if you plan to redistribute. Copyright (C) 2026 Connor.
+memovox is **dual-licensed**:
+
+- **Open source:** [AGPL-3.0-or-later](LICENSE) — free to use, modify, and self-host. Note the
+  AGPL's network copyleft: if you run a *modified* memovox as a network service, you must offer
+  your users its source (AGPL §13).
+- **Commercial:** if the AGPL doesn't fit (e.g. embedding in a proprietary product, or running a
+  hosted service without sharing your changes), a commercial license is available — see
+  [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md).
+
+Copyright (C) 2026 Connor.
