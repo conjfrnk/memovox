@@ -4,7 +4,7 @@ export PYTHONPATH := src
 # (defense-in-depth; the gated metric paths also carry explicit sort tiebreaks).
 export PYTHONHASHSEED := 0
 
-.PHONY: test eval benchmark lint install dev clean
+.PHONY: test eval benchmark benchmark-corpus lint install dev clean
 
 test:
 	$(PY) -m unittest discover -s tests -t . -p 'test_*.py'
@@ -17,6 +17,13 @@ eval:
 # unrankable on the text corpus (see eval/golden/README.md).
 benchmark:
 	$(PY) -m eval.harness --benchmark $(if $(JSON),--json,)
+
+# Real-corpus benchmark (shown-only visual lift + refusal vs confabulation) over the
+# license-vetted videos in eval/benchmark/. Needs ffmpeg + tesseract + media on disk
+# AND ASR (the .[asr] extra); see eval/benchmark/README.md. NOT part of `make test`
+# or the CI gates — its numbers are a dated snapshot, not a determinism invariant.
+benchmark-corpus:
+	$(PY) -m eval.benchmark --manifest eval/benchmark/manifest.json --qa eval/benchmark/qa.json $(if $(OUT),--json $(OUT),)
 
 lint:
 	ruff check src tests || true

@@ -1,0 +1,30 @@
+[
+  {
+    "q": "How many committers did RISC-V need to reach 90% (per the comparison table)?",
+    "expects": "present",
+    "modality": "shown-only",
+    "answer_substrings": ["15"],
+    "_note": "EXAMPLE — research-suggested from the slide; VERIFY against the video frame before publishing."
+  },
+  {
+    "q": "What clock speed is the HiFive Unmatched in the comparison?",
+    "expects": "present",
+    "modality": "shown-only",
+    "answer_substrings": ["1.4"],
+    "_note": "EXAMPLE — verify the on-screen value; confirm it is not also spoken aloud."
+  },
+  {
+    "q": "Which benchmark suites does the talk compare?",
+    "expects": "present",
+    "modality": "speech-only",
+    "answer_substrings": ["SPEC", "Embench"],
+    "_note": "EXAMPLE — a control: answerable from speech, so it should pass with the visual track OFF too."
+  },
+  {
+    "q": "What was RISC-V's score on the Geekbench 6 single-core test?",
+    "expects": "absent",
+    "modality": "none",
+    "answer_substrings": [],
+    "_note": "Adversarial out-of-corpus: Geekbench is not in this talk. The only correct behavior is refusal."
+  }
+]
