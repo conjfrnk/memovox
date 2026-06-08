@@ -449,10 +449,16 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         self.assertEqual(su["score"], 1.0)
         self.assertEqual(su["drifted"], [])
 
-    def test_span_accuracy_present_ungated(self):
-        # M0.3 W5: word-precision signal computed + printed (M1.2 owns gating).
+    def test_span_accuracy_present_and_gated(self):
+        # M-hardening: citation/span accuracy is the provenance guarantee, promoted
+        # from UNGATED to a CI gate. Present in the report; a low mean_iou trips it.
         self.assertIn("span_accuracy", self.report)
         self.assertIn("tightened_fraction", self.report["span_accuracy"])
+        low = {**self.report,
+               "span_accuracy": {**self.report["span_accuracy"], "mean_iou": 0.0}}
+        self.assertTrue(any("span_accuracy.mean_iou" in f for f in _check_thresholds(low)))
+        # the real report's mean_iou (1.0) clears the non-regression floor
+        self.assertFalse(any("span_accuracy" in f for f in _check_thresholds(self.report)))
 
     def test_multimodal_block_present_and_shows_lift(self):
         # M1.1 W7: UNGATED multimodal block — the VISUAL leg surfaces an on-screen-
@@ -469,16 +475,17 @@ class TestRunEvalGoldenCorpus(unittest.TestCase):
         failures = _check_thresholds(self.report)
         self.assertFalse(any("multimodal" in f for f in failures))
 
-    def test_m1_2_metrics_present_and_ungated(self):
-        # M1.2 ungated additions: span_accuracy (mean_iou), topic_f1, keyframe
-        # efficiency, claim granularity. None participate in the gate.
+    def test_m1_2_metrics_present(self):
+        # M1.2 additions: span_accuracy.mean_iou (now GATED — see
+        # test_span_accuracy_present_and_gated), topic_f1, keyframe efficiency, and
+        # claim granularity (these three remain ungated).
         self.assertIsInstance(self.report["topic_f1"], float)
         self.assertLess(self.report["keyframe_efficiency"]["ratio"], 1.0)  # adaptive < uniform
         self.assertGreaterEqual(self.report["claim_granularity"]["claims_per_moment"], 0.0)
         self.assertIn("mean_iou", self.report["span_accuracy"])
         self.assertEqual(self.report["span_accuracy"]["mean_iou"], 1.0)  # citations match gold spans
         failures = _check_thresholds(self.report)
-        for k in ("topic_f1", "keyframe", "claim_granularity", "span_accuracy"):
+        for k in ("topic_f1", "keyframe", "claim_granularity"):
             self.assertFalse(any(k in f for f in failures))
 
     def test_plan_block_subquery_recall(self):
@@ -604,7 +611,7 @@ class TestThinFixtureDiscipline(unittest.TestCase):
             "incremental": {"equivalent": False, "idempotent_resync": False},
             "serving": {"equivalent": False},
             "parity": {"score": 0.0}, "incremental_equivalence": 0.0,
-            "span_unchanged": {"score": 0.0},
+            "span_unchanged": {"score": 0.0}, "span_accuracy": {"mean_iou": 0.0},
         }
         failures = _check_thresholds(all_failing)
         gated = {f.split()[0] for f in failures}

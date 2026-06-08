@@ -1503,6 +1503,12 @@ _DER_GATE = 0.5
 # (5 items; deterministic mean ~0.37). A non-regression floor — stitching may
 # tighten coverage, never drop it below 0.3.
 _CLIP_COVERAGE_GATE = 0.3
+# M-hardening: citation/span accuracy (span_accuracy.mean_iou) is the provenance
+# guarantee — promoted from UNGATED to a CI gate. qa.json has 7 items (>= 3, so
+# gate-eligible); the deterministic free-path value is 1.0 today. This is a
+# NON-REGRESSION FLOOR: citation windows may tighten (M0.3) but must not drift
+# wholesale off their gold spans.
+_SPAN_IOU_GATE = 0.75
 
 
 def _print_report(report: dict) -> None:
@@ -1532,6 +1538,7 @@ _MIN_FIXTURES_TO_GATE = 3
 _GATE_DECLARATIONS = {
     "retrieval.hit_rate": {"kind": "statistical", "fixture": "qa.json"},
     "groundedness": {"kind": "statistical", "fixture": "qa.json"},
+    "span_accuracy.mean_iou": {"kind": "statistical", "fixture": "qa.json"},
     # contradiction/synthesis ride the single seeded cross-corpus disagreement —
     # grandfathered thin (pre-Phase-4 baseline); talk_c (M1.2) brings it to >=3.
     "contradiction.f1": {"kind": "statistical", "fixture": "contradictions.json",
@@ -1591,6 +1598,11 @@ def _check_thresholds(report: dict) -> List[str]:
         failures.append(f"retrieval.hit_rate {hr:.3f} < {_HIT_RATE_GATE}")
     if gr < _GROUNDEDNESS_GATE:
         failures.append(f"groundedness {gr:.3f} < {_GROUNDEDNESS_GATE}")
+    # M-hardening: citation/span accuracy (the provenance guarantee). None when no
+    # gold-relevant citation was scored — skip; else enforce the non-regression floor.
+    siou = (report.get("span_accuracy") or {}).get("mean_iou")
+    if siou is not None and siou < _SPAN_IOU_GATE:
+        failures.append(f"span_accuracy.mean_iou {siou:.3f} < {_SPAN_IOU_GATE}")
     if cf1 < _CONTRADICTION_F1_GATE:
         failures.append(f"contradiction.f1 {cf1:.3f} < {_CONTRADICTION_F1_GATE}")
     if sg < _SYNTHESIS_GROUNDEDNESS_GATE:
