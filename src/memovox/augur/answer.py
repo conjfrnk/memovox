@@ -53,6 +53,21 @@ def _citation_text(moment) -> str:
     return (getattr(moment, "visual_caption", None) or "").strip()
 
 
+def _includes_unverified_visual(moment) -> bool:
+    """True when a moment's answerable content includes on-screen/visual material
+    that did NOT pass the entailment gate. Claims are extracted from the spoken
+    transcript only (assay.claims), so OCR text and a pure-visual caption are never
+    verify-before-commit checked — a poisoned slide could otherwise reach an answer
+    indistinguishable from vetted speech. Citations carrying such content are flagged
+    ``ocr_unverified`` so clients can mark it lower-trust. Mirrors _citation_text's
+    content rule: content = transcript + OCR, falling back to the caption only when
+    there is no transcript and no OCR."""
+    transcript = (getattr(moment, "transcript", None) or "").strip()
+    ocr = (getattr(moment, "ocr_text", None) or "").strip()
+    caption = (getattr(moment, "visual_caption", None) or "").strip()
+    return bool(ocr) or (not transcript and bool(caption))
+
+
 def _synthesize_extractive(citations: List[Citation], *, limit: int = 4) -> str:
     parts = []
     for c in citations[:limit]:
@@ -229,6 +244,7 @@ def ask(
                     deep_link=prov.deep_link if prov else None,
                     snippet=truncate(snippet, 240),
                     score=round(score_by_id.get(moment.moment_id, 0.0), 6),
+                    ocr_unverified=_includes_unverified_visual(moment),
                     source_text=truncate(content, 600),
                 )
             )

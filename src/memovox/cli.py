@@ -74,6 +74,8 @@ def cmd_ask(args, mv: Memovox) -> int:
                 print(f"      {c.deep_link}")
             if c.snippet:
                 print(f"      “{truncate(c.snippet, 160)}”")
+            if getattr(c, "ocr_unverified", False):
+                print("      ⚠ includes on-screen text (not entailment-verified)")
     if answer.clips:
         print("\nClips:")
         for clip in answer.clips:

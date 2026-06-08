@@ -19,6 +19,11 @@ class Citation:
     deep_link: Optional[str] = None
     snippet: str = ""
     score: float = 0.0
+    #: True when this citation's content includes on-screen text (OCR) or a visual
+    #: caption that was NOT entailment-verified — claims are extracted from speech
+    #: only, so visual content bypasses the verify-before-commit gate. Lets clients
+    #: flag on-screen material as lower-trust than vetted speech.
+    ocr_unverified: bool = False
     #: Full answerable content of the cited moment (transcript + OCR), shown to the
     #: LLM synthesizer so an answer-bearing sentence with no query-token overlap is
     #: not lost. Internal only — excluded from the API payload (the short ``snippet``
