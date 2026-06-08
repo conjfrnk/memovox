@@ -1,5 +1,7 @@
 # memovox
 
+[![license: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE) [![commercial license available](https://img.shields.io/badge/commercial-license%20available-orange.svg)](COMMERCIAL-LICENSE.md) ![python: 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg) ![local-first: no API keys](https://img.shields.io/badge/local--first-no%20API%20keys-success.svg)
+
 **memovox turns videos into a searchable, trustworthy memory you can ask questions of.**
 Point it at a talk, lecture, meeting, interview, webinar, or podcast and ask plain-English
 questions later. Every sentence of the answer comes with a **receipt** — which video it
@@ -166,7 +168,10 @@ python -m eval.harness --assert-thresholds   # golden-corpus quality gates
 ```
 
 For design background, see [`docs/DESIGN.md`](docs/DESIGN.md) (how the pieces map to the
-code) and [`spec.md`](spec.md) (the full specification).
+code) and [`spec.md`](spec.md) (the full specification). Contributing:
+[`CONTRIBUTING.md`](CONTRIBUTING.md) (note the DCO + CLA). Security:
+[`SECURITY.md`](SECURITY.md). How quality is measured:
+[`docs/BENCHMARK.md`](docs/BENCHMARK.md).
 
 ## License
 
