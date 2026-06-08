@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use memovox in your research, please cite it."
+title: "memovox: a local-first, multimodal video-to-knowledge engine with provenance"
+abstract: >-
+  memovox turns videos into a searchable, citable memory. Every answer sentence
+  resolves to a (video, time-span, modality, confidence) citation; claims are
+  entailment-checked against their source before they are committed; and the
+  system refuses to answer when it cannot cite. It fuses spoken transcript with
+  on-screen text (OCR) and visual content, runs fully offline, and requires no
+  API keys.
+type: software
+authors:
+  # TODO(connor): add family-names and/or an ORCID so the citation is complete.
+  - given-names: Connor
+    alias: conjfrnk
+repository-code: "https://github.com/conjfrnk/memovox"
+url: "https://github.com/conjfrnk/memovox"
+license: AGPL-3.0-or-later
+keywords:
+  - video-understanding
+  - retrieval-augmented-generation
+  - provenance
+  - multimodal
+  - local-first
+  - knowledge-graph

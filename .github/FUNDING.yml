@@ -1,0 +1,8 @@
+# GitHub Sponsors + funding for memovox.
+# To activate the Sponsor button, enable GitHub Sponsors at
+# https://github.com/sponsors (needs 2FA + a Stripe Connect payout account).
+github: conjfrnk
+# memovox is dual-licensed (AGPL-3.0 + commercial). Organizations that need a
+# commercial license can start here:
+custom:
+  - "https://github.com/conjfrnk/memovox/blob/main/COMMERCIAL-LICENSE.md"
