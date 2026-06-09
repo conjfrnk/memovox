@@ -2,18 +2,16 @@
 
 [![license: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE) [![commercial license available](https://img.shields.io/badge/commercial-license%20available-orange.svg)](COMMERCIAL-LICENSE.md) ![python: 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg) ![local-first: no API keys](https://img.shields.io/badge/local--first-no%20API%20keys-success.svg)
 
-**memovox turns videos into a searchable, trustworthy memory you can ask questions of.**
-Point it at a talk, lecture, meeting, interview, webinar, or podcast and ask plain-English
-questions later. Every sentence of the answer comes with a **receipt** — which video it
-came from, the exact moment (with a link that jumps you straight there), and who said it.
-The one rule it never breaks: **if memovox can't point to where it learned something, it
-won't claim it.**
+**memovox turns videos into a searchable memory you can ask questions of.** Point it at a
+talk, lecture, meeting, interview, or podcast, then ask plain-English questions later. Every
+answer comes with a citation — which video, the exact moment (one click jumps you there), and
+who said it. The one rule it never breaks: if it can't cite where it learned something, it
+won't claim it.
 
 > **New here?** Start with the plain-language overview: **[What is memovox? →](docs/EXPLAINER.md)**
 >
-> **Heads up:** memovox is a **command-line tool** — you run it by typing commands in a
-> terminal; there's no clickable app yet. (It also offers a Python library, a REST server,
-> and an MCP server for wiring into AI assistants.)
+> **Heads up:** memovox runs in the terminal — there's no clickable app yet. (It also has a
+> Python library, a REST server, and an MCP server for wiring into AI assistants.)
 
 ## What it's good for
 
