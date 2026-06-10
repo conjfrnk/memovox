@@ -108,8 +108,24 @@ memovox mcp     # speaks MCP over stdio — wire into Claude Code / Desktop
 ```
 
 Stdlib-only (no `mcp` package required); tools: `ingest_video`, `search_knowledge`,
-`get_claim_provenance`, `synthesize_topic`, `find_contradictions`, `claim_timeline`,
-`consolidate`, `job_status`.
+`list_videos`, `get_claim_provenance`, `synthesize_topic`, `find_contradictions`,
+`claim_timeline`, `consolidate`, `job_status`.
+
+Once connected you don't have to ask for memovox by name — the server ships
+model-facing instructions, so "watch this video and tell me what it says about X"
+routes to `ingest_video` → `job_status` → `search_knowledge` on its own. For
+Claude Desktop, add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "memovox": { "command": "memovox", "args": ["mcp"] }
+  }
+}
+```
+
+(Claude Desktop launches servers with a minimal `PATH` — if it can't find the
+command, use the absolute path from `which memovox`.)
 
 ### REST server
 
