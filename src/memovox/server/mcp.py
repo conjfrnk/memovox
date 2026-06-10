@@ -21,7 +21,11 @@ PROTOCOL_VERSION = "2024-11-05"
 TOOLS = [
     {
         "name": "ingest_video",
-        "description": "Ingest a video/audio/transcript (local path or URL) into the knowledge base.",
+        "description": "Start ingesting a video/audio/transcript (local path or URL) into the "
+                       "knowledge base. Returns {job_id, state} immediately; ingestion runs in "
+                       "the background and can take several minutes for a long video. Poll "
+                       "job_status until state is 'succeeded' (the result holds the ingest "
+                       "report), then query with search_knowledge.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -88,7 +92,7 @@ TOOLS = [
     },
     {
         "name": "job_status",
-        "description": "Resolve a background job id (e.g. from consolidate) to its "
+        "description": "Resolve a background job id (from ingest_video or consolidate) to its "
                        "state/result/error.",
         "inputSchema": {
             "type": "object",
@@ -158,8 +162,12 @@ class McpServer:
     # -- tools ------------------------------------------------------------
 
     def _tool_ingest_video(self, args: dict) -> dict:
-        report = self.mv.ingest(args["url"], source_url=args.get("source_url"), title=args.get("title"))
-        return _tool_json(report.to_dict())
+        # Non-blocking like consolidate: a real ingest (download + ASR + NLI) runs
+        # minutes, but MCP clients cancel long calls (Claude Desktop at 240 s) and
+        # the result is lost even though the ingest finishes. Enqueue + job_status.
+        handle = self.mv.enqueue_ingest(
+            args["url"], source_url=args.get("source_url"), title=args.get("title"))
+        return _tool_json(handle)
 
     def _tool_search_knowledge(self, args: dict) -> dict:
         answer = self.mv.ask(args["query"], video_id=args.get("video_id"),

@@ -232,6 +232,23 @@ class Memovox:
         self._ensure_worker()
         return {"job_id": job_id, "state": state}
 
+    def enqueue_ingest(self, source: str, *, source_url: Optional[str] = None,
+                       title: Optional[str] = None) -> dict:
+        """Enqueue an async ingest; returns {job_id, state} immediately. A real
+        ingest (download + ASR + NLI) runs minutes — longer than MCP clients wait
+        (Claude Desktop cancels at 240 s) — so callers poll job_status instead.
+        None-valued args are dropped to keep the (kind, args_hash) de-dup stable."""
+        args = {"source": source}
+        if source_url:
+            args["source_url"] = source_url
+        if title:
+            args["title"] = title
+        with self._jobstore() as jobs:
+            job_id = jobs.enqueue("ingest", args)
+            state = jobs.get_job(job_id)["state"]
+        self._ensure_worker()
+        return {"job_id": job_id, "state": state}
+
     def enqueue_sync(self) -> dict:
         with self._jobstore() as jobs:
             job_id = jobs.enqueue("sync", {})

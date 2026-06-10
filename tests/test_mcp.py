@@ -122,6 +122,39 @@ class TestMcp(unittest.TestCase):
         self.assertEqual(status["state"], "succeeded")
         self.assertIn("topics", status["result"])
 
+    def test_ingest_video_is_nonblocking_and_job_status_resolves(self):
+        import json
+        import time
+        # ingest_video must enqueue + return a job handle immediately: a real ingest
+        # (download + ASR + NLI) outlasts MCP client timeouts (Claude Desktop cancels
+        # at 240 s), so the inline path loses the result even when the ingest succeeds.
+        vtt = self.dir / "t2.en.vtt"
+        vtt.write_text(VTT, encoding="utf-8")
+        resp = self.server.handle({
+            "jsonrpc": "2.0", "id": 13, "method": "tools/call",
+            "params": {"name": "ingest_video",
+                       "arguments": {"url": str(vtt), "source_url": "https://youtu.be/def456"}},
+        })
+        handle = json.loads(resp["result"]["content"][0]["text"])
+        self.assertIn("job_id", handle)
+        self.assertNotIn("n_moments", handle)  # a handle, not an inline report
+        self.assertIn(handle["state"], ("queued", "running", "succeeded"))
+        # the production path: the auto-spawned worker drains the queue; poll to terminal
+        status = None
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            st = self.server.handle({
+                "jsonrpc": "2.0", "id": 14, "method": "tools/call",
+                "params": {"name": "job_status", "arguments": {"job_id": handle["job_id"]}},
+            })
+            status = json.loads(st["result"]["content"][0]["text"])
+            if status["state"] in ("succeeded", "failed"):
+                break
+            time.sleep(0.1)
+        self.assertEqual(status["state"], "succeeded")
+        self.assertEqual(status["result"]["video_id"], "yt:def456")
+        self.assertEqual(status["result"]["status"], "ingested")
+
     def test_unknown_method_errors(self):
         resp = self.server.handle({"jsonrpc": "2.0", "id": 9, "method": "bogus"})
         self.assertEqual(resp["error"]["code"], -32601)
