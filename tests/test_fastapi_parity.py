@@ -43,6 +43,16 @@ class FastApiParityTest(unittest.TestCase):
             self.skipTest("fastapi not installed (free path)")
         from fastapi.testclient import TestClient
 
+        # wall_ms is an explicitly VOLATILE per-call timing field, so two independent
+        # ask() invocations never share it; parity is asserted on the SUBSTANTIVE
+        # payload with wall_ms scrubbed (both servers emit the same volatile field).
+        def scrub(obj):
+            if isinstance(obj, dict):
+                return {k: scrub(v) for k, v in obj.items() if k != "wall_ms"}
+            if isinstance(obj, list):
+                return [scrub(v) for v in obj]
+            return obj
+
         client = TestClient(fastapi_app.build_app(self.mv))
         # GET routes: FastAPI response == the pure route payload (which the stdlib
         # handler also returns verbatim).
@@ -53,11 +63,11 @@ class FastApiParityTest(unittest.TestCase):
         ]:
             resp = client.get(path)
             _, pure, _ = route_call()
-            self.assertEqual(resp.json(), pure, path)
-        # POST /query parity
+            self.assertEqual(scrub(resp.json()), scrub(pure), path)
+        # POST /query parity (substantive payload; volatile wall_ms scrubbed)
         resp = client.post("/query", json={"query": "chunk size?"})
         _, pure, _ = routes.route_query(self.mv, {"query": "chunk size?"})
-        self.assertEqual(resp.json(), pure)
+        self.assertEqual(scrub(resp.json()), scrub(pure))
 
 
 if __name__ == "__main__":

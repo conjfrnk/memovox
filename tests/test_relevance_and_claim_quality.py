@@ -143,6 +143,15 @@ class TestRelevanceGate(unittest.TestCase):
         self.assertFalse(ans.low_evidence)
         self.assertTrue(ans.citations)
 
+    def test_content_free_query_is_refused(self):
+        # A query with no content/topic words at all (only function/filler/framing
+        # words) names nothing to answer and must be refused, not short-circuited to
+        # full relevance.
+        for q in ("how does it work?", "what do the sources say?"):
+            ans = augur.ask(self.store, q, embedder=self.emb, settings=Settings())
+            self.assertTrue(ans.low_evidence, q)
+            self.assertEqual(ans.citations, [], q)
+
     def test_small_corpus_is_not_gated(self):
         # Below answer_relevance_min_moments the IDF signal is unreliable; an
         # out-of-corpus query on a tiny store must NOT be spuriously refused.

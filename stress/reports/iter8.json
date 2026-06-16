@@ -1,0 +1,1063 @@
+{
+  "stamp": "iter8-content-free+fastapi",
+  "nli": "lexical",
+  "embed": "hashing",
+  "videos": [
+    {
+      "id": "UF8uR6Z6KLc",
+      "group": "sweet",
+      "label": "Jobs Stanford 2005",
+      "published_at": "2008-03-08T00:00:00Z",
+      "video_id": "yt:UF8uR6Z6KLc",
+      "status": "ingested",
+      "n_moments": 87,
+      "n_claims_committed": 87,
+      "n_claims_unsupported": 0,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:UF8uR6Z6KLc:spk_0"
+      ],
+      "n_committed_audited": 87,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "zjkBMFhNj_g",
+      "group": "sweet",
+      "label": "Karpathy Intro to LLMs",
+      "published_at": "2023-11-23T00:00:00Z",
+      "video_id": "yt:zjkBMFhNj_g",
+      "status": "ingested",
+      "n_moments": 392,
+      "n_claims_committed": 392,
+      "n_claims_unsupported": 1,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:zjkBMFhNj_g:spk_0"
+      ],
+      "n_committed_audited": 392,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "XTeJ64KD5cg",
+      "group": "sweet",
+      "label": "Numberphile Graham's Number",
+      "published_at": "2012-04-04T00:00:00Z",
+      "video_id": "yt:XTeJ64KD5cg",
+      "status": "ingested",
+      "n_moments": 74,
+      "n_claims_committed": 113,
+      "n_claims_unsupported": 22,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:XTeJ64KD5cg:BRADY HARAN",
+        "yt:XTeJ64KD5cg:MATT PARKER",
+        "yt:XTeJ64KD5cg:TONY PADILLA",
+        "yt:XTeJ64KD5cg:spk_0"
+      ],
+      "n_committed_audited": 113,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "t3H5D-XxPrI",
+      "group": "asr",
+      "label": "Polyglots 21 languages",
+      "published_at": "2017-06-05T00:00:00Z",
+      "video_id": "yt:t3H5D-XxPrI",
+      "status": "ingested",
+      "n_moments": 35,
+      "n_claims_committed": 31,
+      "n_claims_unsupported": 5,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:t3H5D-XxPrI:spk_0"
+      ],
+      "n_committed_audited": 31,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "144uOfr4SYA",
+      "group": "asr",
+      "label": "Munk Debate on AI",
+      "published_at": "2023-06-24T00:00:00Z",
+      "video_id": "yt:144uOfr4SYA",
+      "status": "ingested",
+      "n_moments": 658,
+      "n_claims_committed": 657,
+      "n_claims_unsupported": 0,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:144uOfr4SYA:spk_0"
+      ],
+      "n_committed_audited": 657,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "nkG2SSzPUns",
+      "group": "asr",
+      "label": "NPR Tiny Desk",
+      "published_at": "2026-06-12T00:00:00Z",
+      "video_id": "yt:nkG2SSzPUns",
+      "status": "ingested",
+      "n_moments": 60,
+      "n_claims_committed": 179,
+      "n_claims_unsupported": 40,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:nkG2SSzPUns:spk_0"
+      ],
+      "n_committed_audited": 179,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "AmlF6xq2SaQ",
+      "group": "asr",
+      "label": "Easy English NYC",
+      "published_at": "2014-10-28T00:00:00Z",
+      "video_id": "yt:AmlF6xq2SaQ",
+      "status": "ingested",
+      "n_moments": 14,
+      "n_claims_committed": 14,
+      "n_claims_unsupported": 0,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:AmlF6xq2SaQ:spk_0"
+      ],
+      "n_committed_audited": 14,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "J7DzL2_Na80",
+      "group": "visual",
+      "label": "Strang Linear Algebra L1",
+      "published_at": "2019-09-24T00:00:00Z",
+      "video_id": "yt:J7DzL2_Na80",
+      "status": "ingested",
+      "n_moments": 229,
+      "n_claims_committed": 326,
+      "n_claims_unsupported": 81,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:J7DzL2_Na80:spk_0"
+      ],
+      "n_committed_audited": 326,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "WUvTyaaNkzM",
+      "group": "visual",
+      "label": "3Blue1Brown calculus",
+      "published_at": "2017-04-28T00:00:00Z",
+      "video_id": "yt:WUvTyaaNkzM",
+      "status": "ingested",
+      "n_moments": 91,
+      "n_claims_committed": 114,
+      "n_claims_unsupported": 43,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:WUvTyaaNkzM:spk_0"
+      ],
+      "n_committed_audited": 114,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "jbkSRLYSojo",
+      "group": "visual",
+      "label": "Rosling 200 Countries",
+      "published_at": "2010-11-26T00:00:00Z",
+      "video_id": "yt:jbkSRLYSojo",
+      "status": "ingested",
+      "n_moments": 24,
+      "n_claims_committed": 26,
+      "n_claims_unsupported": 1,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:jbkSRLYSojo:spk_0"
+      ],
+      "n_committed_audited": 26,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "kCc8FmEb1nY",
+      "group": "visual",
+      "label": "Karpathy build GPT",
+      "published_at": "2023-01-17T00:00:00Z",
+      "video_id": "yt:kCc8FmEb1nY",
+      "status": "ingested",
+      "n_moments": 742,
+      "n_claims_committed": 742,
+      "n_claims_unsupported": 3,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:kCc8FmEb1nY:spk_0"
+      ],
+      "n_committed_audited": 742,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "jGwO_UgTS7I",
+      "group": "visual",
+      "label": "Andrew Ng CS229 L1",
+      "published_at": "2020-04-17T00:00:00Z",
+      "video_id": "yt:jGwO_UgTS7I",
+      "status": "ingested",
+      "n_moments": 432,
+      "n_claims_committed": 492,
+      "n_claims_unsupported": 140,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:jGwO_UgTS7I:spk_0"
+      ],
+      "n_committed_audited": 492,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "1M3Vdl6DRkU",
+      "group": "duration",
+      "label": "Lex Fridman #497",
+      "published_at": "2026-05-29T00:00:00Z",
+      "video_id": "yt:1M3Vdl6DRkU",
+      "status": "ingested",
+      "n_moments": 930,
+      "n_claims_committed": 1388,
+      "n_claims_unsupported": 528,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:1M3Vdl6DRkU:spk_0"
+      ],
+      "n_committed_audited": 1388,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "aqBHXNGKvKU",
+      "group": "contradiction",
+      "label": "Sat fat CAUSES heart disease",
+      "published_at": "2025-06-25T00:00:00Z",
+      "video_id": "yt:aqBHXNGKvKU",
+      "status": "ingested",
+      "n_moments": 44,
+      "n_claims_committed": 52,
+      "n_claims_unsupported": 29,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:aqBHXNGKvKU:spk_0"
+      ],
+      "n_committed_audited": 52,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "dzOTaNwiFmA",
+      "group": "contradiction",
+      "label": "Sat fat does NOT (Attia)",
+      "published_at": "2024-02-22T00:00:00Z",
+      "video_id": "yt:dzOTaNwiFmA",
+      "status": "ingested",
+      "n_moments": 52,
+      "n_claims_committed": 52,
+      "n_claims_unsupported": 0,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:dzOTaNwiFmA:spk_0"
+      ],
+      "n_committed_audited": 52,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "AxIOGqHQqZM",
+      "group": "contradiction",
+      "label": "Breakfast IS important",
+      "published_at": "2018-04-24T00:00:00Z",
+      "video_id": "yt:AxIOGqHQqZM",
+      "status": "ingested",
+      "n_moments": 59,
+      "n_claims_committed": 82,
+      "n_claims_unsupported": 26,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:AxIOGqHQqZM:But caveat",
+        "yt:AxIOGqHQqZM:For example",
+        "yt:AxIOGqHQqZM:spk_0"
+      ],
+      "n_committed_audited": 82,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "2su8e-nhMGw",
+      "group": "contradiction",
+      "label": "SKIP breakfast (Berg)",
+      "published_at": "2019-04-01T00:00:00Z",
+      "video_id": "yt:2su8e-nhMGw",
+      "status": "ingested",
+      "n_moments": 25,
+      "n_claims_committed": 25,
+      "n_claims_unsupported": 0,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:2su8e-nhMGw:spk_0"
+      ],
+      "n_committed_audited": 25,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "n_Smy5-1cHE",
+      "group": "contradiction",
+      "label": "Carnivore risks",
+      "published_at": "2024-04-19T00:00:00Z",
+      "video_id": "yt:n_Smy5-1cHE",
+      "status": "ingested",
+      "n_moments": 98,
+      "n_claims_committed": 97,
+      "n_claims_unsupported": 1,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:n_Smy5-1cHE:spk_0"
+      ],
+      "n_committed_audited": 97,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "SdnEbJZoNg8",
+      "group": "contradiction",
+      "label": "Vegan brain",
+      "published_at": "2023-01-04T00:00:00Z",
+      "video_id": "yt:SdnEbJZoNg8",
+      "status": "ingested",
+      "n_moments": 30,
+      "n_claims_committed": 30,
+      "n_claims_unsupported": 0,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:SdnEbJZoNg8:spk_0"
+      ],
+      "n_committed_audited": 30,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "5KVDDfAkRgc",
+      "group": "timeline",
+      "label": "Not Ready for Superintelligence",
+      "published_at": "2025-07-09T00:00:00Z",
+      "video_id": "yt:5KVDDfAkRgc",
+      "status": "ingested",
+      "n_moments": 217,
+      "n_claims_committed": 320,
+      "n_claims_unsupported": 149,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:5KVDDfAkRgc:spk_0"
+      ],
+      "n_committed_audited": 320,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "YeRS4TbtZWA",
+      "group": "timeline",
+      "label": "AGI timelines 2025",
+      "published_at": "2026-02-10T00:00:00Z",
+      "video_id": "yt:YeRS4TbtZWA",
+      "status": "ingested",
+      "n_moments": 150,
+      "n_claims_committed": 195,
+      "n_claims_unsupported": 61,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:YeRS4TbtZWA:And that worked great",
+        "yt:YeRS4TbtZWA:Rob Wiblin",
+        "yt:YeRS4TbtZWA:spk_0"
+      ],
+      "n_committed_audited": 195,
+      "trivial_count": 3,
+      "trivial_ratio": 0.015,
+      "sample_trivial": [
+        "And unfortunately,&nbsp;&nbsp;",
+        "The Index&nbsp;&nbsp;",
+        "But there’s&nbsp;&nbsp;"
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    }
+  ],
+  "asks": [
+    {
+      "q": "what is Graham's number?",
+      "expect_video": "XTeJ64KD5cg",
+      "expect_kw": "graham",
+      "text_present": true,
+      "n_citations": 8,
+      "low_evidence": false,
+      "cite_videos": [
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg"
+      ],
+      "modalities": [
+        "speech"
+      ],
+      "hit": true,
+      "kw_in_text": true,
+      "all_cited": false
+    },
+    {
+      "q": "what are the two files that make up a large language model?",
+      "expect_video": "zjkBMFhNj_g",
+      "expect_kw": null,
+      "text_present": true,
+      "n_citations": 8,
+      "low_evidence": false,
+      "cite_videos": [
+        "yt:zjkBMFhNj_g",
+        "yt:zjkBMFhNj_g",
+        "yt:kCc8FmEb1nY",
+        "yt:zjkBMFhNj_g",
+        "yt:1M3Vdl6DRkU",
+        "yt:zjkBMFhNj_g",
+        "yt:144uOfr4SYA",
+        "yt:zjkBMFhNj_g"
+      ],
+      "modalities": [
+        "speech"
+      ],
+      "hit": true,
+      "kw_in_text": null,
+      "all_cited": false
+    },
+    {
+      "q": "what did Steve Jobs say about connecting the dots?",
+      "expect_video": "UF8uR6Z6KLc",
+      "expect_kw": "dot",
+      "text_present": true,
+      "n_citations": 8,
+      "low_evidence": false,
+      "cite_videos": [
+        "yt:UF8uR6Z6KLc",
+        "yt:zjkBMFhNj_g",
+        "yt:UF8uR6Z6KLc",
+        "yt:J7DzL2_Na80",
+        "yt:UF8uR6Z6KLc",
+        "yt:zjkBMFhNj_g",
+        "yt:jGwO_UgTS7I",
+        "yt:J7DzL2_Na80"
+      ],
+      "modalities": [
+        "speech"
+      ],
+      "hit": true,
+      "kw_in_text": true,
+      "all_cited": false
+    },
+    {
+      "q": "does saturated fat cause heart disease?",
+      "expect_video": null,
+      "expect_kw": "fat",
+      "text_present": true,
+      "n_citations": 8,
+      "low_evidence": false,
+      "cite_videos": [
+        "yt:aqBHXNGKvKU",
+        "yt:dzOTaNwiFmA",
+        "yt:aqBHXNGKvKU",
+        "yt:aqBHXNGKvKU",
+        "yt:aqBHXNGKvKU",
+        "yt:dzOTaNwiFmA",
+        "yt:aqBHXNGKvKU",
+        "yt:dzOTaNwiFmA"
+      ],
+      "modalities": [
+        "speech"
+      ],
+      "hit": null,
+      "kw_in_text": true,
+      "all_cited": false
+    },
+    {
+      "q": "is breakfast the most important meal of the day?",
+      "expect_video": null,
+      "expect_kw": "breakfast",
+      "text_present": true,
+      "n_citations": 8,
+      "low_evidence": false,
+      "cite_videos": [
+        "yt:AxIOGqHQqZM",
+        "yt:AxIOGqHQqZM",
+        "yt:AxIOGqHQqZM",
+        "yt:AxIOGqHQqZM",
+        "yt:AxIOGqHQqZM",
+        "yt:AxIOGqHQqZM",
+        "yt:AxIOGqHQqZM",
+        "yt:jGwO_UgTS7I"
+      ],
+      "modalities": [
+        "speech"
+      ],
+      "hit": null,
+      "kw_in_text": true,
+      "all_cited": false
+    },
+    {
+      "q": "what do the sources say about superintelligence?",
+      "expect_video": null,
+      "expect_kw": null,
+      "text_present": true,
+      "n_citations": 8,
+      "low_evidence": false,
+      "cite_videos": [
+        "yt:WUvTyaaNkzM",
+        "yt:jGwO_UgTS7I",
+        "yt:1M3Vdl6DRkU",
+        "yt:1M3Vdl6DRkU",
+        "yt:kCc8FmEb1nY",
+        "yt:1M3Vdl6DRkU",
+        "yt:144uOfr4SYA",
+        "yt:5KVDDfAkRgc"
+      ],
+      "modalities": [
+        "speech"
+      ],
+      "hit": null,
+      "kw_in_text": null,
+      "all_cited": false
+    },
+    {
+      "q": "what are the risks of a carnivore diet?",
+      "expect_video": "n_Smy5-1cHE",
+      "expect_kw": null,
+      "text_present": true,
+      "n_citations": 8,
+      "low_evidence": false,
+      "cite_videos": [
+        "yt:n_Smy5-1cHE",
+        "yt:n_Smy5-1cHE",
+        "yt:n_Smy5-1cHE",
+        "yt:n_Smy5-1cHE",
+        "yt:J7DzL2_Na80",
+        "yt:n_Smy5-1cHE",
+        "yt:n_Smy5-1cHE",
+        "yt:kCc8FmEb1nY"
+      ],
+      "modalities": [
+        "speech"
+      ],
+      "hit": true,
+      "kw_in_text": null,
+      "all_cited": false
+    },
+    {
+      "q": "what does Peter Attia say about saturated fat?",
+      "expect_video": null,
+      "expect_kw": "fat",
+      "text_present": true,
+      "n_citations": 8,
+      "low_evidence": false,
+      "cite_videos": [
+        "yt:aqBHXNGKvKU",
+        "yt:aqBHXNGKvKU",
+        "yt:dzOTaNwiFmA",
+        "yt:aqBHXNGKvKU",
+        "yt:aqBHXNGKvKU",
+        "yt:aqBHXNGKvKU",
+        "yt:1M3Vdl6DRkU",
+        "yt:kCc8FmEb1nY"
+      ],
+      "modalities": [
+        "speech"
+      ],
+      "hit": null,
+      "kw_in_text": true,
+      "all_cited": false
+    },
+    {
+      "q": "what did Hans Rosling show about countries and years?",
+      "expect_video": "jbkSRLYSojo",
+      "expect_kw": null,
+      "text_present": true,
+      "n_citations": 8,
+      "low_evidence": false,
+      "cite_videos": [
+        "yt:jbkSRLYSojo",
+        "yt:1M3Vdl6DRkU",
+        "yt:zjkBMFhNj_g",
+        "yt:zjkBMFhNj_g",
+        "yt:aqBHXNGKvKU",
+        "yt:jbkSRLYSojo",
+        "yt:144uOfr4SYA",
+        "yt:jbkSRLYSojo"
+      ],
+      "modalities": [
+        "speech"
+      ],
+      "hit": true,
+      "kw_in_text": null,
+      "all_cited": false
+    },
+    {
+      "q": "what is AGI?",
+      "expect_video": null,
+      "expect_kw": null,
+      "text_present": true,
+      "n_citations": 8,
+      "low_evidence": false,
+      "cite_videos": [
+        "yt:1M3Vdl6DRkU",
+        "yt:1M3Vdl6DRkU",
+        "yt:J7DzL2_Na80",
+        "yt:5KVDDfAkRgc",
+        "yt:kCc8FmEb1nY",
+        "yt:YeRS4TbtZWA",
+        "yt:144uOfr4SYA",
+        "yt:5KVDDfAkRgc"
+      ],
+      "modalities": [
+        "speech"
+      ],
+      "hit": null,
+      "kw_in_text": null,
+      "all_cited": false
+    }
+  ],
+  "refusals": [
+    {
+      "q": "what is the capital of Mongolia?",
+      "text_present": true,
+      "low_evidence": true,
+      "n_citations": 0,
+      "text": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "refused": true
+    },
+    {
+      "q": "what did the speaker say about underwater basket weaving championships?",
+      "text_present": true,
+      "low_evidence": true,
+      "n_citations": 0,
+      "text": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "refused": true
+    },
+    {
+      "q": "how do I change the oil in a 1997 Honda Civic?",
+      "text_present": true,
+      "low_evidence": true,
+      "n_citations": 0,
+      "text": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "refused": true
+    },
+    {
+      "q": "who won the 2014 FIFA World Cup?",
+      "text_present": true,
+      "low_evidence": true,
+      "n_citations": 0,
+      "text": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "refused": true
+    },
+    {
+      "q": "what is the boiling point of mercury?",
+      "text_present": true,
+      "low_evidence": true,
+      "n_citations": 0,
+      "text": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "refused": true
+    },
+    {
+      "q": "how do I change a car tire?",
+      "text_present": true,
+      "low_evidence": true,
+      "n_citations": 0,
+      "text": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "refused": true
+    },
+    {
+      "q": "what are the rules of cricket?",
+      "text_present": true,
+      "low_evidence": true,
+      "n_citations": 0,
+      "text": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "refused": true
+    },
+    {
+      "q": "who is the president of France?",
+      "text_present": true,
+      "low_evidence": true,
+      "n_citations": 0,
+      "text": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "refused": true
+    },
+    {
+      "q": "what is the tallest mountain in Africa?",
+      "text_present": true,
+      "low_evidence": true,
+      "n_citations": 0,
+      "text": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "refused": true
+    },
+    {
+      "q": "what time does the bank open?",
+      "text_present": true,
+      "low_evidence": true,
+      "n_citations": 0,
+      "text": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "refused": true
+    },
+    {
+      "q": "how do I file my taxes?",
+      "text_present": true,
+      "low_evidence": true,
+      "n_citations": 0,
+      "text": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "refused": true
+    },
+    {
+      "q": "how do I train a puppy?",
+      "text_present": true,
+      "low_evidence": true,
+      "n_citations": 0,
+      "text": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "refused": true
+    },
+    {
+      "q": "how do I save energy at home?",
+      "text_present": true,
+      "low_evidence": true,
+      "n_citations": 0,
+      "text": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "refused": true
+    },
+    {
+      "q": "how often should I walk my dog?",
+      "text_present": true,
+      "low_evidence": true,
+      "n_citations": 0,
+      "text": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "refused": true
+    }
+  ],
+  "contradictions": {
+    "saturated fat": {
+      "n_pairs": 0,
+      "n_cross_video": 0,
+      "relations": {},
+      "pairs": []
+    },
+    "breakfast": {
+      "n_pairs": 0,
+      "n_cross_video": 0,
+      "relations": {},
+      "pairs": []
+    },
+    "diet": {
+      "n_pairs": 0,
+      "n_cross_video": 0,
+      "relations": {},
+      "pairs": []
+    },
+    "AGI": {
+      "n_pairs": 0,
+      "n_cross_video": 0,
+      "relations": {},
+      "pairs": []
+    }
+  },
+  "synthesize": {
+    "AGI": {
+      "consensus_count": 0,
+      "contradiction_count": 0,
+      "low_evidence": true,
+      "n_citations": 8,
+      "consensus_sample": []
+    },
+    "saturated fat": {
+      "consensus_count": 0,
+      "contradiction_count": 0,
+      "low_evidence": true,
+      "n_citations": 27,
+      "consensus_sample": []
+    },
+    "diet": {
+      "consensus_count": 0,
+      "contradiction_count": 0,
+      "low_evidence": true,
+      "n_citations": 30,
+      "consensus_sample": []
+    }
+  },
+  "evolution": {
+    "AGI": {
+      "n_steps": 8,
+      "dates": [
+        "2025-07-09T00:00:00Z",
+        "2025-07-09T00:00:00Z",
+        "2025-07-09T00:00:00Z",
+        "2026-02-10T00:00:00Z",
+        "2026-02-10T00:00:00Z",
+        "2026-02-10T00:00:00Z",
+        "2026-02-10T00:00:00Z",
+        "2026-02-10T00:00:00Z"
+      ],
+      "ordered_ok": true,
+      "videos": [
+        "yt:5KVDDfAkRgc",
+        "yt:5KVDDfAkRgc",
+        "yt:5KVDDfAkRgc",
+        "yt:YeRS4TbtZWA",
+        "yt:YeRS4TbtZWA",
+        "yt:YeRS4TbtZWA",
+        "yt:YeRS4TbtZWA",
+        "yt:YeRS4TbtZWA"
+      ]
+    },
+    "superintelligence": {
+      "n_steps": 0,
+      "dates": [],
+      "ordered_ok": true,
+      "videos": []
+    }
+  },
+  "aggregate": {
+    "consolidate": {
+      "topics": 4128,
+      "contradictions": 0,
+      "supports": 2,
+      "consensus_clusters": 0,
+      "superseded": 239,
+      "claims_scanned": 600,
+      "claims_skipped": 4814,
+      "capped": true,
+      "metrics": {
+        "name": "consolidate",
+        "spans": [
+          {
+            "stage": "topics",
+            "wall_ms": 231817.0121249277,
+            "status": "ok",
+            "counters": {
+              "topics": 4128
+            },
+            "caps": []
+          },
+          {
+            "stage": "contradictions",
+            "wall_ms": 4263.089125044644,
+            "status": "ok",
+            "counters": {
+              "candidates": 5414,
+              "nli_calls": 2537,
+              "new_contradictions": 0,
+              "new_supports": 2
+            },
+            "caps": [
+              {
+                "name": "max_claims",
+                "limit": 600,
+                "dropped": 4814
+              }
+            ]
+          },
+          {
+            "stage": "consensus",
+            "wall_ms": 100.52149998955429,
+            "status": "ok",
+            "counters": {
+              "clusters": 0
+            },
+            "caps": []
+          },
+          {
+            "stage": "dedup",
+            "wall_ms": 73.17808317020535,
+            "status": "ok",
+            "counters": {
+              "superseded": 239
+            },
+            "caps": []
+          }
+        ]
+      }
+    },
+    "planted_contradictions": [
+      {
+        "pair": [
+          "aqBHXNGKvKU",
+          "dzOTaNwiFmA"
+        ],
+        "topic": "saturated fat",
+        "surfaced": false
+      },
+      {
+        "pair": [
+          "AxIOGqHQqZM",
+          "2su8e-nhMGw"
+        ],
+        "topic": "breakfast",
+        "surfaced": false
+      }
+    ],
+    "n_videos": 21,
+    "n_ingest_ok": 21,
+    "total_moments": 4443,
+    "total_committed": 5414,
+    "total_trivial": 3,
+    "mean_trivial_ratio": 0.001,
+    "total_provenance_violations": 0,
+    "ask_hit_rate": 1.0,
+    "asks_refused": []
+  },
+  "findings": [
+    {
+      "severity": "LOW",
+      "code": "contradictions_missed",
+      "msg": "2/2 planted pairs not surfaced (lexical-NLI limit + corpus caveat)",
+      "missed": [
+        {
+          "pair": [
+            "aqBHXNGKvKU",
+            "dzOTaNwiFmA"
+          ],
+          "topic": "saturated fat",
+          "surfaced": false
+        },
+        {
+          "pair": [
+            "AxIOGqHQqZM",
+            "2su8e-nhMGw"
+          ],
+          "topic": "breakfast",
+          "surfaced": false
+        }
+      ]
+    },
+    {
+      "severity": "MED",
+      "code": "synthesis_synonyms",
+      "msg": "synthesize('AGI') found 0 consensus points (token-Jaccard misses synonyms?)"
+    },
+    {
+      "severity": "LOW",
+      "code": "speaker_collapse",
+      "msg": "multi-speaker debate collapsed to a single speaker (no diarization backend)"
+    }
+  ],
+  "errors": []
+}

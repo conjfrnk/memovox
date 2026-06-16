@@ -148,14 +148,18 @@ def _relevance_coverage(store, query: str, citations: List["Citation"],
         regresses retrieval, so it is intentionally NOT done here."""
     distinctive = _rel_tokens(query)
     cov_q = _coverage_tokens(query)
-    if not cov_q:
-        return 1.0
     try:
         n = max(1, int(store.stats().get("moments", 1)))
     except Exception:  # noqa: BLE001 - stats is best-effort; never break an answer
         n = 1
     if n < min_moments:
         return 1.0  # corpus too small for the df signal to be reliable
+    if not cov_q:
+        # A content-free query (only function/filler/framing words: "how does it
+        # work?", "what do the sources say?") names no topic to answer -> refuse.
+        # This MUST come after the small-corpus exemption but BEFORE coverage, else
+        # the empty-coverage short-circuit would wrongly return full relevance.
+        return 0.0
 
     min_df = max(2, round(_RELEVANCE_TOPIC_DF_FRAC * n))
     title_tokens: set = set()

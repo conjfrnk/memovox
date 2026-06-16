@@ -6,7 +6,11 @@ functions the stdlib ``http.server`` handler uses, so a JSON-parity test proves 
 two servers return byte-identical responses. ``uvicorn`` is the production runner.
 """
 
-from __future__ import annotations
+# NB: deliberately NO ``from __future__ import annotations`` here. fastapi is imported
+# only inside build_app, so the route handlers' ``request: Request`` annotations must
+# evaluate EAGERLY at def-time (where Request is in local scope) to a real class.
+# Stringized (PEP 563) annotations would be resolved by FastAPI via module globals,
+# where Request does not exist -> PydanticUndefinedAnnotation. (W5.10)
 
 import importlib.util
 
@@ -65,7 +69,7 @@ def build_app(mv):
     def _job(job_id: str):
         return _respond(routes.route_job_status(mv, job_id))
 
-    async def _json_body(request: "Request") -> dict:
+    async def _json_body(request: Request) -> dict:
         # Malformed / empty / non-object body -> {} (the route then answers a clean
         # 400), matching the stdlib server's _body() — keeps JSON parity, never 500s.
         try:
