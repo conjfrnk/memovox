@@ -1,74 +1,77 @@
 export const meta = {
-  name: 'memovox-stress-panel',
-  description: 'Adversarial multi-agent review of the 41-video stress run + the iter11 fixes',
+  name: 'memovox-stress-panel-r2',
+  description: 'Adversarial round-2 review: verify the 6 panel fixes + hunt for regressions (41-video corpus)',
   phases: [
     { title: 'Review', detail: '3 skeptics: data-quality, retrieval/relevance, consolidation/synthesis' },
     { title: 'Adjudicate', detail: 'chair decides team_satisfied + blocking_fixable' },
   ],
 }
 
-const STORE = '/tmp/mv_stress_iter12'
-const REPORT = 'stress/reports/iter12.json'
-const PRIOR = 'stress/reports/iter10.json'
+const STORE = '/tmp/mv_stress_iter13'
+const REPORT = 'stress/reports/iter13.json'
+const PRIOR = 'stress/reports/iter12.json'
 
 const COMMON = `
 You are an ADVERSARIAL reviewer of the memovox pipeline (a free/lexical video-knowledge engine).
-The goal is to find REAL defects, confirm or REFUTE claimed fixes, and honestly classify each
-finding. Be skeptical and concrete — verify with evidence, do not take prior claims on faith.
+This is ROUND 2. A prior panel found 6 FIXABLE defects; they have now been fixed (commit 078d56a).
+Your job: CONFIRM or REFUTE each fix on the fresh 41-video run, AND — critically — hunt for any
+REGRESSION the fixes introduced, plus any remaining/new defect. Be skeptical; verify with evidence.
 
-Context you must read first:
-- The post-fix stress report: ${REPORT} (41 videos, free/captions path, nli=lexical, embed=hashing).
-- The pre-fix report for comparison: ${PRIOR}.
-- The uncommitted/recent fixes under review: run \`git -C /Users/connor/projects/memovox diff HEAD~0 --stat\`
-  and \`git -C /Users/connor/projects/memovox diff\` plus inspect:
-    src/memovox/stentor/transcript.py  (speaker-label heuristic + HTML-entity decode)
-    src/memovox/loom/consolidate.py    (topic filter BEFORE the max_claims cap)
-    tests/test_caption_cleaning_and_consolidate.py (the new regression tests)
+Context to read first:
+- The post-fix report: ${REPORT} (41 videos, free/captions, nli=lexical, embed=hashing).
+- The previous round's report: ${PRIOR}.
+- The fixes under review: \`git -C /Users/connor/projects/memovox show 078d56a --stat\` and
+  \`git -C /Users/connor/projects/memovox diff 3c6fbc3 078d56a\`. Key files:
+    src/memovox/loom/consolidate.py   (_candidate_pairs bucket-blocking; raised max_claims=50000;
+                                        scope always in universe; topic filter before cap)
+    src/memovox/loom/consensus.py     (partition_claims uses the same bucket-blocking)
+    src/memovox/augur/answer.py       (advice/transaction verbs added to _COMMON_WORDS/_COVERAGE_FILLER)
+    src/memovox/augur/synthesize.py   (salient extractive fallback when no structure)
+    src/memovox/stentor/transcript.py (residual-bracket strip; speaker casefold; discourse openers)
 
-The three iter11 fixes claimed:
-  (1) Speaker-label false positives: sentence fragments ("But caveat", "For example",
-      "And that worked great", "I have three world records") were being parsed as speaker IDs;
-      now gated by _looks_like_speaker (ALLCAPS or Title-case proper names, <=3 words).
-  (2) HTML entities (&nbsp;, &amp;, &#39;) survived into committed claim text; now html.unescape'd.
-  (3) find_contradictions(topic=...) truncated to the first 600 committed claims BEFORE applying
-      the topic filter, so topics whose claims arrive late in ingest order (e.g. saturated fat,
-      ~#14-15 of 41) returned ZERO candidates — misattributed to the "lexical-NLI limit". Now the
-      topic filter runs before the cap.
+The 6 fixes claimed (all must be CONFIRMED, and none may have caused a regression):
+  H1 consolidation no longer 94% blind: the offline pass + consensus now scan the WHOLE corpus via
+     inverted-index blocking with a per-bucket cap; persistent CONTRADICTS/SUPPORTS edges should now
+     span many videos (was 0/2). VERIFY the edge graph; CHECK the new edges are not garbage (lexical-NLI
+     false positives) — sample some CONTRADICTS pairs and judge plausibility.
+  H2 incremental new-vs-ALL holds past the cap (scope always in the universe).
+  H3 relevance gate: generic advice verbs no longer leak OOC queries. VERIFY the home-purchase leak now
+     refuses, AND that no LEGITIMATE in-corpus query is now over-refused by the added verbs (e.g. a watch
+     or car review query that legitimately uses "recommend"/"buy").
+  M1 synthesize emits a salient summary (low_evidence=False) when citations exist but no structure;
+     VERIFY the summary sentences are all [n]-cited and grounded (not confabulated), and the genuine
+     zero-citation case still reports low-evidence.
+  M2 bracket annotations stripped from claims; VERIFY none remain AND that code/math ([i],[b,t]) and
+     legitimate content were NOT over-stripped (sample claims from CS/math videos: Karpathy, Strang, 3b1b).
+  M3 case-duplicate speaker collapsed (YANJAA/Yanjaa -> one); VERIFY no remaining case-dup speakers.
 
-A consolidated store exists at ${STORE}. To run live queries WITHOUT lock contention, COPY it first:
-  cp -r ${STORE} /tmp/panel_<yourlabel> && then in python:
-    import sys; sys.path.insert(0, 'src')
-    from memovox import Memovox
-    mv = Memovox(store='/tmp/panel_<yourlabel>', embed_backend='hashing', nli_backend='lexical',
+Consolidated store at ${STORE}. To run live queries WITHOUT lock contention, COPY first:
+  cp -r ${STORE} /tmp/panelr2_<label> && in python (cd /Users/connor/projects/memovox; source .venv/bin/activate):
+    import sys; sys.path.insert(0,'src'); from memovox import Memovox
+    mv = Memovox(store='/tmp/panelr2_<label>', embed_backend='hashing', nli_backend='lexical',
                  llm_backend='none', rerank_backend='identity', entity_backend='none')
-    print(mv.ask('...'))            # read-only; cited Answer
-    print([p.to_dict() for p in mv.contradictions(topic='saturated fat')])
-    print(mv.synthesize('saturated fat').to_dict())
-Work from /Users/connor/projects/memovox. Run the venv python: \`source .venv/bin/activate\`.
+    print(mv.ask('...')); print(mv.synthesize('saturated fat').to_dict())
+  For the persistent edge graph, open the sqlite db directly (read-only): /tmp/panelr2_<label>/memovox.db,
+  table 'edges' (columns src,rel,dst,video_id,confidence). Resolve claim text via the 'claims' table.
 
-Classify EVERY finding as exactly one of:
-  FIXABLE   — a real defect in memovox code that can be fixed on the free/lexical path now.
-  FUNDAMENTAL — a genuine limit of the free path (hashing embedder / lexical NLI / no diarization),
-              only resolvable by an optional backend ([embed]/[nli]/[pyannote]/LLM). Justify WHY.
-  ENV       — a local-environment artifact (e.g. the broken-pyarrow dlopen), not a memovox bug.
-For a claimed fix, also state verdict: CONFIRMED (works + correct) or REFUTED (with the counterexample).
+Classify EVERY finding as FIXABLE / FUNDAMENTAL (free-path limit; justify) / ENV. For a claimed fix give
+verdict CONFIRMED or REFUTED (with the counterexample). Flag any REGRESSION explicitly (severity >= MED).
+Work from /Users/connor/projects/memovox.
 `
 
 const FINDINGS_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
+  type: 'object', additionalProperties: false,
   required: ['fix_verdicts', 'findings', 'summary'],
   properties: {
     fix_verdicts: {
       type: 'array',
-      description: 'Verdict on each claimed fix you were asked to verify.',
       items: {
         type: 'object', additionalProperties: false,
         required: ['fix', 'verdict', 'evidence'],
         properties: {
           fix: { type: 'string' },
           verdict: { type: 'string', enum: ['CONFIRMED', 'REFUTED', 'PARTIAL', 'NOT_APPLICABLE'] },
-          evidence: { type: 'string', description: 'Concrete evidence: command output, report values, counterexample.' },
+          evidence: { type: 'string' },
         },
       },
     },
@@ -76,14 +79,15 @@ const FINDINGS_SCHEMA = {
       type: 'array',
       items: {
         type: 'object', additionalProperties: false,
-        required: ['code', 'severity', 'classification', 'title', 'evidence', 'fix_suggestion'],
+        required: ['code', 'severity', 'classification', 'is_regression', 'title', 'evidence', 'fix_suggestion'],
         properties: {
-          code: { type: 'string', description: 'short_snake_case id' },
+          code: { type: 'string' },
           severity: { type: 'string', enum: ['CRIT', 'HIGH', 'MED', 'LOW'] },
           classification: { type: 'string', enum: ['FIXABLE', 'FUNDAMENTAL', 'ENV'] },
+          is_regression: { type: 'boolean', description: 'true if introduced by the 078d56a fixes' },
           title: { type: 'string' },
-          evidence: { type: 'string', description: 'How you verified it; concrete data.' },
-          fix_suggestion: { type: 'string', description: 'If FIXABLE, the concrete change. Else "n/a".' },
+          evidence: { type: 'string' },
+          fix_suggestion: { type: 'string' },
         },
       },
     },
@@ -97,51 +101,47 @@ const lenses = [
     key: 'data-quality',
     prompt: `${COMMON}
 
-YOUR LENS: caption cleaning & claim data-quality. Adversarially verify fixes (1) and (2), and hunt
-for OTHER residual data-quality defects across all 41 videos. Specifically:
-  - Re-inspect every video's distinct_speakers in ${REPORT}: are there STILL sentence-fragment or
-    duplicate-cased speaker IDs? (pre-fix examples: "But caveat", "For example",
-    "And that worked great", "I have three world records", "Yanjaa"/"YANJAA".)
-  - Sample real committed claim text from the store for leftover artifacts: &nbsp;, &amp;, &#39;,
-    stray <tags>, '>>' turn markers, musical-note lyrics committed as claims, ultra-short fragments.
-  - Try to BREAK _looks_like_speaker with plausible real caption patterns (false pos AND false neg):
-    e.g. "Dr. Smith:", "MR. T:", "Anderson Cooper:", "well, here's the thing:", "JAY-Z:".
-  - Note the Yanjaa/YANJAA case-duplicate speaker: is it still split? is that FIXABLE (case-fold) and worth it?
+YOUR LENS: caption cleaning & claim data-quality. Verify M2 (bracket strip) and M3 (speaker casefold).
+  - Scan ALL committed claim text in the store db for leftover [bracket] spans, &-entities, raw U+00A0,
+    stray tags, '>>' markers. Report any survivors.
+  - REGRESSION CHECK for M2: sample claims from code/math videos (Karpathy kCc8FmEb1nY/zjkBMFhNj_g,
+    Strang J7DzL2_Na80, 3Blue1Brown WUvTyaaNkzM) — was any legitimate bracketed token ([i], [b,t], [0])
+    or real content wrongly stripped? Count claims that lost content.
+  - Re-scan distinct_speakers in ${REPORT}: any remaining sentence-fragment OR case-duplicate speaker?
+  - Try to break the new _strip_bracket / speaker casefold with plausible caption patterns.
 Return findings with concrete evidence.`,
   },
   {
     key: 'retrieval-relevance',
     prompt: `${COMMON}
 
-YOUR LENS: retrieval, the out-of-corpus relevance gate, and CITATION PRECISION. Specifically:
-  - From ${REPORT} asks/refusals: any fabrication (out-of-corpus answered without low_evidence) or
-    over-refusal (an in-corpus probe wrongly refused)? Verify against the actual store.
-  - Citation precision: for short queries the dense (hashing-embed) RRF leg injects zero-lexical-overlap
-    moments into top-k (e.g. iter10 cited the Lunchables/Attenborough/Trevor-Noah videos for
-    "what is AGI?", "Graham's number", "Steve Jobs"). Quantify on iter12: for each ask, how many of the
-    8 citations share NO distinctive query token with the query? Is this a FIXABLE retrieval defect or a
-    FUNDAMENTAL hashing-embed limit? NOTE: a retrieval-ranking change would break the frozen
-    eval/golden/parity.json gate (see eval/harness.py ~line 776) — weigh that.
-  - Invent 6 NEW adversarial out-of-corpus questions whose generic tokens scatter across the now-richer
-    41-genre corpus (watches/cars/chess/law/food/travel) and check they are REFUSED. Report any leak.
+YOUR LENS: retrieval, relevance gate, synthesize. Verify H3 (advice-verb leak) and M1 (synthesize fallback).
+  - VERIFY H3: mv.ask('what is the best way to recommend a first home purchase?') now refuses
+    (low_evidence=True). Then REGRESSION-test the added verbs against legitimate in-corpus queries that
+    use them, e.g. 'what watch does Teddy recommend for a first luxury watch?',
+    'which airline does Jeb Brooks recommend?', 'should I buy the iPhone 17 Pro?' — these SHOULD still be
+    answered (the topic word — watch/airline/iphone — carries topicality). Report any new over-refusal.
+  - VERIFY M1: mv.synthesize('saturated fat') and ('diet') now return low_evidence=False with a non-empty
+    summary; CHECK every summary sentence carries an [n] marker and the cited claim actually contains that
+    text (grounded, not confabulated). Confirm a junk topic ('quantum chromodynamics') still low-evidence.
+  - Re-run 5 fresh out-of-corpus probes to confirm no new fabrication leak.
 Return findings with concrete evidence (run the queries).`,
   },
   {
     key: 'consolidation-synthesis',
     prompt: `${COMMON}
 
-YOUR LENS: consolidation, contradictions, synthesis, scaling. Specifically:
-  - Verify fix (3): run mv.contradictions(topic='saturated fat') and (topic='breakfast') on the store.
-    Do the planted cross-video pairs [aqBHXNGKvKU vs dzOTaNwiFmA] / [AxIOGqHQqZM vs 2su8e-nhMGw] now
-    surface? If NOT, prove WHY by printing the candidate claim texts and the LexicalNLI verdict on the
-    actual mirror sentences — distinguish "cap artifact" (now fixed) from "genuine lexical-NLI semantic
-    limit" (FUNDAMENTAL). Do not just trust the count.
-  - synthesize('saturated fat') / ('diet') return low_evidence=true WITH 29-31 citations. Is reporting
-    low_evidence while emitting 30 citations misleading to a user? FIXABLE or FUNDAMENTAL?
-  - The GLOBAL consolidate pass still caps at max_claims=600 of ~10,182 claims (consolidate.py line ~71,
-    no-topic path) — 94% of claims never scanned for cross-video contradictions/consensus at this scale.
-    Is that a real correctness-at-scale defect or acceptable cost control? Propose the concrete fix if FIXABLE.
-Return findings with concrete evidence (run the queries; print intermediate claim texts).`,
+YOUR LENS: consolidation correctness + the new cross-video edges. Verify H1 and H2.
+  - VERIFY H1: open the store db; count CONTRADICTS and SUPPORTS edges and the number of DISTINCT video
+    pairs they span. Confirm it is no longer 0/2 over 5 videos. Then ADVERSARIALLY judge QUALITY: sample
+    15-20 CONTRADICTS edges, print both claim texts, and classify each as a real contradiction vs a
+    lexical-NLI false positive. If the new edges are mostly garbage, that is a NEW finding (precision of
+    the now-complete scan) — classify FIXABLE (e.g. raise threshold / require min overlap) or FUNDAMENTAL.
+  - Confirm the planted diet pairs' status is honestly the lexical-NLI limit (FUNDAMENTAL), not a cap bug.
+  - VERIFY H2 conceptually from the diff + the new regression tests.
+  - Check consolidate wall-time in ${REPORT} (aggregate.consolidate.metrics) — is the full-corpus pass
+    affordable, or did the rewrite blow up runtime? Report the contradictions/consensus stage timings.
+Return findings with concrete evidence (open the db; print pair texts).`,
   },
 ]
 
@@ -157,7 +157,6 @@ const CHAIR_SCHEMA = {
     team_satisfied: { type: 'boolean' },
     blocking_fixable: {
       type: 'array',
-      description: 'Finding codes that MUST be fixed before the team is satisfied. A finding blocks only if classification=FIXABLE, severity>=MED, and it is a genuine correctness/UX defect (NOT a known free-path limit, NOT ENV).',
       items: {
         type: 'object', additionalProperties: false,
         required: ['code', 'severity', 'why_blocking', 'fix'],
@@ -167,25 +166,25 @@ const CHAIR_SCHEMA = {
         },
       },
     },
-    accepted_limits: { type: 'array', items: { type: 'string' }, description: 'Findings accepted as FUNDAMENTAL/ENV with one-line justification.' },
+    accepted_limits: { type: 'array', items: { type: 'string' } },
     rationale: { type: 'string' },
   },
 }
 
 const chair = await agent(`${COMMON}
 
-YOU ARE THE CHAIR. Three adversarial reviewers (data-quality, retrieval-relevance,
-consolidation-synthesis) returned the JSON findings below. Adjudicate.
+YOU ARE THE CHAIR. Three adversarial reviewers returned the JSON findings below. Adjudicate.
 
 REVIEWS:
 ${JSON.stringify(reviews.map((r, i) => ({ lens: lenses[i].key, ...r })), null, 2)}
 
 Decide team_satisfied. Rules:
- - The team is SATISFIED only when there is no FIXABLE finding of severity >= MED that is a genuine
-   correctness or user-facing-quality defect. FUNDAMENTAL (free-path) and ENV findings never block.
- - Be adversarial about the reviewers too: if a reviewer mislabeled a FUNDAMENTAL limit as FIXABLE
-   (or vice-versa), correct it in your rationale. If a claimed fix was REFUTED, that blocks.
- - blocking_fixable must be ACTIONABLE: each needs a concrete fix. Keep it minimal and real.
+ - SATISFIED only when (a) all 6 fixes are CONFIRMED (no REFUTED), AND (b) no FIXABLE finding of
+   severity >= MED is a genuine correctness/UX defect or a REGRESSION introduced by the fixes.
+ - A REGRESSION (e.g. over-stripped content, new over-refusal, garbage contradiction edges that mislead
+   users) of severity >= MED blocks even if technically "fixable later".
+ - FUNDAMENTAL (free-path) and ENV findings never block. Correct any reviewer misclassification.
+ - blocking_fixable must be concrete + actionable. Keep it minimal and real.
 Return the verdict.`, { label: 'chair', phase: 'Adjudicate', schema: CHAIR_SCHEMA })
 
 return { reviews: reviews.map((r, i) => ({ lens: lenses[i].key, ...r })), chair }

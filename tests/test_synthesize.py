@@ -90,23 +90,24 @@ class TestSynthesize(SynthesizeTestBase):
             self.assertTrue(re.search(r"\[\d+\]", sentence),
                             f"uncited synthesis sentence: {sentence!r}")
 
-    def test_no_duplicate_sentence_when_claim_is_consensus_and_contradiction(self):
-        # X (vid:a) and Y (vid:b) are identical -> a non-contradicting consensus
-        # cluster whose representative is X. Z (vid:b) is a SHORT negation that the
-        # NLI flags as contradicting X (directional overlap is high), but whose
-        # symmetric Jaccard with X is below the clustering floor, so Z does NOT
-        # join X's cluster. X is therefore BOTH a consensus rep AND a contradiction
-        # member — its text must appear only ONCE in the synthesis.
-        self._add("va.0", "vid:a", "Alpha beta gamma delta epsilon zeta will hold.",
-                  salience=0.9, idx=0)
-        self._add("vb.0", "vid:b", "Alpha beta gamma delta epsilon zeta will hold.",
-                  salience=0.2, idx=0)
-        self._add("vb.1", "vid:b", "Alpha will not hold.", salience=0.1, idx=1)
-        syn = synthesize(self.store, "alpha", nli=self.nli)
-        self.assertTrue(syn.contradictions)   # X vs Z surfaced
-        self.assertTrue(syn.consensus_points)  # {X, Y} surfaced
-        occurrences = syn.text.lower().count("alpha beta gamma delta epsilon zeta will hold")
-        self.assertEqual(occurrences, 1)
+    def test_no_duplicate_sentence_across_consensus_and_contradictions(self):
+        # A genuine cross-video consensus cluster {A, B} (identical claims), plus a
+        # claim X that contradicts TWO near-mirror negations Z1, Z2 (so X appears in
+        # two contradiction pairs). Every surfaced claim — especially X — must appear
+        # ONCE in the synthesis (the `emitted` dedup). NB: under the precision gate a
+        # contradiction partner is always a near-mirror that clusters with X, so a
+        # claim can no longer be BOTH a surviving consensus rep and a contradiction
+        # member; the reachable dedup is a claim spanning multiple contradiction pairs.
+        self._add("a.con", "vid:a", "Productivity gains require deliberate focus.", salience=0.9, idx=0)
+        self._add("b.con", "vid:b", "Productivity gains require deliberate focus.", salience=0.2, idx=0)
+        self._add("a.x", "vid:a", "Remote productivity clearly boosts measured output here.", salience=0.8, idx=1)
+        self._add("b.z1", "vid:b", "Remote productivity does not boost measured output here.", salience=0.3, idx=1)
+        self._add("b.z2", "vid:b", "Remote productivity will never boost measured output here.", salience=0.3, idx=2)
+        syn = synthesize(self.store, "productivity", nli=self.nli)
+        self.assertTrue(syn.consensus_points)  # {A, B} surfaced
+        self.assertTrue(syn.contradictions)    # X vs Z1 / X vs Z2 surfaced
+        self.assertEqual(syn.text.lower().count("remote productivity clearly boosts measured output here"), 1)
+        self.assertEqual(syn.text.lower().count("productivity gains require deliberate focus"), 1)
 
     def test_low_evidence_when_topic_absent(self):
         self._corpus()

@@ -144,7 +144,7 @@ def _cosine(a, b) -> float:
 
 
 def partition_claims(
-    claims: List[Claim], *, min_shared: int = 2, jaccard: float = 0.5,
+    claims: List[Claim], *, min_shared: int = 3, jaccard: float = 0.5,
     cosine: float = 0.0, vectors: Optional[Dict[str, list]] = None,
     bucket_cap: int = _BUCKET_CAP,
 ):
@@ -217,7 +217,7 @@ def clusters_from_groups(store, groups: List[List[Claim]]) -> List[ClaimCluster]
 def cluster_claims(
     store,
     *,
-    min_shared: int = 2,
+    min_shared: int = 3,
     jaccard: Optional[float] = None,
     max_claims: int = DEFAULT_MAX_CLAIMS,
     write_edges: bool = True,

@@ -102,7 +102,8 @@ def find_contradictions(
     nli: NLIBackend,
     topic: Optional[str] = None,
     threshold: float = 0.55,
-    min_shared: int = 2,
+    min_shared: int = 3,
+    min_jaccard: float = 0.5,
     max_claims: int = DEFAULT_MAX_CLAIMS,
     write_edges: bool = True,
     include_supports: bool = False,
@@ -163,7 +164,20 @@ def find_contradictions(
         a, b = by_id[cid_a], by_id[cid_b]
         if a.video_id == b.video_id:
             continue  # cross-corpus only
-        if len(token_set[cid_a] & token_set[cid_b]) < min_shared:
+        # PRECISION GATE (free/lexical path): only NLI-compare claims that are
+        # substantive NEAR-MIRRORS — they must share >= min_shared content tokens AND
+        # overlap by >= min_jaccard. Lexical NLI reliably scores opposing-polarity
+        # near-duplicates ("X is harmful" / "X is not harmful") but FALSELY flags
+        # unrelated short fragments that share a couple of generic tokens plus a
+        # negation cue. Without this gate a full-corpus scan emits hundreds of garbage
+        # cross-video edges (the 600-claim cap used to hide them by barely scanning
+        # cross-video pairs). Genuine differently-phrased contradictions need a real
+        # [nli] backend; the free path cannot tell them from coincidence.
+        shared = token_set[cid_a] & token_set[cid_b]
+        if len(shared) < min_shared:
+            continue
+        union = token_set[cid_a] | token_set[cid_b]
+        if union and len(shared) / len(union) < min_jaccard:
             continue
 
         nli_calls += 1

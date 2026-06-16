@@ -177,6 +177,45 @@ class TestTopicContradictionCapOrdering(unittest.TestCase):
         self.assertIsInstance(pairs, list)
 
 
+class TestContradictionPrecisionGate(unittest.TestCase):
+    """A full-corpus scan must not emit garbage cross-video edges: lexical NLI falsely
+    flags unrelated SHORT claims that share a couple of generic tokens plus a negation.
+    Only substantive NEAR-MIRRORS (>= min_shared shared tokens AND jaccard >= floor)
+    may be NLI-compared, so real opposing-polarity duplicates survive and coincidences
+    do not."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.config = Config(store=pathlib.Path(self._tmp.name) / "s").ensure()
+        self.store = LoomStore(self.config)
+        self.nli = LexicalNLI()
+        for v in ("yt:a", "yt:b"):
+            self.store.upsert_video(Video(v, f"https://youtu.be/{v[3:]}", "talk"))
+
+        def add(cid, mid, vid, text, t):
+            self.store.add_moment(Moment(mid, vid, float(t), float(t) + 1.0, text, index=0))
+            self.store.add_claim(Claim(cid, mid, vid, text, t_start_s=float(t), t_end_s=float(t) + 1.0))
+
+        # near-mirror genuine contradiction (high overlap + opposing polarity)
+        add("yt:a#m0.c0", "yt:a#m0", "yt:a", "remote work improves team productivity significantly", 0)
+        add("yt:b#m0.c0", "yt:b#m0", "yt:b", "remote work does not improve team productivity significantly", 0)
+        # unrelated short fragments that share 2 generic tokens + a negation cue
+        add("yt:a#m1.c0", "yt:a#m1", "yt:a", "this work here is not done", 10)
+        add("yt:b#m1.c0", "yt:b#m1", "yt:b", "the work here is good", 10)
+
+    def tearDown(self):
+        self.store.close()
+        self._tmp.cleanup()
+
+    def test_near_mirror_found_garbage_rejected(self):
+        pairs = find_contradictions(self.store, nli=self.nli, write_edges=False)
+        flagged = {frozenset((p.claim_a.claim_id, p.claim_b.claim_id)) for p in pairs}
+        self.assertIn(frozenset(("yt:a#m0.c0", "yt:b#m0.c0")), flagged,
+                      "genuine near-mirror contradiction was missed")
+        self.assertNotIn(frozenset(("yt:a#m1.c0", "yt:b#m1.c0")), flagged,
+                         "unrelated short fragments were flagged as a contradiction")
+
+
 class TestRelevanceGenericVerbFilter(unittest.TestCase):
     """Generic advice/transaction verbs (recommend/suggest/purchase/buy) must not act as
     distinctive topicality tokens — the leak that let 'what is the best way to recommend a
