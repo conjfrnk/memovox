@@ -28,8 +28,12 @@ _LOW_EVIDENCE_MSG = (
 )
 
 
-# W5.1 relevance gate — stopwords mirror loom._content_tokens so "distinctive"
-# query terms are judged the same way across retrieval and consolidation.
+# W5.1/W5.4 relevance gate. The signal asks: do the query's DISTINCTIVE terms appear,
+# jointly, in a single cited moment? "Distinctive" = not a function word and not a
+# common English word — so a generic word that is merely absent from a niche corpus
+# ("arrive", "capital") neither vetoes a real question nor fakes relevance for an
+# out-of-corpus one. The COMMON_WORDS list is deliberately generic (no corpus topic
+# terms). NOTE: English-only; a non-English corpus falls back to df-based weighting.
 _REL_STOP = {
     "the", "a", "an", "of", "to", "in", "on", "at", "for", "and", "or", "is",
     "are", "was", "were", "be", "been", "it", "this", "that", "these", "those",
@@ -38,9 +42,55 @@ _REL_STOP = {
     "do", "does", "did", "say", "said", "tell", "about", "their", "his", "her",
 }
 
+# Common English content words (verbs/nouns/adjectives) that are NOT topic-distinctive.
+# Dropped from the relevance signal so they cannot veto a real question (a df=0 generic
+# verb like "arrive") or fake relevance for an absent topic (an incidentally-rare word
+# like "capital"/"boiling"). Curated to contain zero domain/topic terms.
+_COMMON_WORDS = frozenset("""
+able about above across act actual add after again against age ago agree air all
+allow almost alone along already also although always among amount another answer any
+anyone anything appear area around arrive ask available away back bad base because
+become been before begin behind believe below best better between big bit body both
+break bring build business call came can cannot car care carry case catch cause center
+certain chance change check child choose city claim class clear close come common
+community company complete consider continue control cost could country couple course
+cover create current cut data day deal decide deep develop die difference different
+discuss done door down draw drive drop during each early easy eat effect either else
+end enough enter even ever every example expect experience explain face fact fall family
+far feel few field figure fill final find fine first follow food foot force form found
+free friend full game general get give glad goes going gone good got great group grow
+guess guy had half hand happen happy hard has have head hear heart held help here high
+hold home hope hour house however huge idea important include increase inside instead
+interest into issue item job join just keep kind knew know land large last late later
+lead learn least leave left less let level life light like line list little live local
+long look lose lot love low made main make man many matter may mean meet member might
+mind minute miss moment money month more most move much must name near need never new
+next nice night nor note nothing now number off offer office often okay old once only
+open order other our out over own page part pass past pay people perhaps person pick
+piece place plan play point possible power present press pretty probably problem process
+provide pull purpose push put question quick quite rather reach read ready real reason
+receive recent record remember report rest result return right rise room round run safe
+said same save saw school season second see seem seen sell send sense set several shall
+share short should show side simple since single small social some something sometimes
+soon sort sound space speak special spend stand start state stay step still stop story
+street strong study stuff such sure system take talk teach team tell thank their them
+then there thing think this those though thought three through time today together told
+too took top total touch toward tried true try turn type under understand until upon
+use used usual very view visit wait walk want watch water way week well went were what
+when where whether while white whole why will win window wish within without word work
+world would write wrong year yes yet young
+""".split())
+
 
 def _rel_tokens(text: str) -> set:
-    return {t for t in tokenize(text) if t not in _REL_STOP and len(t) > 2}
+    return {t for t in tokenize(text)
+            if t not in _REL_STOP and t not in _COMMON_WORDS and len(t) > 2}
+
+
+# Minimum distinctive query mass (as a fraction of the max possible IDF, log(n+1))
+# required for an answer to clear the relevance gate. Calibrated on the stress corpus
+# so a query whose only in-corpus term is generic is refused. See _relevance_coverage.
+_RELEVANCE_MIN_MASS_FRAC = 0.35
 
 
 def _relevance_coverage(store, query: str, citations: List["Citation"],
@@ -60,22 +110,33 @@ def _relevance_coverage(store, query: str, citations: List["Citation"],
         n = 1
     if n < min_moments:
         return 1.0  # corpus too small for IDF to be a reliable relevance signal
-    cited: set = set()
-    for c in citations:
-        cited |= _rel_tokens(c.source_text or c.snippet or "")
 
-    def idf(tok: str) -> float:
-        return math.log((n + 1) / (store.doc_freq(tok) + 1))
-
-    weights = {t: idf(t) for t in q}
+    # IDF over the query's DISTINCTIVE tokens (function + common words already removed
+    # by _rel_tokens). KEEP tokens absent from the corpus (df==0) at max IDF: an absent
+    # distinctive term ("mercury", "mongolia") is exactly what should sink coverage for
+    # an out-of-corpus question. (Generic absent words like "arrive" were already
+    # dropped as common, so they can't wrongly veto a real question.)
+    weights = {t: math.log((n + 1) / (store.doc_freq(t) + 1)) for t in q}
     total = sum(weights.values())
-    # Degenerate case: every query content token appears in (almost) every moment
-    # (idf -> 0), so there is no distinctive term to assess — the query is maximally
-    # on-topic. Never gate here (this is also the small-corpus / unit-test regime).
     if total < 1e-6:
-        return 1.0
-    covered = sum(w for t, w in weights.items() if t in cited)
-    return covered / total
+        return 1.0  # only ubiquitous (idf~0) terms -> maximally on-topic, never gate
+
+    # Backstop: a real query carries a MINIMUM distinctive mass; floor the denominator
+    # as a fraction of the maximum possible IDF (log(n+1)) so it is corpus-size-robust.
+    denom = max(total, _RELEVANCE_MIN_MASS_FRAC * math.log(n + 1))
+
+    # JOINT single-moment coverage (max over citations), NOT a union across all results.
+    # Scattered generic tokens each in a different moment must not add up to fake
+    # relevance; a genuinely answerable query has ONE moment that covers its distinctive
+    # terms together. The cited moment's video TITLE is included so questions naming the
+    # speaker/event ("Peter Attia ... saturated fat") match metadata too.
+    best = 0.0
+    for c in citations:
+        ctoks = _rel_tokens(" ".join(filter(None, (c.source_text or c.snippet or "", c.title or ""))))
+        covered = sum(w for t, w in weights.items() if t in ctoks)
+        if covered > best:
+            best = covered
+    return best / denom
 
 
 def _best_sentence(text: str, query: str) -> str:

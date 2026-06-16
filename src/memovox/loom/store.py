@@ -755,9 +755,12 @@ class LoomStore:
                 return int(row[0]) if row else 0
             except sqlite3.OperationalError:
                 pass  # fall through to the LIKE scan
+        # Escape LIKE wildcards so a term containing % or _ is matched literally
+        # (else doc_freq('%') would match every row).
+        safe = term.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         row = self.conn.execute(
-            "SELECT COUNT(*) FROM moments WHERE LOWER(transcript) LIKE ?",
-            (f"%{term.lower()}%",),
+            "SELECT COUNT(*) FROM moments WHERE LOWER(transcript) LIKE ? ESCAPE '\\'",
+            (f"%{safe}%",),
         ).fetchone()
         return int(row[0]) if row else 0
 

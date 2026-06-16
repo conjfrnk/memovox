@@ -198,7 +198,11 @@ _GREETING_STARTS = (
     "good morning", "good afternoon", "good evening",
     "thanks for", "thank you for", "thanks everyone", "thank you everyone",
 )
-_AD_RE = re.compile(r"\b(support|sponsored|brought to you|this episode) .*?(by|from|comes from)\b")
+# Anchored at the start so a content claim that merely MENTIONS sponsorship
+# ("studies are sponsored by food companies") is not mistaken for an ad read.
+_AD_RE = re.compile(
+    r"^(support for |sponsored by |brought to you by "
+    r"|this (episode|video|podcast|segment) is (sponsored|brought))")
 _URL_RE = re.compile(r"(https?://|www\.|\.com\b|\.org\b|\.net\b|\.io\b)")
 # Navigational/promotional imperatives only — NOT content verbs (look/see/watch),
 # which routinely lead real assertions ("Look at the data showing…").
@@ -212,13 +216,16 @@ def is_non_claim(text: str) -> bool:
     if len(t) < 2:
         return True
     low = t.lower()
-    if any(low.startswith(g) for g in _GREETING_STARTS):
+    toks = tokenize(t)
+    # Greeting/self-intro: only when it is essentially the WHOLE short utterance, so a
+    # greeting PREFIX on a substantive sentence ("Hello everyone, today saturated fat
+    # ...") is kept.
+    if len(toks) <= 8 and any(low.startswith(g) for g in _GREETING_STARTS):
         return True
-    if _AD_RE.search(low):
+    if _AD_RE.match(low):
         return True
     if any(k in low for k in ("learn more", "check out", "go to ")) and _URL_RE.search(low):
         return True
-    toks = tokenize(t)
     if toks and toks[0].lower() in _IMPERATIVE_VERBS and len(toks) <= 6:
         return True
     return False

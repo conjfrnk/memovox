@@ -43,6 +43,19 @@ class TestRelevanceGate(unittest.TestCase):
                    "Photosynthesis converts sunlight into chemical energy inside chloroplasts.",
                    speaker_id="spk_0", index=900)
         self.store.add_moment(d, self.emb.embed_one(d.text_for_embedding()))
+        # An INCIDENTAL rare-but-generic token ("capital") present in an unrelated
+        # moment — must NOT let an out-of-corpus question about an absent topic pass.
+        e = Moment("yt:v#m9001", "yt:v", 931.0, 960.0,
+                   "The capital expenditure that quarter was unusually high.",
+                   speaker_id="spk_0", index=901)
+        self.store.add_moment(e, self.emb.embed_one(e.text_for_embedding()))
+        # A second video whose TITLE names a speaker not spoken in the transcript.
+        self.store.upsert_video(Video("yt:w", "https://youtu.be/w",
+                                      "Dr Jane Halvorsen explains glucose metabolism"))
+        g = Moment("yt:w#m0000", "yt:w", 0.0, 30.0,
+                   "Glucose metabolism produces ATP through cellular respiration.",
+                   speaker_id="spk_0", index=0)
+        self.store.add_moment(g, self.emb.embed_one(g.text_for_embedding()))
 
     def tearDown(self):
         self.store.close()
@@ -63,6 +76,22 @@ class TestRelevanceGate(unittest.TestCase):
     def test_floor_zero_disables_gate(self):
         ans = augur.ask(self.store, "what is the capital of Mongolia?",
                         embedder=self.emb, settings=Settings(answer_relevance_floor=0.0))
+        self.assertFalse(ans.low_evidence)
+        self.assertTrue(ans.citations)
+
+    def test_out_of_corpus_with_incidental_present_token_is_refused(self):
+        # "capital" is present (incidentally) but the distinctive topic ("mongolia")
+        # is absent -> keep-df=0 veto must sink coverage below the floor.
+        ans = augur.ask(self.store, "what is the capital of Mongolia?",
+                        embedder=self.emb, settings=Settings())
+        self.assertTrue(ans.low_evidence)
+        self.assertEqual(ans.citations, [])
+
+    def test_proper_name_in_title_is_answered(self):
+        # The speaker name is only in the video TITLE, not the transcript; the topic
+        # (glucose) is spoken. Must NOT be wrongly refused (W5.1 over-refusal fix).
+        ans = augur.ask(self.store, "what does Jane Halvorsen say about glucose metabolism?",
+                        embedder=self.emb, settings=Settings())
         self.assertFalse(ans.low_evidence)
         self.assertTrue(ans.citations)
 
@@ -93,6 +122,9 @@ class TestLowValueClaimFilter(unittest.TestCase):
             self.assertTrue(is_non_claim(t), t)
         for t in ("The Transformer is the foundation of modern language models.",
                   "The study was supported by a grant from the NSF.",
+                  "Studies are often sponsored by food companies with an agenda.",
+                  "Support groups help patients recover faster.",
+                  "Hello everyone, today saturated fat turns out to be more nuanced.",
                   "Look at the data showing that scaling laws hold."):
             self.assertFalse(is_non_claim(t), t)
 
@@ -132,6 +164,23 @@ class TestLowValueClaimFilter(unittest.TestCase):
                    speaker_id="spk_0")
         claims = assay_run(m, nli=nli, settings=Settings())
         self.assertTrue(any(c.status == STATUS_COMMITTED for c in claims))
+
+
+class TestDocFreq(unittest.TestCase):
+    """W5.5: doc_freq must escape LIKE wildcards (else doc_freq('%') matches all)."""
+
+    def test_doc_freq_escapes_wildcards(self):
+        with tempfile.TemporaryDirectory() as t:
+            store = LoomStore(Config(store=pathlib.Path(t) / "s").ensure())
+            store.upsert_video(Video("yt:z", "https://youtu.be/z", "t"))
+            store.add_moment(Moment("yt:z#m0", "yt:z", 0.0, 5.0,
+                                    "Chinchilla scaling laws govern compute budgets.",
+                                    speaker_id="spk_0", index=0))
+            self.assertEqual(store.doc_freq("chinchilla"), 1)
+            self.assertEqual(store.doc_freq("nonexistentword"), 0)
+            self.assertEqual(store.doc_freq("%"), 0)   # wildcard, not "match all"
+            self.assertEqual(store.doc_freq("_"), 0)
+            store.close()
 
 
 class TestLexicalNliNegation(unittest.TestCase):
