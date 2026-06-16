@@ -197,6 +197,7 @@ _INTENTIONALLY_UNPINNED = frozenset({
     "decay_halflife_days",  # M3.1: recency half-life tuning knob
     "answer_relevance_floor",       # W5.1: out-of-corpus refusal threshold (numeric knob)
     "answer_relevance_min_moments",  # W5.1: min corpus size before the gate activates
+    "consensus_cosine",             # W5.6: opt-in embedding-cosine consensus fallback (0=off)
 })
 
 # Frozen FULL Settings snapshot (M1.2 W8) — beyond _DEFAULT_OFF_FLAGS, this pins
@@ -208,7 +209,7 @@ EVAL_SETTINGS_SNAPSHOT = {
     "asr_allow_cpu": False, "asr_backend": "auto", "asr_compute_type": "default",
     "asr_device": "auto", "boundary_similarity": 0.45, "budget_mode": "soft",
     "captions_as_prior": True, "clip_merge_gap_s": 2.5,
-    "consensus_jaccard": 0.5, "contradiction_threshold": 0.55,
+    "consensus_cosine": 0.0, "consensus_jaccard": 0.5, "contradiction_threshold": 0.55,
     "decay_enabled": False, "decay_halflife_days": 365.0,
     "embed_backend": "auto", "embed_dim": 256, "entailment_threshold": 0.5,
     "entity_backend": "auto", "frame_max": 1200, "frame_sample_fps": 1.0, "frame_side": 16,

@@ -136,20 +136,31 @@ class _UnionFind:
             self.parent[hi] = lo
 
 
+def _cosine(a, b) -> float:
+    num = sum(x * y for x, y in zip(a, b))
+    na = sum(x * x for x in a) ** 0.5
+    nb = sum(y * y for y in b) ** 0.5
+    return num / (na * nb) if na and nb else 0.0
+
+
 def partition_claims(
-    claims: List[Claim], *, min_shared: int = 2, jaccard: float = 0.5
+    claims: List[Claim], *, min_shared: int = 2, jaccard: float = 0.5,
+    cosine: float = 0.0, vectors: Optional[Dict[str, list]] = None,
 ):
     """Union-find partition of claims into equivalence groups (pure, no store).
 
     Two claims are equivalent when they share at least ``min_shared`` content
-    tokens AND their content-token Jaccard is ``>= jaccard``. Returns
-    ``(groups, cross_video_pairs)`` where ``groups`` is a list of claim lists
-    (each sorted by claim_id, the whole list ordered by representative id) and
-    ``cross_video_pairs`` is the list of equivalent ``(a, b)`` pairs that span two
-    different videos — the agreement edges a caller may persist as ``SUPPORTS``.
+    tokens AND their content-token Jaccard is ``>= jaccard`` — OR (W5.6, opt-in)
+    when ``cosine > 0`` and their embedding cosine is ``>= cosine``. The cosine
+    fallback groups paraphrases/synonyms that token-Jaccard misses ("AGI is coming
+    soon" / "AGI will arrive imminently" share only the token 'agi'); it only fires
+    among the inverted-index candidate pairs (claims sharing >=1 token), and is a
+    no-op by default (``cosine=0``) and with the lexical hashing embedder (whose
+    geometry is not semantic). Returns ``(groups, cross_video_pairs)``.
     """
     by_id = {c.claim_id: c for c in claims}
     tokens = {c.claim_id: _content_tokens(c.text) for c in claims}
+    vectors = vectors or {}
 
     inverted = defaultdict(list)
     for cid, toks in tokens.items():
@@ -169,9 +180,11 @@ def partition_claims(
                 continue
             seen_pairs.add(key)
             toks_b = tokens[cid_b]
-            if len(toks_a & toks_b) < min_shared:
-                continue
-            if _jaccard(toks_a, toks_b) < jaccard:
+            token_equiv = (len(toks_a & toks_b) >= min_shared
+                           and _jaccard(toks_a, toks_b) >= jaccard)
+            cos_equiv = (cosine > 0.0 and cid_a in vectors and cid_b in vectors
+                         and _cosine(vectors[cid_a], vectors[cid_b]) >= cosine)
+            if not (token_equiv or cos_equiv):
                 continue
             uf.union(cid_a, cid_b)
             a, b = by_id[cid_a], by_id[cid_b]

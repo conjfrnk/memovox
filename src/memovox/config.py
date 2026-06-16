@@ -93,6 +93,10 @@ class Settings:
     topic_similarity: float = 0.5   # cosine floor to merge moments into one topic
     topic_min_size: int = 1         # drop induced topics with fewer members
     consensus_jaccard: float = 0.5  # content-token Jaccard floor to cluster equivalent claims
+    # W5.6: opt-in embedding-cosine fallback for consensus clustering — groups
+    # paraphrases/synonyms that token-Jaccard misses. 0.0 = off (free path default);
+    # a no-op with the lexical hashing embedder, meaningful with sentence-transformers.
+    consensus_cosine: float = 0.0
 
     # Observability (M0.1, spec §7/§9) — all default to the free, no-output-change path
     budget_mode: str = "soft"       # "soft" records overage; "hard" raises BudgetExceeded

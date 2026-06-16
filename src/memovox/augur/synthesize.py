@@ -132,6 +132,7 @@ def synthesize(
     *,
     nli: NLIBackend,
     llm: Optional[LLMBackend] = None,
+    embedder: Optional[object] = None,
     settings: Optional[Settings] = None,
 ) -> Synthesis:
     """Synthesize what the corpus says about ``topic`` (spec §5)."""
@@ -156,7 +157,15 @@ def synthesize(
     index_of: Dict[str, int] = {c.moment_id: c.index for c in citations}
 
     # Consensus: token-equivalence clusters, NLI-verified to exclude disagreements.
-    groups, _ = partition_claims(claims, jaccard=settings.consensus_jaccard)
+    # W5.6: when consensus_cosine is enabled AND an embedder is available, also group
+    # paraphrases/synonyms by embedding cosine (embedded lazily so the default free
+    # path pays nothing and stays byte-identical).
+    vectors = None
+    cosine = settings.consensus_cosine
+    if cosine > 0.0 and embedder is not None:
+        vectors = {c.claim_id: embedder.embed_one(c.text) for c in claims}
+    groups, _ = partition_claims(claims, jaccard=settings.consensus_jaccard,
+                                 cosine=cosine, vectors=vectors)
     clusters = clusters_from_groups(store, groups)
     consensus_points: List[dict] = []
     for cl in sorted(clusters, key=lambda c: (-c.support_count, -c.consensus)):

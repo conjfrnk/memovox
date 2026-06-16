@@ -276,7 +276,9 @@ class Memovox:
         with LoomStore(self.config) as store:
             nli = get_nli(self.settings.nli_backend, config=self.config)
             llm = get_llm(self.settings.llm_backend, config=self.config)
-            return augur.synthesize(store, topic, nli=nli, llm=llm, settings=self.settings)
+            embedder = get_embedder(self.settings.embed_backend, config=self.config)
+            return augur.synthesize(store, topic, nli=nli, llm=llm, embedder=embedder,
+                                    settings=self.settings)
 
     def evolution(self, *, entity: Optional[str] = None, topic: Optional[str] = None) -> List[dict]:
         """Trace how a claim/position about an entity or topic changed over time.

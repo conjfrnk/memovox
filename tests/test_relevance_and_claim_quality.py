@@ -183,6 +183,43 @@ class TestDocFreq(unittest.TestCase):
             store.close()
 
 
+class TestConsensusCosineFallback(unittest.TestCase):
+    """W5.6: an opt-in embedding-cosine fallback groups paraphrases that token-Jaccard
+    misses. Off by default (byte-identical free path); fires with real embeddings."""
+
+    def _claims(self):
+        from memovox.loom.models import Claim
+        # Two videos asserting the same thing in different words: they share only the
+        # token 'agi', so token-Jaccard (>=0.5) cannot group them.
+        return [
+            Claim("yt:a#m0.c0", "yt:a#m0", "yt:a", "AGI is coming very soon", subject="agi"),
+            Claim("yt:b#m0.c0", "yt:b#m0", "yt:b", "AGI will arrive imminently", subject="agi"),
+        ]
+
+    def test_token_jaccard_alone_does_not_group(self):
+        from memovox.loom.consensus import partition_claims
+        groups, xv = partition_claims(self._claims())
+        self.assertEqual(len(groups), 2)   # not merged
+        self.assertEqual(xv, [])
+
+    def test_cosine_fallback_groups_paraphrases(self):
+        from memovox.loom.consensus import partition_claims
+        claims = self._claims()
+        # Synthetic embeddings: near-identical vectors for the two paraphrases.
+        vectors = {claims[0].claim_id: [1.0, 0.0, 0.05],
+                   claims[1].claim_id: [0.98, 0.0, 0.10]}
+        groups, xv = partition_claims(claims, cosine=0.9, vectors=vectors)
+        self.assertEqual(len(groups), 1)   # merged into one consensus cluster
+        self.assertEqual(len(xv), 1)       # one cross-video agreement pair
+
+    def test_cosine_off_is_noop(self):
+        from memovox.loom.consensus import partition_claims
+        claims = self._claims()
+        vectors = {claims[0].claim_id: [1.0, 0.0], claims[1].claim_id: [1.0, 0.0]}
+        groups, _ = partition_claims(claims, cosine=0.0, vectors=vectors)
+        self.assertEqual(len(groups), 2)   # disabled -> unchanged
+
+
 class TestLexicalNliNegation(unittest.TestCase):
     """W5.3: negation-polarity words beyond a bare 'not' (e.g. 'nothing') flip
     polarity so a high-overlap pair is detected as a contradiction."""
