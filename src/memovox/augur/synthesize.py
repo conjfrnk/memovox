@@ -156,6 +156,20 @@ def synthesize(
     citations = _build_citations(store, moment_ids)
     index_of: Dict[str, int] = {c.moment_id: c.index for c in citations}
 
+    # OUT-OF-CORPUS GATE (mirror ask()): refuse a topic that does not clear the
+    # topicality + coverage floor over its cited moments, BEFORE composing any
+    # consensus/contradiction structure. _topic_claims is pure token-overlap and
+    # _content_tokens keeps generic question words (what/how/form), so an OOC topic
+    # ("population of Brazil") OR-matches enough claims across the corpus to BUILD
+    # structure — which would otherwise bypass a fallback-only gate and confabulate a
+    # confident, heavily-cited synthesis of unrelated content. This must run on the
+    # structured path too, not just the salient fallback.
+    from .answer import _relevance_coverage
+    if _relevance_coverage(store, topic, citations,
+                           min_moments=settings.answer_relevance_min_moments) \
+            < settings.answer_relevance_floor:
+        return Synthesis(topic=topic, text=_LOW_EVIDENCE_MSG, low_evidence=True)
+
     # Consensus: token-equivalence clusters, NLI-verified to exclude disagreements.
     # W5.6: when consensus_cosine is enabled AND an embedder is available, also group
     # paraphrases/synonyms by embedding cosine (embedded lazily so the default free
@@ -209,20 +223,11 @@ def synthesize(
 
     # SALIENT FALLBACK: when the free/lexical path extracts no agreement/contradiction
     # STRUCTURE (token-Jaccard consensus + lexical NLI both empty) but the topic IS
-    # genuinely covered, emit the most salient on-topic claims (distinct moments, cited)
-    # instead of a misleading "ingest more sources". GATE it on the same topicality +
-    # coverage signal ask() uses: _topic_claims is pure token-overlap, so without this
-    # gate an OUT-OF-CORPUS topic ("capital of Mongolia") would confabulate a confident
-    # synthesis from unrelated claims sharing only a polysemous token ("capital"). If the
-    # topic is not genuinely in-corpus, fall through to the low-evidence message below.
+    # genuinely covered (the OOC gate above already passed), emit the most salient
+    # on-topic claims (distinct moments, cited) instead of a misleading "ingest more
+    # sources". Cross-video agreement/contradiction detection needs the optional
+    # [embed]/[nli] backends; this keeps synthesize useful on the free path.
     if not parts:
-        from .answer import _relevance_coverage
-        relevance = _relevance_coverage(
-            store, topic, citations, min_moments=settings.answer_relevance_min_moments)
-        if relevance < settings.answer_relevance_floor:
-            # Out-of-corpus topic whose claims merely share a polysemous token
-            # ("capital of Mongolia"): refuse cleanly, like ask(), with no citations.
-            return Synthesis(topic=topic, text=_LOW_EVIDENCE_MSG, low_evidence=True)
         seen_m: set = set()
         for c in sorted(claims, key=lambda c: (-c.salience, c.video_id, c.t_start_s, c.claim_id)):
             idx = index_of.get(c.moment_id)

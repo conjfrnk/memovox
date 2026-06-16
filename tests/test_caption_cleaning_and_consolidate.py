@@ -338,6 +338,22 @@ class TestSynthesizeOutOfCorpusGate(unittest.TestCase):
         self.assertTrue(s["low_evidence"])
         self.assertEqual(len(s["citations"]), 0)
 
+    def test_ooc_topic_that_builds_structure_still_refused(self):
+        # The OOC gate must run on the STRUCTURED path too, not only the salient
+        # fallback: a generic question token ("form") that matches identical claims
+        # builds a consensus cluster, making `parts` non-empty — a fallback-only gate
+        # would be bypassed and confabulate a confident synthesis.
+        from memovox.augur.synthesize import synthesize
+        for i in range(6):  # identical claims -> a consensus cluster sharing "form"
+            mid = f"yt:a#f{i:04d}"
+            text = "the panel will form a strong consensus on this"
+            self.store.add_moment(Moment(mid, "yt:a", float(i), float(i) + 1.0, text, index=0))
+            self.store.add_claim(Claim(f"{mid}.c0", mid, "yt:a", text,
+                                       t_start_s=float(i), t_end_s=float(i) + 1.0, salience=1.0))
+        s = synthesize(self.store, "how do volcanoes form?", nli=self.nli).to_dict()
+        self.assertTrue(s["low_evidence"], "OOC topic that built structure was not refused")
+        self.assertEqual(len(s["citations"]), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

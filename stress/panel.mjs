@@ -7,22 +7,25 @@ export const meta = {
   ],
 }
 
-const STORE = '/tmp/mv_stress_iter14'
-const REPORT = 'stress/reports/iter14.json'
-const PRIOR = 'stress/reports/iter13.json'
+const STORE = '/tmp/mv_stress_iter15'
+const REPORT = 'stress/reports/iter15.json'
+const PRIOR = 'stress/reports/iter14.json'
 
 const COMMON = `
 You are an ADVERSARIAL reviewer of the memovox pipeline (a free/lexical video-knowledge engine).
-This is ROUND 2. A prior panel found 6 FIXABLE defects; they were fixed (commit 078d56a), and a
-7th fix (commit e25193d) was added because fixing H1 EXPOSED a latent lexical-NLI precision problem.
-Your job: CONFIRM or REFUTE each fix on the fresh 41-video run, AND — critically — hunt for any
-REGRESSION the fixes introduced, plus any remaining/new defect. Be skeptical; verify with evidence.
+This is ROUND 3. Prior rounds fixed 6 defects (078d56a), added a precision gate (e25193d), and
+fixed 3 more — two MED REGRESSIONS the round-2 fixes themselves introduced plus a markdown leak
+(7374841). Round 2 already CONFIRMED H1, H1b, H2, M2, M3 as solid. Your job this round: (a) confirm
+the two round-2 regression fixes hold AND did not re-open anything or introduce a NEW regression,
+(b) re-verify nothing else regressed on the fresh run, (c) hunt for any remaining defect. Be
+skeptical; verify with evidence. The bar for satisfaction is high but FAIR — do not invent blockers
+out of FUNDAMENTAL free-path limits or pre-existing LOW issues.
 
 Context to read first:
 - The post-fix report: ${REPORT} (41 videos, free/captions, nli=lexical, embed=hashing).
 - The previous round's report: ${PRIOR}.
-- The fixes under review: \`git -C /Users/connor/projects/memovox diff 3c6fbc3 e25193d\` (both
-  the 6 fixes AND the precision gate). Key files:
+- The fixes under review: \`git -C /Users/connor/projects/memovox diff 3c6fbc3 7374841\` (all
+  rounds). The newest (round-2 regression) fixes: \`git -C ... show 7374841\`. Key files:
     src/memovox/loom/consolidate.py   (_candidate_pairs bucket-blocking; raised max_claims=50000;
                                         scope always in universe; topic filter before cap)
     src/memovox/loom/consensus.py     (partition_claims uses the same bucket-blocking)
@@ -125,16 +128,18 @@ Return findings with concrete evidence.`,
     key: 'retrieval-relevance',
     prompt: `${COMMON}
 
-YOUR LENS: retrieval, relevance gate, synthesize. Verify H3 (advice-verb leak) and M1 (synthesize fallback).
-  - VERIFY H3: mv.ask('what is the best way to recommend a first home purchase?') now refuses
-    (low_evidence=True). Then REGRESSION-test the added verbs against legitimate in-corpus queries that
-    use them, e.g. 'what watch does Teddy recommend for a first luxury watch?',
-    'which airline does Jeb Brooks recommend?', 'should I buy the iPhone 17 Pro?' — these SHOULD still be
-    answered (the topic word — watch/airline/iphone — carries topicality). Report any new over-refusal.
-  - VERIFY M1: mv.synthesize('saturated fat') and ('diet') now return low_evidence=False with a non-empty
-    summary; CHECK every summary sentence carries an [n] marker and the cited claim actually contains that
-    text (grounded, not confabulated). Confirm a junk topic ('quantum chromodynamics') still low-evidence.
-  - Re-run 5 fresh out-of-corpus probes to confirm no new fabrication leak.
+YOUR LENS: retrieval, relevance gate, synthesize. Re-verify the round-2 regression fixes (7374841).
+  - H3 + its round-2 fix: 'what is the best way to recommend a first home purchase?' and 'how do I
+    recommend a good real estate agent?' must REFUSE (low_evidence=True). AND the over-refusal fix must
+    hold: 'which Rolex should I buy?' must ANSWER (low_evidence=False, citations) — rolex is a real
+    48-claim topic. Try other legit in-corpus 'buy/recommend a <topic>' queries (iphone, watch — note
+    'watch' the noun collides with 'watch' the verb, a PRE-EXISTING FUNDAMENTAL limit, not a regression).
+  - M1 + its round-2 fix: mv.synthesize('saturated fat') and ('diet') must return low_evidence=False
+    with a cited summary (grounded — the cited claim must actually contain the text). CRITICAL OOC gate:
+    synthesize('capital of Mongolia') and synthesize('underwater basket weaving') must now return
+    low_evidence=True with NO citations (round-2 regression fix). Confirm 'quantum chromodynamics' (in
+    corpus) behaviour is consistent with the gate.
+  - Re-run 5 fresh out-of-corpus probes on BOTH ask() and synthesize() to confirm no fabrication leak.
 Return findings with concrete evidence (run the queries).`,
   },
   {
@@ -190,10 +195,11 @@ REVIEWS:
 ${JSON.stringify(reviews.map((r, i) => ({ lens: lenses[i].key, ...r })), null, 2)}
 
 Decide team_satisfied. Rules:
- - SATISFIED only when (a) all 7 fixes (the 6 round-1 fixes + the H1b precision gate) are CONFIRMED
-   (no REFUTED), AND (b) no FIXABLE finding of severity >= MED is a genuine correctness/UX defect or a
-   REGRESSION introduced by the fixes (garbage edges remaining, real contradictions newly missed,
-   over-stripped content, new over-refusal, ungrounded synthesis text).
+ - SATISFIED only when (a) the prior-round fixes still hold (H1, H1b, H2, M2, M3) AND the two round-2
+   regression fixes hold (synthesize OOC refusal restored; legit "buy a <topic>" no longer over-refused),
+   AND (b) no FIXABLE finding of severity >= MED is a genuine correctness/UX defect or a NEW regression
+   (garbage edges, real contradictions newly missed, over-stripped content, over-refusal, ungrounded or
+   confabulated synthesis). FUNDAMENTAL free-path limits and pre-existing LOW issues NEVER block.
  - A REGRESSION (e.g. over-stripped content, new over-refusal, garbage contradiction edges that mislead
    users) of severity >= MED blocks even if technically "fixable later".
  - FUNDAMENTAL (free-path) and ENV findings never block. Correct any reviewer misclassification.
