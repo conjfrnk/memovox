@@ -1,3 +1,6 @@
+# ---- stress-test downloaded corpus (large media/captions; regenerable) ----
+/.stress-corpus/
+
 # ---- memovox knowledge store (never commit ingested media / DB / models) ----
 /store/
 /.memovox/

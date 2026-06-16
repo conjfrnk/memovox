@@ -1,0 +1,1075 @@
+{
+  "stamp": "iter1-fixes",
+  "nli": "lexical",
+  "embed": "hashing",
+  "videos": [
+    {
+      "id": "UF8uR6Z6KLc",
+      "group": "sweet",
+      "label": "Jobs Stanford 2005",
+      "published_at": "2008-03-08T00:00:00Z",
+      "video_id": "yt:UF8uR6Z6KLc",
+      "status": "ingested",
+      "n_moments": 87,
+      "n_claims_committed": 86,
+      "n_claims_unsupported": 1,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:UF8uR6Z6KLc:spk_0"
+      ],
+      "n_committed_audited": 86,
+      "trivial_count": 20,
+      "trivial_ratio": 0.233,
+      "sample_trivial": [
+        "you I'm honored to be with you today for your commencement from one of the finest universities in the world truth be",
+        "graduation today I want to tell you three stories from my life that's it no big deal just three stories the first story is about",
+        "connecting the dots I dropped out of Reed College after the first 6 months but then stayed around as a drop in for another 18 months or so",
+        "unwed graduate student and she decided to put me up for adoption she felt very strongly that I should be adopted by college graduates",
+        "baby boy do you want him they said of course my biological mother found out later that my mother had never graduated"
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "zjkBMFhNj_g",
+      "group": "sweet",
+      "label": "Karpathy Intro to LLMs",
+      "published_at": "2023-11-23T00:00:00Z",
+      "video_id": "yt:zjkBMFhNj_g",
+      "status": "ingested",
+      "n_moments": 392,
+      "n_claims_committed": 391,
+      "n_claims_unsupported": 2,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:zjkBMFhNj_g:spk_0"
+      ],
+      "n_committed_audited": 391,
+      "trivial_count": 120,
+      "trivial_ratio": 0.307,
+      "sample_trivial": [
+        "but a lot of people came to me after the talk and they told me that they really liked the talk so I would just I thought I would just re-record it and basically put it up on YouTube so here",
+        "multiple models belonging to the Llama 2 Series 7 billion 13 billion 34 billion and 70 billion is the",
+        "files on your file system the parameters file and the Run some kind of a code that runs those parameters so the parameters are",
+        "type now in addition to these parameters that's just like a large list of parameters for that neural network you also need something that runs that",
+        "else you can take these two files you compile your C code you get a binary that you can point at the parameters and you can talk to this language model so"
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "XTeJ64KD5cg",
+      "group": "sweet",
+      "label": "Numberphile Graham's Number",
+      "published_at": "2012-04-04T00:00:00Z",
+      "video_id": "yt:XTeJ64KD5cg",
+      "status": "ingested",
+      "n_moments": 74,
+      "n_claims_committed": 113,
+      "n_claims_unsupported": 22,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:XTeJ64KD5cg:BRADY HARAN",
+        "yt:XTeJ64KD5cg:MATT PARKER",
+        "yt:XTeJ64KD5cg:TONY PADILLA",
+        "yt:XTeJ64KD5cg:spk_0"
+      ],
+      "n_committed_audited": 113,
+      "trivial_count": 86,
+      "trivial_ratio": 0.761,
+      "sample_trivial": [
+        "If you actually tried to picture Graham's",
+        "That's not just some sort of crazy sort of pictorial image-- it would.",
+        "It would-- you couldn't store that much information in your head.",
+        "People think mathematicians just basically",
+        "Well, because there's a sort of maximum"
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "t3H5D-XxPrI",
+      "group": "asr",
+      "label": "Polyglots 21 languages",
+      "published_at": "2017-06-05T00:00:00Z",
+      "video_id": "yt:t3H5D-XxPrI",
+      "status": "ingested",
+      "n_moments": 35,
+      "n_claims_committed": 30,
+      "n_claims_unsupported": 6,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:t3H5D-XxPrI:spk_0"
+      ],
+      "n_committed_audited": 30,
+      "trivial_count": 28,
+      "trivial_ratio": 0.933,
+      "sample_trivial": [
+        "A lot of a lot of Yeah, I don't want to say number, but so let's practice all the languages which we have",
+        "So you can say a language and we're going to speak this language.",
+        "Or you just you just start speaking the language, I will answer you immediately.",
+        "So he got his degree as the but I can speak a lot of Russian",
+        "You know astrach and the"
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "144uOfr4SYA",
+      "group": "asr",
+      "label": "Munk Debate on AI",
+      "published_at": "2023-06-24T00:00:00Z",
+      "video_id": "yt:144uOfr4SYA",
+      "status": "ingested",
+      "n_moments": 658,
+      "n_claims_committed": 655,
+      "n_claims_unsupported": 2,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:144uOfr4SYA:spk_0"
+      ],
+      "n_committed_audited": 655,
+      "trivial_count": 270,
+      "trivial_ratio": 0.412,
+      "sample_trivial": [
+        "you don't know which of your facts will be demolished you don't know which of your arguments will be totally destroyed and you now rattled you're shaken up",
+        "and you don't know what the hell to say but you got to say something capitalism doesn't just have problems",
+        "but a liberal Society like the United States of America manipulated by flattery goaded by tweets his hand near",
+        "permission to know right from wrong we don't need tablets administered to US 10 at a time in tablet form to be able to",
+        "have a moral argument no do not want sympathy we do not want pity we want opportunities and that's why the"
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "nkG2SSzPUns",
+      "group": "asr",
+      "label": "NPR Tiny Desk",
+      "published_at": "2026-06-12T00:00:00Z",
+      "video_id": "yt:nkG2SSzPUns",
+      "status": "ingested",
+      "n_moments": 60,
+      "n_claims_committed": 178,
+      "n_claims_unsupported": 41,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:nkG2SSzPUns:spk_0"
+      ],
+      "n_committed_audited": 178,
+      "trivial_count": 164,
+      "trivial_ratio": 0.921,
+      "sample_trivial": [
+        "NPR. &gt;&gt; We're a band from Atlanta called The Paradox.",
+        "I'm Zealand. &gt;&gt; She hates when I listen to Blink when I skate on the side of the street.",
+        "She wants to change up about me.",
+        "Her car costs more than my crib and her dad.",
+        "No matter what I do, I'll never be like you."
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "AmlF6xq2SaQ",
+      "group": "asr",
+      "label": "Easy English NYC",
+      "published_at": "2014-10-28T00:00:00Z",
+      "video_id": "yt:AmlF6xq2SaQ",
+      "status": "ingested",
+      "n_moments": 14,
+      "n_claims_committed": 13,
+      "n_claims_unsupported": 1,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:AmlF6xq2SaQ:spk_0"
+      ],
+      "n_committed_audited": 13,
+      "trivial_count": 8,
+      "trivial_ratio": 0.615,
+      "sample_trivial": [
+        "Edition we we love New York because of the lifestyle it offers me and my husband and the children and everything that's on offer for for children",
+        "tourists love it here I love it it's only a city that you could really enjoy yourself everything is here",
+        "now I'm going to see it what about I'm squ the lights the Billboards the people there it's it's",
+        "here having a good balance of I guess like Urban landscape and like finding Central Park posic Park know even doing something like freshwater",
+        "from Germany we're from England so we don't get three months worth of sunshine like you do over here so there's lots of different things that we like about"
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "J7DzL2_Na80",
+      "group": "visual",
+      "label": "Strang Linear Algebra L1",
+      "published_at": "2019-09-24T00:00:00Z",
+      "video_id": "yt:J7DzL2_Na80",
+      "status": "ingested",
+      "n_moments": 229,
+      "n_claims_committed": 326,
+      "n_claims_unsupported": 81,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:J7DzL2_Na80:spk_0"
+      ],
+      "n_committed_audited": 326,
+      "trivial_count": 244,
+      "trivial_ratio": 0.748,
+      "sample_trivial": [
+        "And I'm Gilbert Strang.",
+        "And the course web page, which has",
+        "got a lot of exercises from the past, MATLAB the syllabus for the course is",
+        "This is my plan. the fundamental problem of linear which is to solve a system of linear",
+        "So an equal number of equations and"
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "WUvTyaaNkzM",
+      "group": "visual",
+      "label": "3Blue1Brown calculus",
+      "published_at": "2017-04-28T00:00:00Z",
+      "video_id": "yt:WUvTyaaNkzM",
+      "status": "ingested",
+      "n_moments": 91,
+      "n_claims_committed": 114,
+      "n_claims_unsupported": 43,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:WUvTyaaNkzM:spk_0"
+      ],
+      "n_committed_audited": 114,
+      "trivial_count": 73,
+      "trivial_ratio": 0.64,
+      "sample_trivial": [
+        "This is the first video in a series on the essence of calculus, and I'll be publishing the following videos once per day for the next 10 days.",
+        "But with a topic that's as broad as calculus, there's a lot of things that can mean,",
+        "Lots of derivative formulas, the product rule, the chain rule,",
+        "That is, cover all those core ideas, but in a way that makes clear where they actually come from, and what they really mean, using an all-around visual approach.",
+        "In this initial video, I want to show how you might stumble into the core ideas of"
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "jbkSRLYSojo",
+      "group": "visual",
+      "label": "Rosling 200 Countries",
+      "published_at": "2010-11-26T00:00:00Z",
+      "video_id": "yt:jbkSRLYSojo",
+      "status": "ingested",
+      "n_moments": 24,
+      "n_claims_committed": 26,
+      "n_claims_unsupported": 1,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:jbkSRLYSojo:spk_0"
+      ],
+      "n_committed_audited": 26,
+      "trivial_count": 15,
+      "trivial_ratio": 0.577,
+      "sample_trivial": [
+        "Now, I'm going to try something I've never done before Now, I'm going to try something I've never done before animating the data in real space With a bit of technical assistance from the crew",
+        "So here we go first an axis for health life Expectancy from 25 years to 75 years and down here an axis for wealth",
+        "Now I'm going to show you the world 200 years ago in 1810 here come over countries Europe Brown Asia",
+        "Red Middle East Queens Africa south of sahara blue and the americas yellow And the size of the country bubbles showed the size of the population and in 1810",
+        "It was pretty crowded down there wasn't it all countries were sick and poor life Expectancy were below 40 in all countries and only the UK and the Netherlands were slightly better off"
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "kCc8FmEb1nY",
+      "group": "visual",
+      "label": "Karpathy build GPT",
+      "published_at": "2023-01-17T00:00:00Z",
+      "video_id": "yt:kCc8FmEb1nY",
+      "status": "ingested",
+      "n_moments": 742,
+      "n_claims_committed": 740,
+      "n_claims_unsupported": 5,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:kCc8FmEb1nY:spk_0"
+      ],
+      "n_committed_audited": 740,
+      "trivial_count": 265,
+      "trivial_ratio": 0.358,
+      "sample_trivial": [
+        "power okay not bad and so you could see that chpt went from left to right and generated all these words SE sort of sequentially now I asked it already the",
+        "exact same prompt a little bit earlier and it generated a slightly different outcome ai's power to grow ignorance holds us back learn Prosperity weights",
+        "write a note about Elon Musk buying a Twitter and so on so as an example please write a breaking news article about a leaf falling from a",
+        "sequence of words or characters or tokens more generally and it knows how sort of words follow each other in English language and so from its",
+        "this architecture that they produced in the context of machine translation in their case actually ended up taking over the rest of AI in the next 5 years"
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "jGwO_UgTS7I",
+      "group": "visual",
+      "label": "Andrew Ng CS229 L1",
+      "published_at": "2020-04-17T00:00:00Z",
+      "video_id": "yt:jGwO_UgTS7I",
+      "status": "ingested",
+      "n_moments": 432,
+      "n_claims_committed": 491,
+      "n_claims_unsupported": 141,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:jGwO_UgTS7I:spk_0"
+      ],
+      "n_committed_audited": 491,
+      "trivial_count": 300,
+      "trivial_ratio": 0.611,
+      "sample_trivial": [
+        "I think AI already we call machine learning for the rest of the world seems to call AI.",
+        "And I hope that through 229, we'll give you the tools you need so that you can be many of",
+        "these future titans of industries that you can be one to go out and build, you know, help the large tech companies do the amazing things they do, or build your own start-up,",
+        "Go, go transform healthcare or go transform transportation or go build a self-driving car. and do all of these things that,",
+        "You know, the majority of students supplying- the,"
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "1M3Vdl6DRkU",
+      "group": "duration",
+      "label": "Lex Fridman #497",
+      "published_at": "2026-05-29T00:00:00Z",
+      "video_id": "yt:1M3Vdl6DRkU",
+      "status": "ingested",
+      "n_moments": 930,
+      "n_claims_committed": 1388,
+      "n_claims_unsupported": 528,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:1M3Vdl6DRkU:spk_0"
+      ],
+      "n_committed_audited": 1388,
+      "trivial_count": 814,
+      "trivial_ratio": 0.586,
+      "sample_trivial": [
+        "Don turned out to be one of my favorite people to talk to about physics.",
+        "Truly a unique mind with that Richard Feynman ability",
+        "of taking very complicated ideas and explaining them simply, without losing any of the essential, brilliant insights at",
+        "This is a Lex Fridman podcast.",
+        "To support it, please check out our sponsors in the description where you can also find ways to contact me, ask questions,"
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "aqBHXNGKvKU",
+      "group": "contradiction",
+      "label": "Sat fat CAUSES heart disease",
+      "published_at": "2025-06-25T00:00:00Z",
+      "video_id": "yt:aqBHXNGKvKU",
+      "status": "ingested",
+      "n_moments": 44,
+      "n_claims_committed": 52,
+      "n_claims_unsupported": 29,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:aqBHXNGKvKU:spk_0"
+      ],
+      "n_committed_audited": 52,
+      "trivial_count": 31,
+      "trivial_ratio": 0.596,
+      "sample_trivial": [
+        "It shows that reducing saturated fat does nothing to protect your heart.",
+        "Now, that may surprise some people as we've been",
+        "Well, I mean, in truth, when it comes to taking charge of your",
+        "None of these recommendations matter.",
+        "To tell you that"
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "dzOTaNwiFmA",
+      "group": "contradiction",
+      "label": "Sat fat does NOT (Attia)",
+      "published_at": "2024-02-22T00:00:00Z",
+      "video_id": "yt:dzOTaNwiFmA",
+      "status": "ingested",
+      "n_moments": 52,
+      "n_claims_committed": 52,
+      "n_claims_unsupported": 0,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:dzOTaNwiFmA:spk_0"
+      ],
+      "n_committed_audited": 52,
+      "trivial_count": 20,
+      "trivial_ratio": 0.385,
+      "sample_trivial": [
+        "the the negative consequences of dietary fat specifically dietary saturated fat in the American diet especially as it pertains to ascvd and then I suspect the second",
+        "obur so they're probably in the 40s or right yeah I I can't exactly date that but you're exactly right so those were I",
+        "mean we learned a lot about starvation at that point for obvious reasons we can't Dukes experiments like that before but we",
+        "we did a lot of fasting type of experiments with animals to look at composition change and I did malnutrition work in in Northern Africa",
+        "and I sort of got into all of that and I I I started realizing you know I don't really believe that and one seminar I will always remember at Minnesota was"
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "AxIOGqHQqZM",
+      "group": "contradiction",
+      "label": "Breakfast IS important",
+      "published_at": "2018-04-24T00:00:00Z",
+      "video_id": "yt:AxIOGqHQqZM",
+      "status": "ingested",
+      "n_moments": 59,
+      "n_claims_committed": 80,
+      "n_claims_unsupported": 28,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:AxIOGqHQqZM:But caveat",
+        "yt:AxIOGqHQqZM:For example",
+        "yt:AxIOGqHQqZM:spk_0"
+      ],
+      "n_committed_audited": 80,
+      "trivial_count": 48,
+      "trivial_ratio": 0.6,
+      "sample_trivial": [
+        "And it made me kind of sad.",
+        "Okay, That’s a really good question!",
+        "So let’s dive into it.",
+        "We’ve all heard this old saying about breakfast being at the top of the meal time hierarchy.",
+        "But it seems a bit counterintuitive now since breakfasts can range from a cold bowl of cereal,"
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "2su8e-nhMGw",
+      "group": "contradiction",
+      "label": "SKIP breakfast (Berg)",
+      "published_at": "2019-04-01T00:00:00Z",
+      "video_id": "yt:2su8e-nhMGw",
+      "status": "ingested",
+      "n_moments": 25,
+      "n_claims_committed": 25,
+      "n_claims_unsupported": 0,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:2su8e-nhMGw:spk_0"
+      ],
+      "n_committed_audited": 25,
+      "trivial_count": 9,
+      "trivial_ratio": 0.36,
+      "sample_trivial": [
+        "promote that before I realize that's not the best thing to do but I had a serious blood sugar issue I had hypoglycemia and",
+        "books however here's the here's the problem when you eat you stimulate insulin okay and insulin creates a lot of issues not just with slowing your",
+        "eating a breakfast actually will not increase your metabolism it slows your metabolism number two you're breaking the fast all night long you're in a",
+        "raise insulin now you nullify the benefits of fasting you're gonna actually kind of nullify the top of goog",
+        "inflammation or arthritis you just won't ever go away if you keep eating and then used to stop repairing okay so number"
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "n_Smy5-1cHE",
+      "group": "contradiction",
+      "label": "Carnivore risks",
+      "published_at": "2024-04-19T00:00:00Z",
+      "video_id": "yt:n_Smy5-1cHE",
+      "status": "ingested",
+      "n_moments": 98,
+      "n_claims_committed": 97,
+      "n_claims_unsupported": 1,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:n_Smy5-1cHE:spk_0"
+      ],
+      "n_committed_audited": 97,
+      "trivial_count": 39,
+      "trivial_ratio": 0.402,
+      "sample_trivial": [
+        "is the carnivore diet okay what does a massive influencer doctor think about it",
+        "YouTube I'm Dr Eric Westman and welcome back to my channel where I review and debunk nutritional misinformation",
+        "online in this video thank you for sending me ideas of things to look at we're going to look at a video done by a",
+        "YouTuber called zg MD if you haven't heard of Z dog we you'll see him right here be sure to stay till the end where",
+        "group of doctors so even today I think doctors get a lot of new information from YouTube from podcasts"
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "SdnEbJZoNg8",
+      "group": "contradiction",
+      "label": "Vegan brain",
+      "published_at": "2023-01-04T00:00:00Z",
+      "video_id": "yt:SdnEbJZoNg8",
+      "status": "ingested",
+      "n_moments": 30,
+      "n_claims_committed": 30,
+      "n_claims_unsupported": 0,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:SdnEbJZoNg8:spk_0"
+      ],
+      "n_committed_audited": 30,
+      "trivial_count": 12,
+      "trivial_ratio": 0.4,
+      "sample_trivial": [
+        "so you're thinking of trying out veganism well you're not alone according to a poll the number of vegans in Britain quadrupled between 2014 and 2016",
+        "of babies as young as 2 weeks being hospitalized due to B12 deficiency after being born and exclusively breastfed by",
+        "it is important that vegans and vegetarians especially those planning pregnancy are aware of the need to supplement with",
+        "such as headache fatigue poor concentration and brain fog and low mood and depression and although vegans have",
+        "low levels of B12 another brain healthy nutrient found most abundantly in animal Foods is Chine"
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "5KVDDfAkRgc",
+      "group": "timeline",
+      "label": "Not Ready for Superintelligence",
+      "published_at": "2025-07-09T00:00:00Z",
+      "video_id": "yt:5KVDDfAkRgc",
+      "status": "ingested",
+      "n_moments": 217,
+      "n_claims_committed": 320,
+      "n_claims_unsupported": 149,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:5KVDDfAkRgc:spk_0"
+      ],
+      "n_committed_audited": 320,
+      "trivial_count": 214,
+      "trivial_ratio": 0.669,
+      "sample_trivial": [
+        "The impact of superhuman AI over the next decade will exceed that of the industrial revolution.",
+        "That is the opening claim of AI 2027.",
+        "He is known for being very early and very right about what's",
+        "So, when Daniel sat down to game out a month-by-month prediction of the next few years of AI progress, the world sat up and listened.",
+        "I actually read the paper of the guy that you had to the world's most cited computer scientist, the godfather of AI."
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "YeRS4TbtZWA",
+      "group": "timeline",
+      "label": "AGI timelines 2025",
+      "published_at": "2026-02-10T00:00:00Z",
+      "video_id": "yt:YeRS4TbtZWA",
+      "status": "ingested",
+      "n_moments": 150,
+      "n_claims_committed": 195,
+      "n_claims_unsupported": 61,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:YeRS4TbtZWA:And that worked great",
+        "yt:YeRS4TbtZWA:Rob Wiblin",
+        "yt:YeRS4TbtZWA:spk_0"
+      ],
+      "n_committed_audited": 195,
+      "trivial_count": 122,
+      "trivial_ratio": 0.626,
+      "sample_trivial": [
+        "Let’s talk timelines&nbsp; to artificial general intelligence.",
+        "In late 2024 and early 2025, after OpenAI put out&nbsp; the first ever set of reasoning models — that is,&nbsp;&nbsp; o1 and o3 — short timelines to transformative&nbsp; artificial general intelligence swept the AI&nbsp;&nbsp;",
+        "But then, in the second half of 2025,&nbsp; a strange thing happened: sentiment swung all&nbsp;&nbsp; the way back in the other direction, with people’s&nbsp; forecasts for when AI might really shake things up&nbsp;&nbsp;",
+        "And as often the case,&nbsp;&nbsp;",
+        "Dario from Anthropic had the most colourful turn&nbsp; of phrase: he announced a “country of geniuses&nbsp;&nbsp; in a data centre,” we’re quite likely to&nbsp; get that in the next two to three years."
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    }
+  ],
+  "asks": [
+    {
+      "q": "what is Graham's number?",
+      "expect_video": "XTeJ64KD5cg",
+      "expect_kw": "graham",
+      "text_present": true,
+      "n_citations": 8,
+      "low_evidence": false,
+      "cite_videos": [
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg"
+      ],
+      "modalities": [
+        "speech"
+      ],
+      "hit": true,
+      "kw_in_text": true,
+      "all_cited": false
+    },
+    {
+      "q": "what are the two files that make up a large language model?",
+      "expect_video": "zjkBMFhNj_g",
+      "expect_kw": null,
+      "text_present": true,
+      "n_citations": 8,
+      "low_evidence": false,
+      "cite_videos": [
+        "yt:zjkBMFhNj_g",
+        "yt:zjkBMFhNj_g",
+        "yt:kCc8FmEb1nY",
+        "yt:zjkBMFhNj_g",
+        "yt:1M3Vdl6DRkU",
+        "yt:zjkBMFhNj_g",
+        "yt:144uOfr4SYA",
+        "yt:zjkBMFhNj_g"
+      ],
+      "modalities": [
+        "speech"
+      ],
+      "hit": true,
+      "kw_in_text": null,
+      "all_cited": false
+    },
+    {
+      "q": "what did Steve Jobs say about connecting the dots?",
+      "expect_video": "UF8uR6Z6KLc",
+      "expect_kw": "dot",
+      "text_present": true,
+      "n_citations": 8,
+      "low_evidence": false,
+      "cite_videos": [
+        "yt:UF8uR6Z6KLc",
+        "yt:zjkBMFhNj_g",
+        "yt:UF8uR6Z6KLc",
+        "yt:J7DzL2_Na80",
+        "yt:UF8uR6Z6KLc",
+        "yt:zjkBMFhNj_g",
+        "yt:jGwO_UgTS7I",
+        "yt:J7DzL2_Na80"
+      ],
+      "modalities": [
+        "speech"
+      ],
+      "hit": true,
+      "kw_in_text": true,
+      "all_cited": false
+    },
+    {
+      "q": "does saturated fat cause heart disease?",
+      "expect_video": null,
+      "expect_kw": "fat",
+      "text_present": true,
+      "n_citations": 8,
+      "low_evidence": false,
+      "cite_videos": [
+        "yt:aqBHXNGKvKU",
+        "yt:dzOTaNwiFmA",
+        "yt:aqBHXNGKvKU",
+        "yt:aqBHXNGKvKU",
+        "yt:aqBHXNGKvKU",
+        "yt:dzOTaNwiFmA",
+        "yt:aqBHXNGKvKU",
+        "yt:dzOTaNwiFmA"
+      ],
+      "modalities": [
+        "speech"
+      ],
+      "hit": null,
+      "kw_in_text": true,
+      "all_cited": false
+    },
+    {
+      "q": "is breakfast the most important meal of the day?",
+      "expect_video": null,
+      "expect_kw": "breakfast",
+      "text_present": true,
+      "n_citations": 8,
+      "low_evidence": false,
+      "cite_videos": [
+        "yt:AxIOGqHQqZM",
+        "yt:AxIOGqHQqZM",
+        "yt:AxIOGqHQqZM",
+        "yt:AxIOGqHQqZM",
+        "yt:AxIOGqHQqZM",
+        "yt:AxIOGqHQqZM",
+        "yt:AxIOGqHQqZM",
+        "yt:jGwO_UgTS7I"
+      ],
+      "modalities": [
+        "speech"
+      ],
+      "hit": null,
+      "kw_in_text": true,
+      "all_cited": false
+    },
+    {
+      "q": "when will AGI or superintelligence arrive?",
+      "expect_video": null,
+      "expect_kw": null,
+      "text_present": true,
+      "n_citations": 0,
+      "low_evidence": true,
+      "cite_videos": [],
+      "modalities": [],
+      "hit": null,
+      "kw_in_text": null,
+      "all_cited": true
+    },
+    {
+      "q": "what are the risks of a carnivore diet?",
+      "expect_video": "n_Smy5-1cHE",
+      "expect_kw": null,
+      "text_present": true,
+      "n_citations": 8,
+      "low_evidence": false,
+      "cite_videos": [
+        "yt:n_Smy5-1cHE",
+        "yt:n_Smy5-1cHE",
+        "yt:n_Smy5-1cHE",
+        "yt:n_Smy5-1cHE",
+        "yt:J7DzL2_Na80",
+        "yt:n_Smy5-1cHE",
+        "yt:n_Smy5-1cHE",
+        "yt:kCc8FmEb1nY"
+      ],
+      "modalities": [
+        "speech"
+      ],
+      "hit": true,
+      "kw_in_text": null,
+      "all_cited": false
+    }
+  ],
+  "refusals": [
+    {
+      "q": "what is the capital of Mongolia?",
+      "text_present": true,
+      "low_evidence": true,
+      "n_citations": 0,
+      "text": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "refused": true
+    },
+    {
+      "q": "what did the speaker say about underwater basket weaving championships?",
+      "text_present": true,
+      "low_evidence": true,
+      "n_citations": 0,
+      "text": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "refused": true
+    },
+    {
+      "q": "how do I change the oil in a 1997 Honda Civic?",
+      "text_present": true,
+      "low_evidence": true,
+      "n_citations": 0,
+      "text": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "refused": true
+    }
+  ],
+  "contradictions": {
+    "saturated fat": {
+      "n_pairs": 0,
+      "n_cross_video": 0,
+      "relations": {},
+      "pairs": []
+    },
+    "breakfast": {
+      "n_pairs": 0,
+      "n_cross_video": 0,
+      "relations": {},
+      "pairs": []
+    },
+    "diet": {
+      "n_pairs": 0,
+      "n_cross_video": 0,
+      "relations": {},
+      "pairs": []
+    },
+    "AGI": {
+      "n_pairs": 0,
+      "n_cross_video": 0,
+      "relations": {},
+      "pairs": []
+    }
+  },
+  "synthesize": {
+    "AGI": {
+      "consensus_count": 0,
+      "contradiction_count": 0,
+      "low_evidence": true,
+      "n_citations": 8,
+      "consensus_sample": []
+    },
+    "saturated fat": {
+      "consensus_count": 0,
+      "contradiction_count": 0,
+      "low_evidence": true,
+      "n_citations": 27,
+      "consensus_sample": []
+    },
+    "diet": {
+      "consensus_count": 0,
+      "contradiction_count": 0,
+      "low_evidence": true,
+      "n_citations": 30,
+      "consensus_sample": []
+    }
+  },
+  "evolution": {
+    "AGI": {
+      "n_steps": 8,
+      "dates": [
+        "2025-07-09T00:00:00Z",
+        "2025-07-09T00:00:00Z",
+        "2025-07-09T00:00:00Z",
+        "2026-02-10T00:00:00Z",
+        "2026-02-10T00:00:00Z",
+        "2026-02-10T00:00:00Z",
+        "2026-02-10T00:00:00Z",
+        "2026-02-10T00:00:00Z"
+      ],
+      "ordered_ok": true,
+      "videos": [
+        "yt:5KVDDfAkRgc",
+        "yt:5KVDDfAkRgc",
+        "yt:5KVDDfAkRgc",
+        "yt:YeRS4TbtZWA",
+        "yt:YeRS4TbtZWA",
+        "yt:YeRS4TbtZWA",
+        "yt:YeRS4TbtZWA",
+        "yt:YeRS4TbtZWA"
+      ]
+    },
+    "superintelligence": {
+      "n_steps": 0,
+      "dates": [],
+      "ordered_ok": true,
+      "videos": []
+    }
+  },
+  "aggregate": {
+    "consolidate": {
+      "topics": 4128,
+      "contradictions": 0,
+      "supports": 2,
+      "consensus_clusters": 0,
+      "superseded": 239,
+      "claims_scanned": 600,
+      "claims_skipped": 4802,
+      "capped": true,
+      "metrics": {
+        "name": "consolidate",
+        "spans": [
+          {
+            "stage": "topics",
+            "wall_ms": 231542.58474987,
+            "status": "ok",
+            "counters": {
+              "topics": 4128
+            },
+            "caps": []
+          },
+          {
+            "stage": "contradictions",
+            "wall_ms": 4211.264374898747,
+            "status": "ok",
+            "counters": {
+              "candidates": 5402,
+              "nli_calls": 2542,
+              "new_contradictions": 0,
+              "new_supports": 2
+            },
+            "caps": [
+              {
+                "name": "max_claims",
+                "limit": 600,
+                "dropped": 4802
+              }
+            ]
+          },
+          {
+            "stage": "consensus",
+            "wall_ms": 98.93929190002382,
+            "status": "ok",
+            "counters": {
+              "clusters": 0
+            },
+            "caps": []
+          },
+          {
+            "stage": "dedup",
+            "wall_ms": 73.41529196128249,
+            "status": "ok",
+            "counters": {
+              "superseded": 239
+            },
+            "caps": []
+          }
+        ]
+      }
+    },
+    "planted_contradictions": [
+      {
+        "pair": [
+          "aqBHXNGKvKU",
+          "dzOTaNwiFmA"
+        ],
+        "topic": "saturated fat",
+        "surfaced": false
+      },
+      {
+        "pair": [
+          "AxIOGqHQqZM",
+          "2su8e-nhMGw"
+        ],
+        "topic": "breakfast",
+        "surfaced": false
+      }
+    ],
+    "n_videos": 21,
+    "n_ingest_ok": 21,
+    "total_moments": 4443,
+    "total_committed": 5402,
+    "total_trivial": 2902,
+    "mean_trivial_ratio": 0.559,
+    "total_provenance_violations": 0,
+    "ask_hit_rate": 1.0
+  },
+  "findings": [
+    {
+      "severity": "HIGH",
+      "code": "trivial_claims",
+      "msg": "mean trivial-claim ratio 0.559 (>0.25)",
+      "worst": [
+        {
+          "id": "t3H5D-XxPrI",
+          "ratio": 0.933,
+          "sample": [
+            "A lot of a lot of Yeah, I don't want to say number, but so let's practice all the languages which we have",
+            "So you can say a language and we're going to speak this language.",
+            "Or you just you just start speaking the language, I will answer you immediately.",
+            "So he got his degree as the but I can speak a lot of Russian",
+            "You know astrach and the"
+          ]
+        },
+        {
+          "id": "nkG2SSzPUns",
+          "ratio": 0.921,
+          "sample": [
+            "NPR. &gt;&gt; We're a band from Atlanta called The Paradox.",
+            "I'm Zealand. &gt;&gt; She hates when I listen to Blink when I skate on the side of the street.",
+            "She wants to change up about me.",
+            "Her car costs more than my crib and her dad.",
+            "No matter what I do, I'll never be like you."
+          ]
+        },
+        {
+          "id": "XTeJ64KD5cg",
+          "ratio": 0.761,
+          "sample": [
+            "If you actually tried to picture Graham's",
+            "That's not just some sort of crazy sort of pictorial image-- it would.",
+            "It would-- you couldn't store that much information in your head.",
+            "People think mathematicians just basically",
+            "Well, because there's a sort of maximum"
+          ]
+        },
+        {
+          "id": "J7DzL2_Na80",
+          "ratio": 0.748,
+          "sample": [
+            "And I'm Gilbert Strang.",
+            "And the course web page, which has",
+            "got a lot of exercises from the past, MATLAB the syllabus for the course is",
+            "This is my plan. the fundamental problem of linear which is to solve a system of linear",
+            "So an equal number of equations and"
+          ]
+        },
+        {
+          "id": "5KVDDfAkRgc",
+          "ratio": 0.669,
+          "sample": [
+            "The impact of superhuman AI over the next decade will exceed that of the industrial revolution.",
+            "That is the opening claim of AI 2027.",
+            "He is known for being very early and very right about what's",
+            "So, when Daniel sat down to game out a month-by-month prediction of the next few years of AI progress, the world sat up and listened.",
+            "I actually read the paper of the guy that you had to the world's most cited computer scientist, the godfather of AI."
+          ]
+        }
+      ]
+    },
+    {
+      "severity": "MED",
+      "code": "contradictions_missed",
+      "msg": "2/2 planted cross-video contradictions not surfaced",
+      "missed": [
+        {
+          "pair": [
+            "aqBHXNGKvKU",
+            "dzOTaNwiFmA"
+          ],
+          "topic": "saturated fat",
+          "surfaced": false
+        },
+        {
+          "pair": [
+            "AxIOGqHQqZM",
+            "2su8e-nhMGw"
+          ],
+          "topic": "breakfast",
+          "surfaced": false
+        }
+      ]
+    },
+    {
+      "severity": "MED",
+      "code": "synthesis_synonyms",
+      "msg": "synthesize('AGI') found 0 consensus points (token-Jaccard misses synonyms?)"
+    },
+    {
+      "severity": "LOW",
+      "code": "speaker_collapse",
+      "msg": "multi-speaker debate collapsed to a single speaker (no diarization backend)"
+    }
+  ],
+  "errors": []
+}
