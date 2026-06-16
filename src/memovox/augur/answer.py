@@ -88,11 +88,31 @@ def _rel_tokens(text: str) -> set:
             if t not in _REL_STOP and t not in _COMMON_WORDS and len(t) > 2}
 
 
+# Generic filler verbs + query-framing meta-words. Dropped from COVERAGE so they
+# neither fake coverage for an out-of-corpus query ("how do plants MAKE energy" — the
+# absent subject 'plants' must not be rescued by the filler 'make') nor demand coverage
+# that over-refuses a real one ("how does gravity WORK", "what do the SOURCES say about
+# X"). Distinct from _COMMON_WORDS: context nouns (save, home, plants, dog) are KEPT.
+_COVERAGE_FILLER = frozenset("""
+make makes made making get gets got getting take takes took taking use uses used using
+work works worked working go goes going come comes coming give gives gave given giving
+find finds finding put puts putting keep keeps keeping let lets letting want wants wanting
+need needs needing like likes look looks looking seem seems become becomes happen happens
+mean means meant call calls called turn turns help helps start starts begin begins
+show shows showed showing tell explain explains explaining describe describes mention
+mentions discuss discusses discussing cover covers covering talk talks talking
+source sources video videos clip clips talk speaker speakers lecture episode podcast
+thing things way ways kind sort lot stuff topic topics idea ideas point points part parts
+""".split())
+
+
 def _coverage_tokens(text: str) -> set:
-    """CONTENT tokens for coverage: only function/question words removed — common
-    words ("save", "home", "dog") are KEPT so the gate checks that the cited moment
-    shares the query's CONTEXT, not just its topic word (the polysemy defense)."""
-    return {t for t in tokenize(text) if t not in _REL_STOP and len(t) > 2}
+    """CONTENT tokens for coverage: function/question words, plus generic filler verbs
+    and query-framing meta-words, removed — but real CONTEXT nouns ("save", "home",
+    "plants", "dog") are KEPT so the gate checks the cited moment shares the query's
+    context (the polysemy defense) without being fooled or blocked by filler."""
+    return {t for t in tokenize(text)
+            if t not in _REL_STOP and t not in _COVERAGE_FILLER and len(t) > 2}
 
 
 # A query token counts as a genuine corpus TOPIC (vs an incidental hapax) when it
@@ -116,11 +136,16 @@ def _relevance_coverage(store, query: str, citations: List["Citation"],
          moments (save/home absent) -> low coverage -> refuse, even though "energy"
          recurs (df=119) in a different sense.
 
-    FUNDAMENTAL LIMIT (free/lexical path): a query whose topic word genuinely co-occurs
-    with its context words in the corpus IN A DIFFERENT SENSE ("train my DOG to sit" vs
-    the CS229 'training a dog' RL analogy) cannot be distinguished lexically — word-sense
-    disambiguation needs semantics. The optional sentence-transformers [embed] backend
-    (dense query/moment similarity) resolves these residual sense collisions."""
+    FUNDAMENTAL LIMITS (free/lexical path), all resolved by the optional sentence-
+    transformers [embed] backend (dense query/moment similarity), none by bag-of-words:
+      - WORD-SENSE collision: a topic word that genuinely co-occurs with its context
+        words in a DIFFERENT sense ("train my DOG to sit" vs the CS229 'training a dog'
+        RL analogy; "speed limit" vs "speed of light") cannot be disambiguated lexically.
+      - VOCABULARY gap: a subject the corpus discusses under a DIFFERENT word
+        ("superintelligence" spoken as "superhuman AI"; "backpropagation" as "back
+        propagation") has doc_freq 0, so the topicality gate over-refuses it. A title
+        carries the word but indexing titles into moment-FTS inflates title-word df and
+        regresses retrieval, so it is intentionally NOT done here."""
     distinctive = _rel_tokens(query)
     cov_q = _coverage_tokens(query)
     if not cov_q:

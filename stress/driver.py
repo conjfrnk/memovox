@@ -357,6 +357,14 @@ def main():
         if hr < 0.8:
             finding("HIGH", "retrieval", f"ask hit-rate {hr:.2f} (<0.80)",
                     misses=[a["q"] for a in expected_hits if not a.get("hit")])
+    # over-refused probes (reporting integrity: a refusal must never be counted as a
+    # successful answer — surface every ask that returned low_evidence).
+    refused_asks = [a["q"] for a in report["asks"] if a.get("low_evidence")]
+    report["aggregate"]["asks_refused"] = refused_asks
+    if refused_asks:
+        finding("MED", "asks_over_refused",
+                f"{len(refused_asks)} in-corpus probe(s) over-refused (low_evidence)",
+                asks=refused_asks)
     # planted contradictions
     missed = [p for p in found if not p["surfaced"]]
     if missed:

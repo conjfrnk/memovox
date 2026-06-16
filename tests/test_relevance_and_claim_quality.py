@@ -118,6 +118,23 @@ class TestRelevanceGate(unittest.TestCase):
         self.assertTrue(ans.low_evidence)
         self.assertEqual(ans.citations, [])
 
+    def test_filler_verb_does_not_rescue_absent_subject(self):
+        # "plants" is absent (df=0); the only matches are the filler verb "make" and a
+        # wrong-sense "energy". A generic filler verb must NOT inflate coverage enough
+        # to answer an out-of-corpus question.
+        ans = augur.ask(self.store, "how do plants make energy?",
+                        embedder=self.emb, settings=Settings())
+        self.assertTrue(ans.low_evidence)
+        self.assertEqual(ans.citations, [])
+
+    def test_generic_verb_phrasing_is_answered(self):
+        # A real topic asked with a generic verb ("how does X work?") must answer —
+        # the filler verb is dropped from coverage so it cannot cause over-refusal.
+        ans = augur.ask(self.store, "how does photosynthesis work?",
+                        embedder=self.emb, settings=Settings())
+        self.assertFalse(ans.low_evidence)
+        self.assertTrue(ans.citations)
+
     def test_title_only_subject_is_answered(self):
         # A distinctive subject that appears ONLY in the video title (df=0 in
         # transcripts) is still a genuine topic -> title-aware topicality keeps it.
