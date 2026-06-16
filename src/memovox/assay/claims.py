@@ -191,6 +191,78 @@ def salience_score(claim: Claim) -> float:
     return round(min(1.0, score), 4)
 
 
+# W5.2 — conservative low-value-claim filter (precision over recall: better to keep
+# a borderline claim than drop a real one). Demotes, never deletes.
+_GREETING_STARTS = (
+    "my name is", "my name's", "hello", "hi ", "hey ", "hey,", "welcome",
+    "good morning", "good afternoon", "good evening",
+    "thanks for", "thank you for", "thanks everyone", "thank you everyone",
+)
+_AD_RE = re.compile(r"\b(support|sponsored|brought to you|this episode) .*?(by|from|comes from)\b")
+_URL_RE = re.compile(r"(https?://|www\.|\.com\b|\.org\b|\.net\b|\.io\b)")
+# Navigational/promotional imperatives only — NOT content verbs (look/see/watch),
+# which routinely lead real assertions ("Look at the data showing…").
+_IMPERATIVE_VERBS = {"subscribe", "click", "visit", "follow", "download", "sign"}
+
+
+def is_non_claim(text: str) -> bool:
+    """True for greetings, self-introductions, ad/sponsor reads, bare URLs, and
+    short navigational imperatives — utterances that carry no verifiable assertion."""
+    t = (text or "").strip()
+    if len(t) < 2:
+        return True
+    low = t.lower()
+    if any(low.startswith(g) for g in _GREETING_STARTS):
+        return True
+    if _AD_RE.search(low):
+        return True
+    if any(k in low for k in ("learn more", "check out", "go to ")) and _URL_RE.search(low):
+        return True
+    toks = tokenize(t)
+    if toks and toks[0].lower() in _IMPERATIVE_VERBS and len(toks) <= 6:
+        return True
+    return False
+
+
+def is_sentence_fragment(text: str) -> bool:
+    """True for a continuation fragment — text starting lowercase, which a real
+    sentence/claim never does. These are produced when a sentence is split across a
+    Moment boundary, leaving a dangling tail ("number in your head, then…").
+    ONLY meaningful for punctuated/cased transcripts — see is_low_value_claim."""
+    t = (text or "").strip()
+    return bool(t) and t[0].islower()
+
+
+_SENTENCE_PUNCT_RE = re.compile(r"[.!?][\"')\]]?\s+[A-Z0-9\"'(]")
+
+
+def transcript_is_punctuated(text: str) -> bool:
+    """Does this transcript use real sentence punctuation (manual/cased captions),
+    vs. unpunctuated all-lowercase auto-captions ("so today we want to talk about")?
+    Continuation-fragment detection (which keys off leading case) is only valid for
+    the former; on auto-captions EVERY sentence starts lowercase, so applying it
+    would demote the entire video's claims."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    # Multi-sentence cased text: a terminator followed by a capitalized next sentence.
+    if _SENTENCE_PUNCT_RE.search(t):
+        return True
+    # A single cased sentence: starts uppercase AND ends with terminal punctuation.
+    # The leading-case requirement avoids misreading an all-lowercase auto-caption
+    # sentence (which merely ends in ".") as a fragment-checkable cased transcript.
+    return t[0].isupper() and t.endswith((".", "!", "?"))
+
+
+def is_low_value_claim(text: str, *, punctuated: bool = True) -> bool:
+    """Demotion predicate (W5.2): a claim not worth committing to the trusted layer.
+    Non-claim utterances always qualify; continuation fragments only when the source
+    transcript is punctuated (else leading-case is not a fragment signal)."""
+    if is_non_claim(text):
+        return True
+    return punctuated and is_sentence_fragment(text)
+
+
 def extract_claims(
     moment: Moment, *, llm: Optional[LLMBackend] = None, min_words: int = 4
 ) -> List[Claim]:

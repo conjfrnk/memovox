@@ -73,6 +73,15 @@ class Settings:
     top_k: int = 8
     contradiction_threshold: float = 0.55
     rerank_backend: str = "auto"  # M2.1: "auto" -> cross-encoder iff installed, else identity
+    # W5.1: refuse confident answers when the cited evidence does not cover the
+    # query's distinctive (IDF-weighted) terms — the "no citation, no claim" promise.
+    # Coverage in [0,1]; below this floor the answer is flagged low_evidence and the
+    # (irrelevant) citations are withheld. 0.0 disables the gate.
+    answer_relevance_floor: float = 0.55
+    # The IDF coverage signal needs a corpus large enough to tell a rare topic term
+    # from a generic term that is merely absent from a tiny store. Below this many
+    # moments the gate is disabled (any real single video already has far more).
+    answer_relevance_min_moments: int = 50
     planner_agentic: bool = False  # M2.2: use the LLM query decomposer (opt-in; deterministic default)
     clip_merge_gap_s: float = 2.5  # M2.3: merge cited spans <= this gap into one stitched clip
     vector_prefilter_fts: bool = False  # M0.2: restrict vector candidates to FTS hits (opt-in)

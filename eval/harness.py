@@ -195,6 +195,8 @@ _INTENTIONALLY_UNPINNED = frozenset({
     "rerank_backend",  # M2.1: backend selector (pinned to 'none' in _FREE_BACKENDS)
     "clip_merge_gap_s",  # M2.3: clip stitch gap tuning knob
     "decay_halflife_days",  # M3.1: recency half-life tuning knob
+    "answer_relevance_floor",       # W5.1: out-of-corpus refusal threshold (numeric knob)
+    "answer_relevance_min_moments",  # W5.1: min corpus size before the gate activates
 })
 
 # Frozen FULL Settings snapshot (M1.2 W8) — beyond _DEFAULT_OFF_FLAGS, this pins
@@ -202,6 +204,7 @@ _INTENTIONALLY_UNPINNED = frozenset({
 # keyframe knobs, …). A change to ANY default fails the snapshot test, forcing a
 # conscious update + a fresh gold re-baseline — the determinism-erosion defense.
 EVAL_SETTINGS_SNAPSHOT = {
+    "answer_relevance_floor": 0.55, "answer_relevance_min_moments": 50,
     "asr_allow_cpu": False, "asr_backend": "auto", "asr_compute_type": "default",
     "asr_device": "auto", "boundary_similarity": 0.45, "budget_mode": "soft",
     "captions_as_prior": True, "clip_merge_gap_s": 2.5,

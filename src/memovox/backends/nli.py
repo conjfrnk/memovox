@@ -22,6 +22,11 @@ _NEGATIONS = {
     "not", "no", "never", "cannot", "cant", "wont", "dont", "doesnt", "didnt",
     "isnt", "arent", "wasnt", "werent", "none", "neither", "nor", "without",
     "n't", "false", "incorrect",
+    # W5.3: negation-polarity words that real speech uses in place of a bare "not"
+    # ("reducing saturated fat does NOTHING to protect your heart"). Unambiguous
+    # polarity markers only — content verbs like "fails"/"lacks" are excluded to
+    # keep contradiction precision high.
+    "nothing", "nobody", "nowhere", "hardly", "barely", "scarcely",
 }
 # Very small stopword set so containment focuses on content words.
 _STOP = {

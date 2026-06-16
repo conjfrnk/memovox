@@ -7,7 +7,13 @@ from typing import List, Optional
 from ..backends.base import LLMBackend, NLIBackend
 from ..config import Settings
 from ..loom.models import STATUS_COMMITTED, STATUS_UNSUPPORTED, Claim, Moment
-from .claims import epistemic_type, extract_claims, salience_score
+from .claims import (
+    epistemic_type,
+    extract_claims,
+    is_low_value_claim,
+    salience_score,
+    transcript_is_punctuated,
+)
 from .spans import is_contiguous_in, premise_covers, span_text
 from .verify import verify_claim
 
@@ -27,6 +33,9 @@ def run(
     """
     settings = settings or Settings()
     claims = extract_claims(moment, llm=llm)
+    # W5.2: fragment detection keys off leading case, which is only valid when the
+    # transcript is actually punctuated (manual captions). Computed once per Moment.
+    punctuated = transcript_is_punctuated(moment.transcript)
     for claim in claims:
         # Verify each claim against the source text of its OWN located span
         # (W1.2), not the whole Moment — so a hallucinated claim whose tokens
@@ -54,6 +63,11 @@ def run(
         if not premise_covers(premise, claim.text) and is_contiguous_in(claim.text, moment.transcript):
             premise = moment.transcript
         verify_claim(nli, claim, premise, threshold=settings.entailment_threshold)
+        # W5.2: demote low-value claims (greetings, ad reads, navigational
+        # imperatives, and continuation fragments split across a Moment boundary).
+        # Conservative + high-precision; retained as unsupported, never dropped.
+        if claim.status == STATUS_COMMITTED and is_low_value_claim(claim.text, punctuated=punctuated):
+            claim.status = STATUS_UNSUPPORTED
         # Salience floor (spec §5): salience drives retrieval priority + summary
         # inclusion, so a low-salience claim is not worth committing to the
         # trusted layer even when entailed. Default floor 0.0 demotes nothing.

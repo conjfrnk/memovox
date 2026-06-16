@@ -739,6 +739,28 @@ class LoomStore:
     def lexical_search(self, query: str, top_k: int = 20) -> List[Tuple[str, float]]:
         return self.lexical_index.search(query, top_k)
 
+    def doc_freq(self, term: str) -> int:
+        """Corpus document frequency: how many moments contain ``term`` (for IDF
+        weighting of answer relevance, W5.1). FTS5 MATCH when available, else a
+        LIKE scan over transcripts. The term is treated as a literal phrase."""
+        term = (term or "").strip()
+        if not term:
+            return 0
+        if self.fts:
+            try:
+                row = self.conn.execute(
+                    "SELECT COUNT(*) FROM moments_fts WHERE moments_fts MATCH ?",
+                    (f'"{term}"',),
+                ).fetchone()
+                return int(row[0]) if row else 0
+            except sqlite3.OperationalError:
+                pass  # fall through to the LIKE scan
+        row = self.conn.execute(
+            "SELECT COUNT(*) FROM moments WHERE LOWER(transcript) LIKE ?",
+            (f"%{term.lower()}%",),
+        ).fetchone()
+        return int(row[0]) if row else 0
+
     def vector_search(
         self, query_vec: Sequence[float], top_k: int = 20, *,
         video_id: Optional[str] = None, query_text: Optional[str] = None,

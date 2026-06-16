@@ -8,6 +8,7 @@ configured. Low-evidence queries are flagged rather than confabulated.
 
 from __future__ import annotations
 
+import math
 from typing import List, Optional, Tuple
 
 from ..backends.base import Embedder, LLMBackend, Reranker
@@ -25,6 +26,56 @@ _LOW_EVIDENCE_MSG = (
     "I don't have enough indexed evidence to answer that confidently. "
     "Try ingesting more sources or rephrasing."
 )
+
+
+# W5.1 relevance gate — stopwords mirror loom._content_tokens so "distinctive"
+# query terms are judged the same way across retrieval and consolidation.
+_REL_STOP = {
+    "the", "a", "an", "of", "to", "in", "on", "at", "for", "and", "or", "is",
+    "are", "was", "were", "be", "been", "it", "this", "that", "these", "those",
+    "as", "by", "with", "from", "we", "you", "they", "i", "not", "no",
+    "what", "which", "who", "whom", "whose", "when", "where", "why", "how",
+    "do", "does", "did", "say", "said", "tell", "about", "their", "his", "her",
+}
+
+
+def _rel_tokens(text: str) -> set:
+    return {t for t in tokenize(text) if t not in _REL_STOP and len(t) > 2}
+
+
+def _relevance_coverage(store, query: str, citations: List["Citation"],
+                        min_moments: int = 0) -> float:
+    """IDF-weighted fraction of the query's distinctive content tokens that the
+    CITED moments actually cover. ~1.0 when the citations contain the query's rare
+    terms; ~0 when the query asks about something absent from the corpus. This is
+    the signal behind the W5.1 gate: out-of-corpus questions match only generic
+    tokens (their distinctive terms have no corpus support), so coverage collapses.
+    Returns 1.0 (never gate) when the query has no distinctive tokens."""
+    q = _rel_tokens(query)
+    if not q:
+        return 1.0
+    try:
+        n = max(1, int(store.stats().get("moments", 1)))
+    except Exception:  # noqa: BLE001 - stats is best-effort; never break an answer
+        n = 1
+    if n < min_moments:
+        return 1.0  # corpus too small for IDF to be a reliable relevance signal
+    cited: set = set()
+    for c in citations:
+        cited |= _rel_tokens(c.source_text or c.snippet or "")
+
+    def idf(tok: str) -> float:
+        return math.log((n + 1) / (store.doc_freq(tok) + 1))
+
+    weights = {t: idf(t) for t in q}
+    total = sum(weights.values())
+    # Degenerate case: every query content token appears in (almost) every moment
+    # (idf -> 0), so there is no distinctive term to assess — the query is maximally
+    # on-topic. Never gate here (this is also the small-corpus / unit-test regime).
+    if total < 1e-6:
+        return 1.0
+    covered = sum(w for t, w in weights.items() if t in cited)
+    return covered / total
 
 
 def _best_sentence(text: str, query: str) -> str:
@@ -274,9 +325,21 @@ def ask(
         else:
             text = _synthesize_extractive(citations)
 
-        low_evidence = not text.strip()
+        # W5.1: a synthesized answer is only trustworthy if the cited evidence
+        # actually covers what was asked. Gate on IDF-weighted query coverage so an
+        # out-of-corpus question ("capital of Mongolia") is refused rather than
+        # answered with the nearest-but-irrelevant moments. Withhold the citations
+        # too — presenting them would itself be an unsupported claim.
+        floor = getattr(settings, "answer_relevance_floor", 0.0)
+        relevance = _relevance_coverage(
+            store, query, citations,
+            min_moments=getattr(settings, "answer_relevance_min_moments", 0),
+        ) if floor > 0 else 1.0
+        low_evidence = (not text.strip()) or relevance < floor
         if low_evidence:
             text = _LOW_EVIDENCE_MSG
+            citations = []
+        _sp.add_counter("relevance", round(relevance, 4))
         _sp.add_counter("citations", len(citations))
     # M2.3 clip stitching (spec §5/§8): a strictly ADDITIVE final step reading the
     # finalized citations — it widens cited spans into deep-linked watch windows and
