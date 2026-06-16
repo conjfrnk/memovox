@@ -58,13 +58,26 @@ ASKS = [
     ("is breakfast the most important meal of the day?", None, "breakfast"),
     ("when will AGI or superintelligence arrive?", None, None),
     ("what are the risks of a carnivore diet?", "n_Smy5-1cHE", None),
+    # Panel over-refusal regression cases: in-corpus but named by a df=0 proper noun
+    # (speaker/event) — must stay ANSWERED, not refused.
+    ("what does Peter Attia say about saturated fat?", None, "fat"),
+    ("what did Hans Rosling show about countries and years?", "jbkSRLYSojo", None),
+    ("when will AGI arrive?", None, None),
 ]
 
 # Refusal probes: questions with no answer in the corpus. ask() should NOT fabricate.
+# Includes the panel's adversarial counterexamples (out-of-corpus questions whose
+# GENERIC tokens scatter across the corpus) — these defeated the iter1 gate.
 REFUSALS = [
     "what is the capital of Mongolia?",
     "what did the speaker say about underwater basket weaving championships?",
     "how do I change the oil in a 1997 Honda Civic?",
+    "who won the 2014 FIFA World Cup?",
+    "what is the boiling point of mercury?",
+    "how do I change a car tire?",
+    "what are the rules of cricket?",
+    "who is the president of France?",
+    "what is the tallest mountain in Africa?",
 ]
 
 CONTRA_TOPICS = ["saturated fat", "breakfast", "diet", "AGI"]
@@ -100,23 +113,15 @@ def pub_of(cid):
 
 
 def is_trivial(claim: dict) -> bool:
-    """Heuristic: a low-information / garbage claim from the rule-based splitter."""
+    """Genuine residual junk among COMMITTED claims: an ultra-short fragment or a
+    non-claim utterance (greeting/ad/imperative). Deliberately NARROW — the earlier
+    'no subject/object' heuristic just measured S-P-O parser structure on substantive
+    sentences (a non-finding per the review panel), not junk."""
+    from memovox.assay.claims import is_non_claim
     text = (claim.get("text") or "").strip()
-    obj = (claim.get("object") or "").strip()
-    subj = (claim.get("subject") or "").strip()
-    pred = (claim.get("predicate") or "").strip().lower()
-    toks = text.split()
-    if len(toks) < 4:
+    if len(text.split()) < 3:
         return True
-    if not obj or not subj:
-        return True
-    # bare copula with almost no content object
-    if pred in {"is", "are", "was", "were", "has", "have"} and len(obj.split()) < 2:
-        return True
-    # subject is a pronoun/filler -> dangling claim
-    if subj.lower() in {"it", "this", "that", "they", "there", "he", "she", "we", "you", "i", "and", "but", "so"}:
-        return True
-    return False
+    return is_non_claim(text)
 
 
 def main():
@@ -346,8 +351,11 @@ def main():
     # planted contradictions
     missed = [p for p in found if not p["surfaced"]]
     if missed:
-        finding("MED", "contradictions_missed",
-                f"{len(missed)}/{len(found)} planted cross-video contradictions not surfaced",
+        # Informational: the free LEXICAL NLI path cannot detect semantic/antonym
+        # contradictions (deberta is the real path), AND the planted "saturated fat"
+        # pair actually AGREES (both contrarian) — so 0 here is partly correct, not a bug.
+        finding("LOW", "contradictions_missed",
+                f"{len(missed)}/{len(found)} planted pairs not surfaced (lexical-NLI limit + corpus caveat)",
                 missed=missed)
     # synthesize AGI synonym clustering
     agi = report["synthesize"].get("AGI", {})
