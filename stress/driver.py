@@ -78,6 +78,11 @@ REFUSALS = [
     "what are the rules of cricket?",
     "who is the president of France?",
     "what is the tallest mountain in Africa?",
+    # Single-distinctive-token cases: the only in-corpus token is an incidental hapax
+    # (df<=2), not a genuine topic — the iter2 leak class.
+    "what time does the bank open?",
+    "how do I file my taxes?",
+    "how do I train a puppy?",
 ]
 
 CONTRA_TOPICS = ["saturated fat", "breakfast", "diet", "AGI"]

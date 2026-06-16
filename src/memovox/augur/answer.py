@@ -87,10 +87,10 @@ def _rel_tokens(text: str) -> set:
             if t not in _REL_STOP and t not in _COMMON_WORDS and len(t) > 2}
 
 
-# Minimum distinctive query mass (as a fraction of the max possible IDF, log(n+1))
-# required for an answer to clear the relevance gate. Calibrated on the stress corpus
-# so a query whose only in-corpus term is generic is refused. See _relevance_coverage.
-_RELEVANCE_MIN_MASS_FRAC = 0.35
+# A query token counts as a genuine corpus TOPIC (vs an incidental hapax) when it
+# appears in at least this fraction of moments (with a small absolute floor). Used by
+# the topicality gate in _relevance_coverage.
+_RELEVANCE_TOPIC_DF_FRAC = 0.0009
 
 
 def _relevance_coverage(store, query: str, citations: List["Citation"],
@@ -109,34 +109,33 @@ def _relevance_coverage(store, query: str, citations: List["Citation"],
     except Exception:  # noqa: BLE001 - stats is best-effort; never break an answer
         n = 1
     if n < min_moments:
-        return 1.0  # corpus too small for IDF to be a reliable relevance signal
+        return 1.0  # corpus too small for the df signal to be reliable
 
-    # IDF over the query's DISTINCTIVE tokens (function + common words already removed
-    # by _rel_tokens). KEEP tokens absent from the corpus (df==0) at max IDF: an absent
-    # distinctive term ("mercury", "mongolia") is exactly what should sink coverage for
-    # an out-of-corpus question. (Generic absent words like "arrive" were already
-    # dropped as common, so they can't wrongly veto a real question.)
-    weights = {t: math.log((n + 1) / (store.doc_freq(t) + 1)) for t in q}
-    total = sum(weights.values())
-    if total < 1e-6:
-        return 1.0  # only ubiquitous (idf~0) terms -> maximally on-topic, never gate
+    # TOPICALITY GATE. The query must mention at least one genuine corpus TOPIC — a
+    # distinctive token that recurs across several moments (df >= min_df), not an
+    # incidental hapax that merely appears once. This is what separates an answerable
+    # question ("what is AGI?", agi in 14 moments) from an out-of-corpus one whose only
+    # in-corpus token is incidental ("what time does the BANK open?", bank in 1 moment).
+    # IDF-mass coverage could not make this distinction: a lone rare-but-present token
+    # scored 1.0 (fabrication) while a lone rare-but-absent token scored ~0 (over-
+    # refusal). Counting, not mass, is the robust signal.
+    min_df = max(2, round(_RELEVANCE_TOPIC_DF_FRAC * n))
+    df_map = {t: store.doc_freq(t) for t in q}
+    if not any(df >= min_df for df in df_map.values()):
+        return 0.0  # no genuine corpus topic in the query -> refuse
 
-    # Backstop: a real query carries a MINIMUM distinctive mass; floor the denominator
-    # as a fraction of the maximum possible IDF (log(n+1)) so it is corpus-size-robust.
-    denom = max(total, _RELEVANCE_MIN_MASS_FRAC * math.log(n + 1))
-
-    # JOINT single-moment coverage (max over citations), NOT a union across all results.
-    # Scattered generic tokens each in a different moment must not add up to fake
-    # relevance; a genuinely answerable query has ONE moment that covers its distinctive
-    # terms together. The cited moment's video TITLE is included so questions naming the
-    # speaker/event ("Peter Attia ... saturated fat") match metadata too.
+    # COUNT-BASED single-moment coverage (max over citations): the fraction of the
+    # query's distinctive tokens that ONE cited moment covers (its video TITLE included
+    # so questions naming the speaker/event match metadata). Count, not IDF mass, so no
+    # single rare token can dominate the score in either direction.
     best = 0.0
     for c in citations:
         ctoks = _rel_tokens(" ".join(filter(None, (c.source_text or c.snippet or "", c.title or ""))))
-        covered = sum(w for t, w in weights.items() if t in ctoks)
-        if covered > best:
-            best = covered
-    return best / denom
+        covered = sum(1 for t in q if t in ctoks)
+        frac = covered / len(q)
+        if frac > best:
+            best = frac
+    return best
 
 
 def _best_sentence(text: str, query: str) -> str:

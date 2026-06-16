@@ -39,23 +39,30 @@ class TestRelevanceGate(unittest.TestCase):
                        f"a generic remark number {i} on assorted everyday topics.",
                        speaker_id="spk_0", index=i)
             self.store.add_moment(m, self.emb.embed_one(m.text_for_embedding()))
-        d = Moment("yt:v#m9000", "yt:v", 900.0, 930.0,
-                   "Photosynthesis converts sunlight into chemical energy inside chloroplasts.",
-                   speaker_id="spk_0", index=900)
-        self.store.add_moment(d, self.emb.embed_one(d.text_for_embedding()))
-        # An INCIDENTAL rare-but-generic token ("capital") present in an unrelated
-        # moment — must NOT let an out-of-corpus question about an absent topic pass.
-        e = Moment("yt:v#m9001", "yt:v", 931.0, 960.0,
+        # A genuine TOPIC recurs across several moments (df above the topicality
+        # floor) — unlike an incidental hapax. A real video mentions its subject many
+        # times, so this mirrors reality.
+        for i in range(6):
+            d = Moment(f"yt:v#m90{i:02d}", "yt:v", 900.0 + i, 930.0 + i,
+                       "Photosynthesis converts sunlight into chemical energy inside "
+                       "chloroplasts during the light reactions of photosynthesis.",
+                       speaker_id="spk_0", index=900 + i)
+            self.store.add_moment(d, self.emb.embed_one(d.text_for_embedding()))
+        # An INCIDENTAL hapax token ("capital", one moment) — must NOT let an
+        # out-of-corpus question whose distinctive topic is absent pass the gate.
+        e = Moment("yt:v#m9100", "yt:v", 980.0, 990.0,
                    "The capital expenditure that quarter was unusually high.",
-                   speaker_id="spk_0", index=901)
+                   speaker_id="spk_0", index=910)
         self.store.add_moment(e, self.emb.embed_one(e.text_for_embedding()))
-        # A second video whose TITLE names a speaker not spoken in the transcript.
+        # A second video whose TITLE names a speaker NOT spoken in the transcript;
+        # its topic (glucose metabolism) recurs across moments.
         self.store.upsert_video(Video("yt:w", "https://youtu.be/w",
                                       "Dr Jane Halvorsen explains glucose metabolism"))
-        g = Moment("yt:w#m0000", "yt:w", 0.0, 30.0,
-                   "Glucose metabolism produces ATP through cellular respiration.",
-                   speaker_id="spk_0", index=0)
-        self.store.add_moment(g, self.emb.embed_one(g.text_for_embedding()))
+        for i in range(5):
+            g = Moment(f"yt:w#m00{i:02d}", "yt:w", float(i), float(i) + 30.0,
+                       "Glucose metabolism produces ATP through cellular respiration and "
+                       "glucose oxidation.", speaker_id="spk_0", index=i)
+            self.store.add_moment(g, self.emb.embed_one(g.text_for_embedding()))
 
     def tearDown(self):
         self.store.close()
@@ -79,13 +86,19 @@ class TestRelevanceGate(unittest.TestCase):
         self.assertFalse(ans.low_evidence)
         self.assertTrue(ans.citations)
 
-    def test_out_of_corpus_with_incidental_present_token_is_refused(self):
-        # "capital" is present (incidentally) but the distinctive topic ("mongolia")
-        # is absent -> keep-df=0 veto must sink coverage below the floor.
-        ans = augur.ask(self.store, "what is the capital of Mongolia?",
-                        embedder=self.emb, settings=Settings())
-        self.assertTrue(ans.low_evidence)
-        self.assertEqual(ans.citations, [])
+    def test_single_incidental_token_is_refused_even_when_retrieved(self):
+        # "capital" is an incidental hapax (df=1) that IS retrieved (proven below),
+        # but it is not a genuine corpus topic, so the question must be refused — the
+        # single-distinctive-token leak the iter2 panel caught ("what time does the
+        # bank open?"). Without the gate it would (wrongly) be answered.
+        ungated = augur.ask(self.store, "what is the capital of Mongolia?",
+                            embedder=self.emb, settings=Settings(answer_relevance_floor=0.0))
+        self.assertTrue(any("capital" in (c.snippet or "").lower() for c in ungated.citations),
+                        "the incidental 'capital' moment must actually be retrieved")
+        gated = augur.ask(self.store, "what is the capital of Mongolia?",
+                          embedder=self.emb, settings=Settings())
+        self.assertTrue(gated.low_evidence)
+        self.assertEqual(gated.citations, [])
 
     def test_proper_name_in_title_is_answered(self):
         # The speaker name is only in the video TITLE, not the transcript; the topic
