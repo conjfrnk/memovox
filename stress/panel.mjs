@@ -13,27 +13,34 @@ const PRIOR = 'stress/reports/iter15.json'
 
 const COMMON = `
 You are an ADVERSARIAL reviewer of the memovox pipeline (a free/lexical video-knowledge engine).
-This is ROUND 6. Prior rounds CONFIRMED H1, H1b, H2, M2, M3, the round-2 regression fixes, and the
-synthesize() OOC pool fix. Round 5 found ONE more MED leak — the SAME incidental-token class on the
-find_contradictions(topic=...) path: question-phrased topics roped "I don't know what ..." filler
-into the candidate set and fabricated ~2 cross-video CONTRADICTS (surfaced in synthesize().
-contradictions and the MCP find_contradictions tool). Fixed (2dfcf77) by adding interrogative/
-auxiliary words to consolidate._STOP so _content_tokens drops them (aligning with ask()'s _rel_tokens).
-The store ${STORE} is a FRESH full re-ingest at HEAD (the _STOP change touches consolidate's edge
-graph, so this was re-ingested). Your job: (a) verify the question-word contradiction leak is closed —
-mv.contradictions and synthesize().contradictions must return NO fabricated 'I don't know'-type
-disagreements for question-phrased OR plain topics, while genuine near-mirror contradictions still
-surface; (b) re-verify ALL prior fixes still hold on the fresh store; (c) make a genuine final attempt
-to find ANY remaining >= MED correctness/UX defect. Be skeptical; verify with evidence. Do NOT
-manufacture blockers from FUNDAMENTAL free-path limits (hashing embed / lexical NLI / no diarization /
-vocabulary gaps / word-sense collisions) or pre-existing LOW issues — name them as accepted_limits. If
-the pipeline is genuinely sound on the free path, SAY SO and set team_satisfied=true.
+This is ROUND 7. Prior rounds CONFIRMED H1, H1b, H2, M2, M3, the round-2 regression fixes, the
+synthesize() OOC pool fix, and the question-word contradiction fix. Round 6 found two MED defects of
+ONE root class — the relevance/coverage gate could be satisfied by generic/high-df VERBS without any
+DISTINCTIVE topic token appearing in the cited evidence ('what should I recommend for dinner?' answered
+with 0 dinner-bearing citations; 'who won the world cup?' cited a cheetah + chess clip). This was
+fixed at the ROOT (526c11b): (A) _relevance_coverage now requires the best-covering citation to
+contain a distinctive topic token, not just generic verbs/framing; (B) the irregular common-verb
+inflections (won/happened/winner/...) were added to _COMMON_WORDS. This is a PRINCIPLED, class-closing
+fix, not a one-off. The store ${STORE} is a fresh HEAD re-ingest; the round-6 fix is query-time so your
+LIVE ask()/synthesize() queries exercise it.
+
+Your job: (a) verify the verb/OOC-coverage class is genuinely closed — throw MANY verb-dominated and
+out-of-corpus queries at BOTH ask() and synthesize() (e.g. 'who won X', 'what happened to Y', 'should
+I <verb> a <absent-noun>', 'how do I <verb> a <absent-noun>') and confirm they refuse, while legit
+in-corpus queries (incl. 'which Rolex should I buy?', 'what is AGI?', diet/saturated-fat/Graham/Jobs)
+still answer; (b) re-verify ALL prior fixes hold; (c) make a genuine final attempt to find any
+remaining >= MED correctness/UX defect ANYWHERE. Be rigorous but FAIR: a query whose distinctive topic
+is genuinely absent SHOULD refuse; a thin-but-genuinely-covered topic answering with a FEW focused
+citations is correct. Do NOT manufacture blockers from FUNDAMENTAL free-path limits (hashing embed /
+lexical NLI / no diarization / vocabulary gaps / word-sense collisions) or pre-existing LOW issues —
+name them as accepted_limits. If the pipeline is genuinely sound on the free path, SAY SO and set
+team_satisfied=true.
 
 Context to read first:
 - The post-fix report: ${REPORT} (41 videos, free/captions, nli=lexical, embed=hashing).
 - The previous round's report: ${PRIOR}.
-- The fixes under review: \`git -C /Users/connor/projects/memovox diff 3c6fbc3 2dfcf77\` (all
-  rounds). The newest question-word _STOP fix: \`git -C ... show 2dfcf77\`. Key files:
+- The fixes under review: \`git -C /Users/connor/projects/memovox diff 3c6fbc3 526c11b\` (all
+  rounds). The newest distinctive-coverage fix: \`git -C ... show 526c11b\`. Key files:
     src/memovox/loom/consolidate.py   (_candidate_pairs bucket-blocking; raised max_claims=50000;
                                         scope always in universe; topic filter before cap)
     src/memovox/loom/consensus.py     (partition_claims uses the same bucket-blocking)
@@ -214,10 +221,13 @@ REVIEWS:
 ${JSON.stringify(reviews.map((r, i) => ({ lens: lenses[i].key, ...r })), null, 2)}
 
 Decide team_satisfied. Rules:
- - SATISFIED only when (a) all prior fixes still hold (H1, H1b, H2, M2, M3, the round-2 regression
-   fixes, the synthesize OOC pool fix) AND the question-word contradiction leak is closed (no fabricated
-   filler CONTRADICTS from mv.contradictions / synthesize().contradictions for question-phrased topics),
-   AND (b) no FIXABLE finding of severity >= MED is a genuine correctness/UX defect or a NEW regression.
+ - SATISFIED only when (a) all prior fixes still hold AND the verb/OOC-coverage class is closed (no
+   verb-dominated or out-of-corpus query certifies a confident ask()/synthesize() answer whose
+   distinctive topic is absent from the cited evidence), AND (b) no FIXABLE finding of severity >= MED
+   is a genuine correctness/UX defect or a NEW regression.
+ - IMPORTANT: another instance of the SAME already-fixed class is only a blocker if it reveals the
+   526c11b root fix is INCOMPLETE (a verb/OOC query that STILL leaks). If 526c11b holds across your
+   probes, the class is closed — do not block on a hypothetical you cannot reproduce.
    A synthesize() answer with a FEW focused on-topic citations for a thinly-but-genuinely-covered topic
    is NOT a leak. FUNDAMENTAL free-path limits (hashing embed / lexical NLI / no diarization / vocabulary
    gaps) and pre-existing LOW issues NEVER block — name them as accepted_limits. Do NOT manufacture a
