@@ -18,11 +18,21 @@ from ..util import split_sentences
 
 FILLERS = {"um", "uh", "erm", "uhh", "umm", "mm", "hmm", "mhm", "uhm", "ah", "er"}
 EVENT_RE = re.compile(
-    r"\[\s*(music|applause|laughter|silence|inaudible|noise|crosstalk|cheering|"
-    r"chuckles?|singing|humming|instrumental|sighs?|groans?|coughs?|gasps?|"
-    r"clears throat|beep|static|whistling)[^\]]*\]",
+    r"\[\s*(music|applause|laughs?|laughter|laughing|silence|inaudible|noise|"
+    r"crosstalk|cheering|chuckles?|singing|humming|instrumental|sighs?|groans?|"
+    r"coughs?|gasps?|clears throat|beep|static|whistling|ticking|sizzling|"
+    r"ringing|rings|dings?|bells?|footsteps|wind|rain|thunder)[^\]]*\]",
     re.IGNORECASE,
 )
+#: After the whitelist pass, a RESIDUAL ``[...]`` span in caption text is a non-speech
+#: annotation the whitelist did not name — sound effects ([clock ticking]), foreign-
+#: language markers ([speaking in Thai]), bracketed speaker labels ([Mark Wiens]), or
+#: censored profanity ([ __ ]). Strip it so it never lands in a claim. Guard against
+#: eating legitimate code/math brackets ([i], [b,t], [0]) by only stripping spans whose
+#: inner text is a WORD annotation (a 3+ letter run) or all-underscore censorship.
+_RESIDUAL_BRACKET_RE = re.compile(r"\[[^\]\n]{1,60}\]")
+_BRACKET_WORD_RE = re.compile(r"[A-Za-z]{3,}")
+_BRACKET_CENSOR_RE = re.compile(r"^[\s_]+$")
 #: Musical-note markers wrap sung lyrics in captions. A line carrying one is music
 #: (a song), NOT spoken video content, so it becomes a timeline event rather than a
 #: claim. Unambiguous: these glyphs appear only for music, so there is no false
@@ -44,7 +54,14 @@ _SPEAKER_PARTICLES = {"van", "von", "de", "del", "der", "da", "di", "la", "le",
 _SPEAKER_DISCOURSE = {"but", "and", "for", "so", "well", "okay", "ok", "now", "yes",
                       "no", "oh", "then", "also", "because", "however", "i", "we",
                       "they", "he", "she", "it", "this", "that", "there", "here",
-                      "what", "when", "why", "how", "anyway", "right"}
+                      "what", "when", "why", "how", "anyway", "right",
+                      # single-word section/interjection openers that end in a colon but
+                      # are sentence framing, not a speaker label ("Note:", "Today:")
+                      "note", "today", "look", "listen", "wait", "see", "first",
+                      "second", "third", "next", "finally", "warning", "breaking",
+                      "remember", "update", "tip", "summary", "conclusion", "basically",
+                      "honestly", "actually", "literally", "meanwhile", "again",
+                      "maybe", "perhaps", "alright", "hey", "welcome", "thanks", "plus"}
 
 
 def _looks_like_speaker(name: str) -> bool:
@@ -221,6 +238,17 @@ def clean_text(raw: str) -> Tuple[str, List[str]]:
     """Return (cleaned speech text, list of audio-event keywords)."""
     events = [e.lower() for e in EVENT_RE.findall(raw)]
     stripped = EVENT_RE.sub(" ", raw)
+
+    def _strip_bracket(m: re.Match) -> str:
+        inner = m.group(0)[1:-1].strip()
+        if _BRACKET_CENSOR_RE.match(inner):
+            return " "  # censored profanity "[ __ ]" -> drop, not a timeline event
+        if _BRACKET_WORD_RE.search(inner):
+            events.append(inner.lower()[:40])  # non-speech annotation -> timeline marker
+            return " "
+        return m.group(0)  # code/math like [i], [b,t], [0] -> keep
+
+    stripped = _RESIDUAL_BRACKET_RE.sub(_strip_bracket, stripped)
     stripped = _TAG_RE.sub(" ", stripped)
     # Decode HTML entities AFTER tag stripping (so a decoded ``&lt;`` is not re-read
     # as a tag): WebVTT escapes ``&`` ``<`` ``>`` and emits ``&nbsp;``/``&#39;`` —
@@ -252,6 +280,15 @@ def clean_segments(segments: List[Segment]) -> List[Segment]:
     current: Optional[str] = None  # persistent speaker across ">>"-delimited turns
     anon_idx = 0
     saw_turn = False
+    # Case-insensitive canonicalization of named speakers WITHIN a video: captions
+    # often spell the same person two ways ("YANJAA" in a label, "Yanjaa" in a <v> tag),
+    # which otherwise splits into two speaker ids with duplicated turns. Collapse to the
+    # first-seen casing.
+    speaker_canon: dict = {}
+
+    def _canon(name: str) -> str:
+        return speaker_canon.setdefault(name.casefold(), name)
+
     for seg in segments:
         # A musical-note-marked line is song/lyrics, not spoken content — record it
         # as a music event and emit no speech (so it never becomes a claim).
@@ -265,6 +302,7 @@ def clean_segments(segments: List[Segment]) -> List[Segment]:
             if m:
                 speaker = m.group(1).strip()
         if speaker:
+            speaker = _canon(speaker)
             current = speaker
         elif _TURN_START_RE.match(seg.text or ""):
             # A ">>" with no name starts a new anonymous turn (the first one keeps

@@ -79,6 +79,9 @@ too took top total touch toward tried true try turn type under understand until 
 use used usual very view visit wait walk want watch water way week well went were what
 when where whether while white whole why will win window wish within without word work
 world would write wrong year yes yet young
+recommend recommended recommends recommendation recommendations suggest suggests
+suggested suggestion suggestions advise advice purchase purchases purchased purchasing
+buy buys buying bought sell sells selling sold choose chooses choosing chose pick picks
 """.split())
 
 
@@ -103,6 +106,8 @@ show shows showed showing tell explain explains explaining describe describes me
 mentions discuss discusses discussing cover covers covering talk talks talking
 source sources video videos clip clips talk speaker speakers lecture episode podcast
 thing things way ways kind sort lot stuff topic topics idea ideas point points part parts
+recommend recommended recommends recommendation suggest suggests suggested suggestion
+advise advice purchase purchases purchased buy buys buying bought best better way
 """.split())
 
 

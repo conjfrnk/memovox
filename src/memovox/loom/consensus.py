@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from ..util import parse_iso
-from .consolidate import _content_tokens
+from .consolidate import _BUCKET_CAP, DEFAULT_MAX_CLAIMS, _candidate_pairs, _content_tokens
 from .models import Claim
 
 # Consensus weighting. Source count dominates (more independent sources asserting
@@ -146,6 +146,7 @@ def _cosine(a, b) -> float:
 def partition_claims(
     claims: List[Claim], *, min_shared: int = 2, jaccard: float = 0.5,
     cosine: float = 0.0, vectors: Optional[Dict[str, list]] = None,
+    bucket_cap: int = _BUCKET_CAP,
 ):
     """Union-find partition of claims into equivalence groups (pure, no store).
 
@@ -162,34 +163,23 @@ def partition_claims(
     tokens = {c.claim_id: _content_tokens(c.text) for c in claims}
     vectors = vectors or {}
 
-    inverted = defaultdict(list)
-    for cid, toks in tokens.items():
-        for t in toks:
-            inverted[t].append(cid)
-
     uf = _UnionFind(by_id.keys())
     cross_video: List[tuple] = []
-    seen_pairs = set()
-    for cid_a, toks_a in tokens.items():
-        candidates = {cid for t in toks_a for cid in inverted[t]}
-        for cid_b in candidates:
-            if cid_a >= cid_b:
-                continue
-            key = (cid_a, cid_b)
-            if key in seen_pairs:
-                continue
-            seen_pairs.add(key)
-            toks_b = tokens[cid_b]
-            token_equiv = (len(toks_a & toks_b) >= min_shared
-                           and _jaccard(toks_a, toks_b) >= jaccard)
-            cos_equiv = (cosine > 0.0 and cid_a in vectors and cid_b in vectors
-                         and _cosine(vectors[cid_a], vectors[cid_b]) >= cosine)
-            if not (token_equiv or cos_equiv):
-                continue
-            uf.union(cid_a, cid_b)
-            a, b = by_id[cid_a], by_id[cid_b]
-            if a.video_id != b.video_id:
-                cross_video.append((a, b))
+    # Inverted-index blocking (bucket-capped) over claims sharing >=1 token — the same
+    # candidate generator the contradiction pass uses, so consensus clustering also
+    # scales to the full corpus instead of a 600-claim prefix.
+    for cid_a, cid_b in _candidate_pairs(tokens, bucket_cap=bucket_cap):
+        toks_a, toks_b = tokens[cid_a], tokens[cid_b]
+        token_equiv = (len(toks_a & toks_b) >= min_shared
+                       and _jaccard(toks_a, toks_b) >= jaccard)
+        cos_equiv = (cosine > 0.0 and cid_a in vectors and cid_b in vectors
+                     and _cosine(vectors[cid_a], vectors[cid_b]) >= cosine)
+        if not (token_equiv or cos_equiv):
+            continue
+        uf.union(cid_a, cid_b)
+        a, b = by_id[cid_a], by_id[cid_b]
+        if a.video_id != b.video_id:
+            cross_video.append((a, b))
 
     grouped: Dict[str, List[Claim]] = defaultdict(list)
     for cid, claim in by_id.items():
@@ -229,7 +219,7 @@ def cluster_claims(
     *,
     min_shared: int = 2,
     jaccard: Optional[float] = None,
-    max_claims: int = 600,
+    max_claims: int = DEFAULT_MAX_CLAIMS,
     write_edges: bool = True,
 ) -> List[ClaimCluster]:
     """Partition committed claims into scored clusters of equivalent claims.

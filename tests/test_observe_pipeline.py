@@ -103,7 +103,8 @@ class AskConsolidateTracerTest(unittest.TestCase):
         self.assertIsNotNone(contra)
         cap = next((c for c in contra.caps if c["name"] == "max_claims"), None)
         self.assertIsNotNone(cap)
-        self.assertEqual(cap["limit"], 600)  # the live default threaded through
+        from memovox.loom.consolidate import DEFAULT_MAX_CLAIMS
+        self.assertEqual(cap["limit"], DEFAULT_MAX_CLAIMS)  # the live default threaded through
 
 
 class MetricsPersistenceTest(unittest.TestCase):

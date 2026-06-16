@@ -206,6 +206,24 @@ def synthesize(
                 continue
             emitted.add(claim.claim_id)
             parts.append(_cite(claim.text, idx))
+
+    # SALIENT FALLBACK: the topic IS covered (we gathered claims + built citations) but
+    # the free/lexical path extracted no agreement/contradiction STRUCTURE (token-Jaccard
+    # consensus + lexical NLI both empty). Rather than report low_evidence + "ingest more
+    # sources" — actively misleading when the corpus is rich on the topic — emit the most
+    # salient on-topic claims (distinct moments, cited). Reserve the low-evidence message
+    # for the genuine zero-citation case handled above. Cross-video agreement/contradiction
+    # detection needs the optional [embed]/[nli] backends; this keeps synthesize useful.
+    if not parts:
+        seen_m: set = set()
+        for c in sorted(claims, key=lambda c: (-c.salience, c.video_id, c.t_start_s, c.claim_id)):
+            idx = index_of.get(c.moment_id)
+            if idx is None or c.moment_id in seen_m:
+                continue
+            seen_m.add(c.moment_id)
+            parts.append(_cite(c.text, idx))
+            if len(parts) >= 4:
+                break
     extractive = " ".join(parts)
 
     text = extractive

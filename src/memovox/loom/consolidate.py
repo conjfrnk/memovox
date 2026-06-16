@@ -54,6 +54,48 @@ def _content_tokens(text: str) -> set:
     return {t for t in tokenize(text) if t not in _STOP and len(t) > 2}
 
 
+#: Default universe ceiling for the offline consolidation job. High enough that real
+#: corpora are scanned IN FULL (every video participates in cross-video discovery);
+#: the per-bucket cap below — not this — is what bounds cost. The old default of 600
+#: silently excluded ~94% of a 10k-claim corpus from the persistent contradiction graph.
+DEFAULT_MAX_CLAIMS = 50000
+
+#: Inverted-index blocking cap: a content token shared by more than this many claims
+#: is too common to signal a specific agreement/contradiction, and its O(bucket^2)
+#: pairs would dominate cost. Skipping such buckets keeps the cross-video scan
+#: near-linear at scale. Small/medium corpora (every bucket <= cap) generate exactly
+#: the same candidate pairs as the old exhaustive per-claim scan, so results — and the
+#: golden contradiction/incremental-equivalence gates — are unchanged.
+_BUCKET_CAP = 200
+
+
+def _candidate_pairs(token_set: dict, *, bucket_cap: int = _BUCKET_CAP):
+    """Yield unique ``(cid_a, cid_b)`` (cid_a < cid_b) claim-id pairs that share at
+    least one content token, via inverted-index blocking with a per-bucket size cap.
+
+    This replaces the per-claim ``candidates = union(buckets); for a in C: for b in C``
+    double loop, which was O(sum |C|^2) and therefore only affordable over a truncated
+    prefix of the corpus. Bucket iteration with a hard cap is near-linear and covers
+    every claim, so the whole corpus participates in cross-video discovery."""
+    inverted: dict = defaultdict(list)
+    for cid, toks in token_set.items():
+        for t in toks:
+            inverted[t].append(cid)
+    seen: set = set()
+    for ids in inverted.values():
+        if len(ids) > bucket_cap:
+            continue  # ubiquitous token: low signal, would dominate cost
+        for i in range(len(ids)):
+            a = ids[i]
+            for j in range(i + 1, len(ids)):
+                b = ids[j]
+                pair = (a, b) if a < b else (b, a)
+                if pair in seen:
+                    continue
+                seen.add(pair)
+                yield pair
+
+
 def find_contradictions(
     store: LoomStore,
     *,
@@ -61,11 +103,12 @@ def find_contradictions(
     topic: Optional[str] = None,
     threshold: float = 0.55,
     min_shared: int = 2,
-    max_claims: int = 600,
+    max_claims: int = DEFAULT_MAX_CLAIMS,
     write_edges: bool = True,
     include_supports: bool = False,
     span: Optional[Span] = None,
     scope: Optional[set] = None,
+    bucket_cap: int = _BUCKET_CAP,
 ) -> List[ContradictionPair]:
     all_committed = store.list_claims(status="committed")
     # Topic filter BEFORE the cap: a topic-scoped query wants the most relevant
@@ -78,22 +121,24 @@ def find_contradictions(
         if topic_tokens:
             all_committed = [c for c in all_committed
                              if _content_tokens(c.text) & topic_tokens]
+    # Universe: bound the PRIOR side by max_claims, but ALWAYS include the scope (new)
+    # claims regardless of their rowid, so the incremental new-vs-ALL guarantee holds
+    # at scale (else a new claim past index max_claims is absent from the candidate
+    # universe entirely and paired against nothing — the M0.2 docstring's guarantee
+    # was silently false once total committed > max_claims).
     claims = all_committed[:max_claims]
+    if scope:
+        have = {c.claim_id for c in claims}
+        claims = claims + [c for c in all_committed
+                           if c.claim_id in scope and c.claim_id not in have]
     if span is not None:
         span.add_counter("candidates", len(all_committed))
         span.add_cap("max_claims", limit=max_claims,
-                     dropped=max(0, len(all_committed) - max_claims))
+                     dropped=max(0, len(all_committed) - len(claims)))
 
     token_set = {c.claim_id: _content_tokens(c.text) for c in claims}
     by_id = {c.claim_id: c for c in claims}
 
-    # Inverted index: token -> claim_ids, to generate only overlapping candidates.
-    inverted = defaultdict(list)
-    for cid, toks in token_set.items():
-        for t in toks:
-            inverted[t].append(cid)
-
-    seen_pairs = set()
     video_cache = {}
     results: List[ContradictionPair] = []
     nli_calls = 0
@@ -105,55 +150,47 @@ def find_contradictions(
             video_cache[claim.video_id] = v
         return deep_link(v.source_url, claim.t_start_s) if v else None
 
-    for toks in token_set.values():
-        candidates = {cid for t in toks for cid in inverted[t]}
-        for cid_a in candidates:
-            for cid_b in candidates:
-                if cid_a >= cid_b:
-                    continue
-                # Incremental scope (M0.2): when scanning only NEW claims, skip any
-                # pair where neither side is new — that pair was already scored in
-                # an earlier pass. The candidate UNIVERSE stays all-committed, so a
-                # new claim is still paired against every prior claim (new-vs-ALL).
-                if scope is not None and cid_a not in scope and cid_b not in scope:
-                    continue
-                a, b = by_id[cid_a], by_id[cid_b]
-                if a.video_id == b.video_id:
-                    continue  # cross-corpus only
-                if len(token_set[cid_a] & token_set[cid_b]) < min_shared:
-                    continue
-                key = (cid_a, cid_b)
-                if key in seen_pairs:
-                    continue
-                seen_pairs.add(key)
+    # Inverted-index blocking (bucket-capped) generates each cross-video candidate pair
+    # once. The whole universe participates — no per-claim O(|C|^2) over a truncated
+    # prefix — so cross-video discovery is no longer blind past the first max_claims.
+    for cid_a, cid_b in _candidate_pairs(token_set, bucket_cap=bucket_cap):
+        # Incremental scope (M0.2): when scanning only NEW claims, skip any pair where
+        # neither side is new — that pair was already scored in an earlier pass. The
+        # candidate UNIVERSE includes all scope claims, so a new claim is still paired
+        # against every prior claim (new-vs-ALL).
+        if scope is not None and cid_a not in scope and cid_b not in scope:
+            continue
+        a, b = by_id[cid_a], by_id[cid_b]
+        if a.video_id == b.video_id:
+            continue  # cross-corpus only
+        if len(token_set[cid_a] & token_set[cid_b]) < min_shared:
+            continue
 
-                nli_calls += 1
-                res = nli.classify(a.text, b.text)
-                # Stamp the cross-video edge with the (deterministic, since a<b by
-                # claim_id) source claim's video so the edges table's
-                # UNIQUE(src, rel, dst, video_id) actually dedups on re-run — a
-                # NULL video_id is treated as distinct by SQLite, which would
-                # duplicate the edge every consolidation pass.
-                if res.label == "contradiction" and res.contradict >= threshold:
-                    if write_edges:
-                        store.add_edge(a.claim_id, "CONTRADICTS", b.claim_id,
-                                       src_type="Claim", dst_type="Claim",
-                                       video_id=a.video_id, confidence=res.contradict)
-                    results.append(ContradictionPair(a, b, "CONTRADICTS", round(res.contradict, 4),
-                                                     link(a), link(b)))
-                elif include_supports and res.label == "entailment" and res.entail >= threshold:
-                    if write_edges:
-                        store.add_edge(a.claim_id, "SUPPORTS", b.claim_id,
-                                       src_type="Claim", dst_type="Claim",
-                                       video_id=a.video_id, confidence=res.entail)
-                    results.append(ContradictionPair(a, b, "SUPPORTS", round(res.entail, 4),
-                                                     link(a), link(b)))
+        nli_calls += 1
+        res = nli.classify(a.text, b.text)
+        # Stamp the cross-video edge with the (deterministic, since a<b by claim_id)
+        # source claim's video so the edges table's UNIQUE(src, rel, dst, video_id)
+        # actually dedups on re-run — a NULL video_id is treated as distinct by SQLite,
+        # which would duplicate the edge every consolidation pass.
+        if res.label == "contradiction" and res.contradict >= threshold:
+            if write_edges:
+                store.add_edge(a.claim_id, "CONTRADICTS", b.claim_id,
+                               src_type="Claim", dst_type="Claim",
+                               video_id=a.video_id, confidence=res.contradict)
+            results.append(ContradictionPair(a, b, "CONTRADICTS", round(res.contradict, 4),
+                                             link(a), link(b)))
+        elif include_supports and res.label == "entailment" and res.entail >= threshold:
+            if write_edges:
+                store.add_edge(a.claim_id, "SUPPORTS", b.claim_id,
+                               src_type="Claim", dst_type="Claim",
+                               video_id=a.video_id, confidence=res.entail)
+            results.append(ContradictionPair(a, b, "SUPPORTS", round(res.entail, 4),
+                                             link(a), link(b)))
 
     if span is not None:
         span.add_counter("nli_calls", nli_calls)  # actual NLI work (sparse under scope)
-    # Stable tiebreak by (claim_a, claim_b) ids: candidate pairs are generated from a
-    # SET (hash-randomized iteration), so a score-only sort would order ties
-    # non-deterministically across PYTHONHASHSEED. The id tiebreak makes it reproducible.
+    # Stable tiebreak by (claim_a, claim_b) ids: ties on score must order the same way
+    # across runs (PYTHONHASHSEED-independent), so sort by id within equal scores.
     results.sort(key=lambda p: (-p.score, p.claim_a.claim_id, p.claim_b.claim_id))
     return results
 
@@ -242,7 +279,7 @@ _WATERMARK_KEY = "consolidation_watermark"
 def consolidate(
     store: LoomStore, *, nli: NLIBackend, settings: Optional[Settings] = None,
     tracer: Optional[Tracer] = None, since_watermark: Optional[int] = None,
-    max_claims: int = 600,
+    max_claims: int = DEFAULT_MAX_CLAIMS,
 ) -> ConsolidationReport:
     """Run cross-corpus consolidation (spec §4 stage 7), incrementally (M0.2 W5).
 
