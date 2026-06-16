@@ -1,5 +1,5 @@
 {
-  "stamp": "iter8-content-free+fastapi",
+  "stamp": "iter10-variety-clean",
   "nli": "lexical",
   "embed": "hashing",
   "videos": [
@@ -496,6 +496,484 @@
       "provenance_violations": 0,
       "sample_bad_span": [],
       "caps_dropped": []
+    },
+    {
+      "id": "84WIaK3bl_s",
+      "group": "vlog",
+      "label": "Casey Neistat $21k airplane seat",
+      "published_at": "2016-09-19T00:00:00Z",
+      "video_id": "yt:84WIaK3bl_s",
+      "status": "ingested",
+      "n_moments": 29,
+      "n_claims_committed": 51,
+      "n_claims_unsupported": 6,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:84WIaK3bl_s:spk_0"
+      ],
+      "n_committed_audited": 51,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "Gnr2k-VvsCc",
+      "group": "vlog",
+      "label": "Casey Neistat MEGAVLOG",
+      "published_at": "2017-05-08T00:00:00Z",
+      "video_id": "yt:Gnr2k-VvsCc",
+      "status": "ingested",
+      "n_moments": 101,
+      "n_claims_committed": 100,
+      "n_claims_unsupported": 0,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:Gnr2k-VvsCc:spk_0"
+      ],
+      "n_committed_audited": 100,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "jlPQjC-CjNg",
+      "group": "watches",
+      "label": "Teddy Baldassarre: first luxury watches",
+      "published_at": "2024-09-14T00:00:00Z",
+      "video_id": "yt:jlPQjC-CjNg",
+      "status": "ingested",
+      "n_moments": 129,
+      "n_claims_committed": 129,
+      "n_claims_unsupported": 1,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:jlPQjC-CjNg:spk_0"
+      ],
+      "n_committed_audited": 129,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "sBN_2g0_NE8",
+      "group": "watches",
+      "label": "Teddy Baldassarre: Rolex Submariner",
+      "published_at": "2023-09-26T00:00:00Z",
+      "video_id": "yt:sBN_2g0_NE8",
+      "status": "ingested",
+      "n_moments": 80,
+      "n_claims_committed": 79,
+      "n_claims_unsupported": 1,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:sBN_2g0_NE8:spk_0"
+      ],
+      "n_committed_audited": 79,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "F3OEtmUv5Nc",
+      "group": "watches",
+      "label": "Watchfinder: Omega Moonwatch",
+      "published_at": "2023-01-22T00:00:00Z",
+      "video_id": "yt:F3OEtmUv5Nc",
+      "status": "ingested",
+      "n_moments": 75,
+      "n_claims_committed": 75,
+      "n_claims_unsupported": 0,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:F3OEtmUv5Nc:spk_0"
+      ],
+      "n_committed_audited": 75,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "d5yvnak4x8U",
+      "group": "review",
+      "label": "Doug DeMuro: BMW M3",
+      "published_at": "2026-06-11T00:00:00Z",
+      "video_id": "yt:d5yvnak4x8U",
+      "status": "ingested",
+      "n_moments": 165,
+      "n_claims_committed": 229,
+      "n_claims_unsupported": 125,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:d5yvnak4x8U:spk_0"
+      ],
+      "n_committed_audited": 229,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "n_XlcTBjVgY",
+      "group": "review",
+      "label": "Doug DeMuro: Porsche 911 930 Turbo",
+      "published_at": "2023-11-24T00:00:00Z",
+      "video_id": "yt:n_XlcTBjVgY",
+      "status": "ingested",
+      "n_moments": 139,
+      "n_claims_committed": 139,
+      "n_claims_unsupported": 0,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:n_XlcTBjVgY:spk_0"
+      ],
+      "n_committed_audited": 139,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "q0aFOxT6TNw",
+      "group": "review",
+      "label": "MKBHD: iPhone 17 Pro",
+      "published_at": "2025-09-26T00:00:00Z",
+      "video_id": "yt:q0aFOxT6TNw",
+      "status": "ingested",
+      "n_moments": 75,
+      "n_claims_committed": 117,
+      "n_claims_unsupported": 40,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:q0aFOxT6TNw:spk_0"
+      ],
+      "n_committed_audited": 117,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "ugpcWk0p4Mk",
+      "group": "travel",
+      "label": "Jeb Brooks: American business class",
+      "published_at": "2025-06-28T00:00:00Z",
+      "video_id": "yt:ugpcWk0p4Mk",
+      "status": "ingested",
+      "n_moments": 85,
+      "n_claims_committed": 155,
+      "n_claims_unsupported": 59,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:ugpcWk0p4Mk:spk_0"
+      ],
+      "n_committed_audited": 155,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "teN-Y1wAu78",
+      "group": "travel",
+      "label": "Jeb Brooks: Amtrak Empire Builder train",
+      "published_at": "2023-03-11T00:00:00Z",
+      "video_id": "yt:teN-Y1wAu78",
+      "status": "ingested",
+      "n_moments": 166,
+      "n_claims_committed": 165,
+      "n_claims_unsupported": 0,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:teN-Y1wAu78:spk_0"
+      ],
+      "n_committed_audited": 165,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "WRJ1oJ0rfFU",
+      "group": "travel",
+      "label": "Jeb Brooks: worst US airlines",
+      "published_at": "2023-09-02T00:00:00Z",
+      "video_id": "yt:WRJ1oJ0rfFU",
+      "status": "ingested",
+      "n_moments": 127,
+      "n_claims_committed": 127,
+      "n_claims_unsupported": 0,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:WRJ1oJ0rfFU:spk_0"
+      ],
+      "n_committed_audited": 127,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "MY3Qy6vAbZQ",
+      "group": "food",
+      "label": "Mark Wiens: Thai street food",
+      "published_at": "2024-10-21T00:00:00Z",
+      "video_id": "yt:MY3Qy6vAbZQ",
+      "status": "ingested",
+      "n_moments": 84,
+      "n_claims_committed": 238,
+      "n_claims_unsupported": 23,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:MY3Qy6vAbZQ:spk_0"
+      ],
+      "n_committed_audited": 238,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "tj6rNP2p1Yk",
+      "group": "food",
+      "label": "Beyond Babish: Lunchables ranking",
+      "published_at": "2026-06-13T00:00:00Z",
+      "video_id": "yt:tj6rNP2p1Yk",
+      "status": "ingested",
+      "n_moments": 260,
+      "n_claims_committed": 512,
+      "n_claims_unsupported": 183,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:tj6rNP2p1Yk:spk_0"
+      ],
+      "n_committed_audited": 512,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "aeWyp2vXxqA",
+      "group": "science",
+      "label": "Kurzgesagt: Black Hole Star",
+      "published_at": "2022-12-15T00:00:00Z",
+      "video_id": "yt:aeWyp2vXxqA",
+      "status": "ingested",
+      "n_moments": 58,
+      "n_claims_committed": 58,
+      "n_claims_unsupported": 0,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:aeWyp2vXxqA:spk_0"
+      ],
+      "n_committed_audited": 58,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "d95dOH-7GHM",
+      "group": "science",
+      "label": "Vox: Memory, Explained",
+      "published_at": "2019-09-12T00:00:00Z",
+      "video_id": "yt:d95dOH-7GHM",
+      "status": "ingested",
+      "n_moments": 141,
+      "n_claims_committed": 163,
+      "n_claims_unsupported": 15,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:d95dOH-7GHM:ADDIS",
+        "yt:d95dOH-7GHM:ARMSTRONG",
+        "yt:d95dOH-7GHM:I have three world records",
+        "yt:d95dOH-7GHM:Molaison",
+        "yt:d95dOH-7GHM:NEWSCASTER",
+        "yt:d95dOH-7GHM:PHELPS",
+        "yt:d95dOH-7GHM:REAGAN",
+        "yt:d95dOH-7GHM:THOMPSON",
+        "yt:d95dOH-7GHM:TULVING",
+        "yt:d95dOH-7GHM:YANJAA",
+        "yt:d95dOH-7GHM:Yanjaa",
+        "yt:d95dOH-7GHM:spk_0"
+      ],
+      "n_committed_audited": 163,
+      "trivial_count": 1,
+      "trivial_ratio": 0.006,
+      "sample_trivial": [
+        "225-902-634-582-177-161-12."
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "T4uMfr4dppQ",
+      "group": "finance",
+      "label": "Patrick Boyle: Great Depression",
+      "published_at": "2024-11-18T00:00:00Z",
+      "video_id": "yt:T4uMfr4dppQ",
+      "status": "ingested",
+      "n_moments": 243,
+      "n_claims_committed": 293,
+      "n_claims_unsupported": 133,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:T4uMfr4dppQ:spk_0"
+      ],
+      "n_committed_audited": 293,
+      "trivial_count": 4,
+      "trivial_ratio": 0.014,
+      "sample_trivial": [
+        "By 1920,&nbsp;&nbsp;",
+        "The dry&nbsp;&nbsp;",
+        "The Rural&nbsp;&nbsp;",
+        "While social&nbsp;&nbsp;"
+      ],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "spr5smxuO5E",
+      "group": "law",
+      "label": "LegalEagle reacts to Suits",
+      "published_at": "2018-09-11T00:00:00Z",
+      "video_id": "yt:spr5smxuO5E",
+      "status": "ingested",
+      "n_moments": 173,
+      "n_claims_committed": 173,
+      "n_claims_unsupported": 0,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:spr5smxuO5E:spk_0"
+      ],
+      "n_committed_audited": 173,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "8zDwI0Z-VIg",
+      "group": "chess",
+      "label": "GothamChess: best game of the century",
+      "published_at": "2024-01-29T00:00:00Z",
+      "video_id": "yt:8zDwI0Z-VIg",
+      "status": "ingested",
+      "n_moments": 148,
+      "n_claims_committed": 148,
+      "n_claims_unsupported": 0,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:8zDwI0Z-VIg:spk_0"
+      ],
+      "n_committed_audited": 148,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "7ZhdXgRfxHI",
+      "group": "nature",
+      "label": "Attenborough: 4K nature (~4h)",
+      "published_at": "2024-10-31T00:00:00Z",
+      "video_id": "yt:7ZhdXgRfxHI",
+      "status": "ingested",
+      "n_moments": 674,
+      "n_claims_committed": 661,
+      "n_claims_unsupported": 1,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:7ZhdXgRfxHI:spk_0"
+      ],
+      "n_committed_audited": 661,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
+    },
+    {
+      "id": "VyEINfRMvdc",
+      "group": "comedy",
+      "label": "Trevor Noah: standup mashup",
+      "published_at": "2024-08-04T00:00:00Z",
+      "video_id": "yt:VyEINfRMvdc",
+      "status": "ingested",
+      "n_moments": 388,
+      "n_claims_committed": 1156,
+      "n_claims_unsupported": 210,
+      "asr_backend": "captions",
+      "duration_s": null,
+      "distinct_speakers": [
+        "yt:VyEINfRMvdc:spk_0"
+      ],
+      "n_committed_audited": 1156,
+      "trivial_count": 0,
+      "trivial_ratio": 0.0,
+      "sample_trivial": [],
+      "provenance_violations": 0,
+      "sample_bad_span": [],
+      "caps_dropped": []
     }
   ],
   "asks": [
@@ -514,7 +992,7 @@
         "yt:XTeJ64KD5cg",
         "yt:XTeJ64KD5cg",
         "yt:XTeJ64KD5cg",
-        "yt:XTeJ64KD5cg"
+        "yt:tj6rNP2p1Yk"
       ],
       "modalities": [
         "speech"
@@ -532,13 +1010,13 @@
       "low_evidence": false,
       "cite_videos": [
         "yt:zjkBMFhNj_g",
-        "yt:zjkBMFhNj_g",
         "yt:kCc8FmEb1nY",
+        "yt:zjkBMFhNj_g",
+        "yt:7ZhdXgRfxHI",
         "yt:zjkBMFhNj_g",
         "yt:1M3Vdl6DRkU",
         "yt:zjkBMFhNj_g",
-        "yt:144uOfr4SYA",
-        "yt:zjkBMFhNj_g"
+        "yt:spr5smxuO5E"
       ],
       "modalities": [
         "speech"
@@ -555,14 +1033,14 @@
       "n_citations": 8,
       "low_evidence": false,
       "cite_videos": [
-        "yt:UF8uR6Z6KLc",
+        "yt:tj6rNP2p1Yk",
+        "yt:tj6rNP2p1Yk",
         "yt:zjkBMFhNj_g",
+        "yt:UF8uR6Z6KLc",
         "yt:UF8uR6Z6KLc",
         "yt:J7DzL2_Na80",
-        "yt:UF8uR6Z6KLc",
-        "yt:zjkBMFhNj_g",
-        "yt:jGwO_UgTS7I",
-        "yt:J7DzL2_Na80"
+        "yt:VyEINfRMvdc",
+        "yt:zjkBMFhNj_g"
       ],
       "modalities": [
         "speech"
@@ -583,10 +1061,10 @@
         "yt:dzOTaNwiFmA",
         "yt:aqBHXNGKvKU",
         "yt:aqBHXNGKvKU",
-        "yt:aqBHXNGKvKU",
         "yt:dzOTaNwiFmA",
         "yt:aqBHXNGKvKU",
-        "yt:dzOTaNwiFmA"
+        "yt:dzOTaNwiFmA",
+        "yt:aqBHXNGKvKU"
       ],
       "modalities": [
         "speech"
@@ -610,7 +1088,7 @@
         "yt:AxIOGqHQqZM",
         "yt:AxIOGqHQqZM",
         "yt:AxIOGqHQqZM",
-        "yt:jGwO_UgTS7I"
+        "yt:q0aFOxT6TNw"
       ],
       "modalities": [
         "speech"
@@ -627,13 +1105,13 @@
       "n_citations": 8,
       "low_evidence": false,
       "cite_videos": [
-        "yt:WUvTyaaNkzM",
+        "yt:teN-Y1wAu78",
         "yt:jGwO_UgTS7I",
+        "yt:n_XlcTBjVgY",
         "yt:1M3Vdl6DRkU",
+        "yt:WUvTyaaNkzM",
         "yt:1M3Vdl6DRkU",
-        "yt:kCc8FmEb1nY",
-        "yt:1M3Vdl6DRkU",
-        "yt:144uOfr4SYA",
+        "yt:VyEINfRMvdc",
         "yt:5KVDDfAkRgc"
       ],
       "modalities": [
@@ -682,7 +1160,7 @@
         "yt:aqBHXNGKvKU",
         "yt:aqBHXNGKvKU",
         "yt:1M3Vdl6DRkU",
-        "yt:kCc8FmEb1nY"
+        "yt:7ZhdXgRfxHI"
       ],
       "modalities": [
         "speech"
@@ -699,14 +1177,14 @@
       "n_citations": 8,
       "low_evidence": false,
       "cite_videos": [
-        "yt:jbkSRLYSojo",
+        "yt:VyEINfRMvdc",
         "yt:1M3Vdl6DRkU",
         "yt:zjkBMFhNj_g",
-        "yt:zjkBMFhNj_g",
+        "yt:jbkSRLYSojo",
         "yt:aqBHXNGKvKU",
         "yt:jbkSRLYSojo",
         "yt:144uOfr4SYA",
-        "yt:jbkSRLYSojo"
+        "yt:jlPQjC-CjNg"
       ],
       "modalities": [
         "speech"
@@ -723,14 +1201,14 @@
       "n_citations": 8,
       "low_evidence": false,
       "cite_videos": [
-        "yt:1M3Vdl6DRkU",
+        "yt:tj6rNP2p1Yk",
         "yt:1M3Vdl6DRkU",
         "yt:J7DzL2_Na80",
+        "yt:tj6rNP2p1Yk",
         "yt:5KVDDfAkRgc",
-        "yt:kCc8FmEb1nY",
-        "yt:YeRS4TbtZWA",
-        "yt:144uOfr4SYA",
-        "yt:5KVDDfAkRgc"
+        "yt:ugpcWk0p4Mk",
+        "yt:7ZhdXgRfxHI",
+        "yt:1M3Vdl6DRkU"
       ],
       "modalities": [
         "speech"
@@ -814,14 +1292,6 @@
       "refused": true
     },
     {
-      "q": "what time does the bank open?",
-      "text_present": true,
-      "low_evidence": true,
-      "n_citations": 0,
-      "text": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
-      "refused": true
-    },
-    {
       "q": "how do I file my taxes?",
       "text_present": true,
       "low_evidence": true,
@@ -892,14 +1362,14 @@
       "consensus_count": 0,
       "contradiction_count": 0,
       "low_evidence": true,
-      "n_citations": 27,
+      "n_citations": 29,
       "consensus_sample": []
     },
     "diet": {
       "consensus_count": 0,
       "contradiction_count": 0,
       "low_evidence": true,
-      "n_citations": 30,
+      "n_citations": 31,
       "consensus_sample": []
     }
   },
@@ -937,32 +1407,32 @@
   },
   "aggregate": {
     "consolidate": {
-      "topics": 4128,
+      "topics": 7110,
       "contradictions": 0,
       "supports": 2,
       "consensus_clusters": 0,
-      "superseded": 239,
+      "superseded": 317,
       "claims_scanned": 600,
-      "claims_skipped": 4814,
+      "claims_skipped": 9582,
       "capped": true,
       "metrics": {
         "name": "consolidate",
         "spans": [
           {
             "stage": "topics",
-            "wall_ms": 231817.0121249277,
+            "wall_ms": 697504.9963339698,
             "status": "ok",
             "counters": {
-              "topics": 4128
+              "topics": 7110
             },
             "caps": []
           },
           {
             "stage": "contradictions",
-            "wall_ms": 4263.089125044644,
+            "wall_ms": 4474.730291869491,
             "status": "ok",
             "counters": {
-              "candidates": 5414,
+              "candidates": 10182,
               "nli_calls": 2537,
               "new_contradictions": 0,
               "new_supports": 2
@@ -971,13 +1441,13 @@
               {
                 "name": "max_claims",
                 "limit": 600,
-                "dropped": 4814
+                "dropped": 9582
               }
             ]
           },
           {
             "stage": "consensus",
-            "wall_ms": 100.52149998955429,
+            "wall_ms": 131.54904218390584,
             "status": "ok",
             "counters": {
               "clusters": 0
@@ -986,10 +1456,10 @@
           },
           {
             "stage": "dedup",
-            "wall_ms": 73.17808317020535,
+            "wall_ms": 128.98958288133144,
             "status": "ok",
             "counters": {
-              "superseded": 239
+              "superseded": 317
             },
             "caps": []
           }
@@ -1014,11 +1484,11 @@
         "surfaced": false
       }
     ],
-    "n_videos": 21,
-    "n_ingest_ok": 21,
-    "total_moments": 4443,
-    "total_committed": 5414,
-    "total_trivial": 3,
+    "n_videos": 41,
+    "n_ingest_ok": 41,
+    "total_moments": 7783,
+    "total_committed": 10182,
+    "total_trivial": 8,
     "mean_trivial_ratio": 0.001,
     "total_provenance_violations": 0,
     "ask_hit_rate": 1.0,

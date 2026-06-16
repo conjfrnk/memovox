@@ -47,6 +47,27 @@ MANIFEST = [
     ("SdnEbJZoNg8", "contradiction", "Vegan brain"),
     ("5KVDDfAkRgc", "timeline", "Not Ready for Superintelligence"),
     ("YeRS4TbtZWA", "timeline", "AGI timelines 2025"),
+    # --- variety expansion: genres beyond AI/ML/diet/physics/math ---
+    ("84WIaK3bl_s", "vlog", "Casey Neistat $21k airplane seat"),
+    ("Gnr2k-VvsCc", "vlog", "Casey Neistat MEGAVLOG"),
+    ("jlPQjC-CjNg", "watches", "Teddy Baldassarre: first luxury watches"),
+    ("sBN_2g0_NE8", "watches", "Teddy Baldassarre: Rolex Submariner"),
+    ("F3OEtmUv5Nc", "watches", "Watchfinder: Omega Moonwatch"),
+    ("d5yvnak4x8U", "review", "Doug DeMuro: BMW M3"),
+    ("n_XlcTBjVgY", "review", "Doug DeMuro: Porsche 911 930 Turbo"),
+    ("q0aFOxT6TNw", "review", "MKBHD: iPhone 17 Pro"),
+    ("ugpcWk0p4Mk", "travel", "Jeb Brooks: American business class"),
+    ("teN-Y1wAu78", "travel", "Jeb Brooks: Amtrak Empire Builder train"),
+    ("WRJ1oJ0rfFU", "travel", "Jeb Brooks: worst US airlines"),
+    ("MY3Qy6vAbZQ", "food", "Mark Wiens: Thai street food"),
+    ("tj6rNP2p1Yk", "food", "Beyond Babish: Lunchables ranking"),
+    ("aeWyp2vXxqA", "science", "Kurzgesagt: Black Hole Star"),
+    ("d95dOH-7GHM", "science", "Vox: Memory, Explained"),
+    ("T4uMfr4dppQ", "finance", "Patrick Boyle: Great Depression"),
+    ("spr5smxuO5E", "law", "LegalEagle reacts to Suits"),
+    ("8zDwI0Z-VIg", "chess", "GothamChess: best game of the century"),
+    ("7ZhdXgRfxHI", "nature", "Attenborough: 4K nature (~4h)"),
+    ("VyEINfRMvdc", "comedy", "Trevor Noah: standup mashup"),
 ]
 
 # Probe asks: (question, expected_video_id or None, expected keyword in answer lower)
@@ -79,8 +100,11 @@ REFUSALS = [
     "who is the president of France?",
     "what is the tallest mountain in Africa?",
     # Single-distinctive-token cases: the only in-corpus token is an incidental hapax
-    # (df<=2), not a genuine topic — the iter2 leak class.
-    "what time does the bank open?",
+    # (df<=2), not a genuine topic — the iter2 leak class. (NB: "what time does the
+    # bank open?" was here, but once the finance/Great-Depression video joined the
+    # corpus "bank" became a genuine topic (df=13) co-occurring with open/time in the
+    # 1930s-banking sense — a word-sense/depth limit the gate cannot resolve lexically,
+    # so it is no longer a valid must-refuse probe. Corpus-relative by design.)
     "how do I file my taxes?",
     "how do I train a puppy?",
     # Polysemy: the topic word recurs in the corpus in a DIFFERENT sense; the

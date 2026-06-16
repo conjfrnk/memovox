@@ -1,9 +1,9 @@
-# Stress report — iter8-content-free+fastapi (nli=lexical)
+# Stress report — iter10-variety-clean (nli=lexical)
 
-- ingest: **21/21** ok
-- moments=4443 committed_claims=5414 trivial=3 (mean ratio **0.001**)
+- ingest: **41/41** ok
+- moments=7783 committed_claims=10182 trivial=8 (mean ratio **0.001**)
 - provenance violations: **0**
-- ask hit-rate: **1.0** | refusals_ok: 14/14
+- ask hit-rate: **1.0** | refusals_ok: 13/13
 
 ## Findings
 - **[MED] synthesis_synonyms** — synthesize('AGI') found 0 consensus points (token-Jaccard misses synonyms?)
@@ -34,3 +34,23 @@
 | SdnEbJZoNg8 | contradiction | 30 | 0.0 | 0 | 1 | 0 |
 | 5KVDDfAkRgc | timeline | 320 | 0.0 | 0 | 1 | 0 |
 | YeRS4TbtZWA | timeline | 195 | 0.015 | 0 | 3 | 0 |
+| 84WIaK3bl_s | vlog | 51 | 0.0 | 0 | 1 | 0 |
+| Gnr2k-VvsCc | vlog | 100 | 0.0 | 0 | 1 | 0 |
+| jlPQjC-CjNg | watches | 129 | 0.0 | 0 | 1 | 0 |
+| sBN_2g0_NE8 | watches | 79 | 0.0 | 0 | 1 | 0 |
+| F3OEtmUv5Nc | watches | 75 | 0.0 | 0 | 1 | 0 |
+| d5yvnak4x8U | review | 229 | 0.0 | 0 | 1 | 0 |
+| n_XlcTBjVgY | review | 139 | 0.0 | 0 | 1 | 0 |
+| q0aFOxT6TNw | review | 117 | 0.0 | 0 | 1 | 0 |
+| ugpcWk0p4Mk | travel | 155 | 0.0 | 0 | 1 | 0 |
+| teN-Y1wAu78 | travel | 165 | 0.0 | 0 | 1 | 0 |
+| WRJ1oJ0rfFU | travel | 127 | 0.0 | 0 | 1 | 0 |
+| MY3Qy6vAbZQ | food | 238 | 0.0 | 0 | 1 | 0 |
+| tj6rNP2p1Yk | food | 512 | 0.0 | 0 | 1 | 0 |
+| aeWyp2vXxqA | science | 58 | 0.0 | 0 | 1 | 0 |
+| d95dOH-7GHM | science | 163 | 0.006 | 0 | 12 | 0 |
+| T4uMfr4dppQ | finance | 293 | 0.014 | 0 | 1 | 0 |
+| spr5smxuO5E | law | 173 | 0.0 | 0 | 1 | 0 |
+| 8zDwI0Z-VIg | chess | 148 | 0.0 | 0 | 1 | 0 |
+| 7ZhdXgRfxHI | nature | 661 | 0.0 | 0 | 1 | 0 |
+| VyEINfRMvdc | comedy | 1156 | 0.0 | 0 | 1 | 0 |

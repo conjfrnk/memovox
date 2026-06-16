@@ -2,7 +2,9 @@
 
 A curated set of **real, verified** YouTube videos for exercising and breaking memovox.
 All links resolved live via `yt-dlp` on 2026-06-16 (durations/channels confirmed).
-Working doc — **untracked**, not part of the repo.
+The genre-variety set (§7) was added and verified ingesting on 2026-06-16; the full
+41-video corpus is wired into `stress/driver.py` (downloaded captions live untracked in
+`.stress-corpus/`).
 
 ## Why these / how it's organized
 
@@ -111,6 +113,68 @@ cluster on the free path → A/B against the `[embed]` upgrade.
   explosion); transcript-only ingest with no media (visual track must no-op, not crash).
 
 ---
+
+## 7. Variety expansion — beyond AI/diet/physics/math (20 videos, all ingest-verified)
+
+The original corpus skewed academic/technical. This set adds genres that stress the
+pipeline in new ways — casual fast-cut speech, domain jargon (horology, chess, legal),
+sarcasm/hyperbole that must NOT be committed as fact, product close-ups, and a thematic
+**premium-travel cluster** (Casey + Jeb Brooks) for cross-video synthesis.
+
+### Vlog — fast cuts, music beds, casual narration over b-roll
+| Video | Len | Why |
+|---|---|---|
+| https://youtu.be/84WIaK3bl_s | 9:05 | Casey Neistat, **$21,000 First Class Airplane Seat** (Emirates). Its transcript is literally in memovox's own test fixtures ("reserve the shower…"). |
+| https://youtu.be/Gnr2k-VvsCc | 21:05 | Casey Neistat, **THE MEGAVLOG** — long, jump-cut-heavy, music + narration. |
+
+### Watches — horology jargon (tourbillon/GMT/caliber/bezel) + product close-ups (OCR)
+| Video | Len | Why |
+|---|---|---|
+| https://youtu.be/jlPQjC-CjNg | 19:30 | Teddy Baldassarre — best first luxury watches (recommendations = OPINION/PROCEDURE claims). |
+| https://youtu.be/sBN_2g0_NE8 | 12:18 | Teddy Baldassarre — Rolex Submariner review. |
+| https://youtu.be/F3OEtmUv5Nc | 13:00 | Watchfinder & Co. — Omega Moonwatch (2nd reviewer → cross-video on the same domain). |
+
+### Product reviews — specs, numbers, quirks
+| Video | Len | Why |
+|---|---|---|
+| https://youtu.be/d5yvnak4x8U | 26:13 | Doug DeMuro — E92 BMW M3. |
+| https://youtu.be/n_XlcTBjVgY | 21:51 | Doug DeMuro — **Original Porsche 911 930 Turbo**. |
+| https://youtu.be/q0aFOxT6TNw | 12:21 | MKBHD — iPhone 17 Pro (tech jargon, fast). |
+
+### Travel (Jeb Brooks) — air + rail; pairs with Casey for a premium-travel cluster
+| Video | Len | Why |
+|---|---|---|
+| https://youtu.be/ugpcWk0p4Mk | 13:49 | American's new business class (flight review). |
+| https://youtu.be/teN-Y1wAu78 | 30:12 | Amtrak Empire Builder sleeper train, Seattle→Chicago (scenic, long-haul). |
+| https://youtu.be/WRJ1oJ0rfFU | 20:50 | America's worst airlines: Allegiant vs Frontier vs Spirit (comparison/ranking → `synthesize`/`contradictions` fodder). |
+
+### Food — reactions, procedure, ingredient lists
+| Video | Len | Why |
+|---|---|---|
+| https://youtu.be/MY3Qy6vAbZQ | 27:03 | Mark Wiens — 24h Thai street food (Nat Geo). |
+| https://youtu.be/tj6rNP2p1Yk | 42:41 | Beyond Babish — ranking every Lunchables (taste-test/ranking). |
+
+### Science explainers — dense factual claims, fast narration
+| Video | Len | Why |
+|---|---|---|
+| https://youtu.be/aeWyp2vXxqA | 9:57 | Kurzgesagt — Black Hole Star (animated; meaning partly in visuals). |
+| https://youtu.be/d95dOH-7GHM | 20:09 | Vox — *Memory, Explained* (documentary). |
+
+### Other genres
+| Video | Len | Genre / why |
+|---|---|---|
+| https://youtu.be/T4uMfr4dppQ | 53:13 | **Finance/history** — Patrick Boyle, *The Great Depression* (long, dry sarcasm, economics jargon; "bank" becomes a real topic here). |
+| https://youtu.be/spr5smxuO5E | 27:26 | **Law** — LegalEagle reacts to *Suits* (legal jargon, commentary over clips). |
+| https://youtu.be/8zDwI0Z-VIg | 23:36 | **Chess** — GothamChess, best game of the century (notation/jargon, fast). |
+| https://youtu.be/7ZhdXgRfxHI | 3:58:42 | **Nature** — Attenborough 4K (~4h → duration + "shown-not-spoken" stress). |
+| https://youtu.be/VyEINfRMvdc | 1:21:28 | **Comedy** — Trevor Noah standup mashup (sarcasm/irony/hyperbole → adversarial: jokes must NOT be committed as facts). |
+
+> **What the expanded corpus revealed (honest):** growing the corpus is *corpus-relative*
+> by design — "what time does the bank open?" was a clean out-of-corpus refusal until the
+> Great Depression video made "bank" a genuine topic (df 1→13). It now answers because
+> "bank"+"open"+"time" co-occur in the 1930s-banking sense — a word-sense/depth limit no
+> bag-of-words gate can resolve (the optional `[embed]` backend can). This is expected,
+> not a regression.
 
 ## Copy-paste ingest blocks
 
