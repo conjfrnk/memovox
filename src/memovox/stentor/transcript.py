@@ -7,6 +7,7 @@ retaining the events as timeline markers (spec §4 stage 2).
 
 from __future__ import annotations
 
+import html
 import json
 import re
 from pathlib import Path
@@ -30,7 +31,47 @@ EVENT_RE = re.compile(
 _MUSIC_NOTE_RE = re.compile(r"[♪♫♬\U0001f3b5\U0001f3b6]")
 _TAG_RE = re.compile(r"<[^>]+>")
 _SPEAKER_VTT_RE = re.compile(r"<v\s+([^>]+)>")
-_SPEAKER_PREFIX_RE = re.compile(r"^\s*([A-Z][A-Za-z0-9 ._-]{0,30}):\s+")
+_SPEAKER_PREFIX_RE = re.compile(r"^\s*([A-Z][A-Za-z0-9 ._'-]{0,30}):\s+")
+#: A leading ``Name:`` is only a speaker label if it *looks* like a name, not a
+#: sentence that happens to contain a colon. Real caption labels are ALL-CAPS
+#: ("NEWSCASTER", "BRADY HARAN") or Title-Case proper names ("Rob Wiblin",
+#: "Molaison"), ≤3 words. Sentence fragments ("But caveat:", "For example:",
+#: "And that worked great:", "I have three world records:") carry a lowercase
+#: content word or run long — those are content, not a speaker, and must NOT be
+#: hoisted into a bogus speaker id (the richer-corpus false positives).
+_SPEAKER_PARTICLES = {"van", "von", "de", "del", "der", "da", "di", "la", "le",
+                      "bin", "al", "of", "the", "y"}
+_SPEAKER_DISCOURSE = {"but", "and", "for", "so", "well", "okay", "ok", "now", "yes",
+                      "no", "oh", "then", "also", "because", "however", "i", "we",
+                      "they", "he", "she", "it", "this", "that", "there", "here",
+                      "what", "when", "why", "how", "anyway", "right"}
+
+
+def _looks_like_speaker(name: str) -> bool:
+    """True iff ``name`` looks like a caption speaker label, not a sentence fragment."""
+    words = name.split()
+    if not words or len(words) > 3:
+        return False
+    if len(words) == 1 and words[0].lower() in _SPEAKER_DISCOURSE:
+        return False  # a lone discourse word ("Well:", "So:", "I:") is punctuation
+    for w in words:
+        alpha = re.sub(r"[^A-Za-z]", "", w)
+        if not alpha:
+            continue  # punctuation/initials-only token
+        if alpha.isupper() or (alpha[0].isupper() and not alpha.islower()):
+            continue  # ALLCAPS or Capitalized (incl. McDonald/DiCaprio) -> name-like
+        if alpha.lower() in _SPEAKER_PARTICLES:
+            continue  # nobiliary particle: de / van / von ...
+        return False  # an all-lowercase content word -> this is a sentence
+    return True
+
+
+def _speaker_prefix(text: str) -> Optional[re.Match]:
+    """Return the ``Name:`` prefix match only when it is a plausible speaker label."""
+    m = _SPEAKER_PREFIX_RE.match(text)
+    if m and _looks_like_speaker(m.group(1)):
+        return m
+    return None
 #: ``>>`` (optionally ``>>>``) marks a speaker change in CEA-608 / broadcast-style
 #: captions. We strip it from the knowledge text and use it to start a new
 #: (anonymous) speaker turn so multi-speaker captions don't collapse onto spk_0.
@@ -181,8 +222,15 @@ def clean_text(raw: str) -> Tuple[str, List[str]]:
     events = [e.lower() for e in EVENT_RE.findall(raw)]
     stripped = EVENT_RE.sub(" ", raw)
     stripped = _TAG_RE.sub(" ", stripped)
+    # Decode HTML entities AFTER tag stripping (so a decoded ``&lt;`` is not re-read
+    # as a tag): WebVTT escapes ``&`` ``<`` ``>`` and emits ``&nbsp;``/``&#39;`` —
+    # left raw, these survive into claim text ("By 1920,&nbsp;&nbsp;"). The trailing
+    # ``\s+`` collapse folds the resulting U+00A0 into a normal space.
+    stripped = html.unescape(stripped)
     stripped = _TURN_ANYWHERE_RE.sub(" ", stripped)  # drop ">>" turn markers
-    stripped = _SPEAKER_PREFIX_RE.sub("", stripped)
+    m = _speaker_prefix(stripped)
+    if m:
+        stripped = stripped[m.end():]
     words = [w for w in stripped.split() if _normalize_word(w) not in FILLERS]
     text = re.sub(r"\s+", " ", " ".join(words)).strip()
     return text, events
@@ -213,7 +261,7 @@ def clean_segments(segments: List[Segment]) -> List[Segment]:
         text, events = clean_text(seg.text)
         speaker = seg.speaker
         if not speaker:
-            m = _SPEAKER_PREFIX_RE.match(seg.text)
+            m = _speaker_prefix(seg.text)
             if m:
                 speaker = m.group(1).strip()
         if speaker:

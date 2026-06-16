@@ -68,15 +68,21 @@ def find_contradictions(
     scope: Optional[set] = None,
 ) -> List[ContradictionPair]:
     all_committed = store.list_claims(status="committed")
+    # Topic filter BEFORE the cap: a topic-scoped query wants the most relevant
+    # claims, not whatever happens to fall in the first ``max_claims`` of ingest
+    # order. Capping first silently empties any topic whose claims arrive late
+    # (e.g. with 10k claims the saturated-fat videos sit past index 4500, so a
+    # cap-then-filter returned zero candidates and *looked* like an NLI miss).
+    if topic:
+        topic_tokens = _content_tokens(topic)
+        if topic_tokens:
+            all_committed = [c for c in all_committed
+                             if _content_tokens(c.text) & topic_tokens]
     claims = all_committed[:max_claims]
     if span is not None:
         span.add_counter("candidates", len(all_committed))
         span.add_cap("max_claims", limit=max_claims,
                      dropped=max(0, len(all_committed) - max_claims))
-    if topic:
-        topic_tokens = _content_tokens(topic)
-        if topic_tokens:
-            claims = [c for c in claims if _content_tokens(c.text) & topic_tokens]
 
     token_set = {c.claim_id: _content_tokens(c.text) for c in claims}
     by_id = {c.claim_id: c for c in claims}
