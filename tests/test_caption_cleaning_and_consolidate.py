@@ -285,6 +285,59 @@ class TestRelevanceGenericVerbFilter(unittest.TestCase):
         from memovox.augur.answer import _rel_tokens
         self.assertIn("submariner", _rel_tokens("recommend the rolex submariner"))
 
+    def test_high_df_verb_inflections_not_distinctive(self):
+        # Irregular common-verb inflections (won/happened/winner/lost/beaten) must not
+        # act as a topic — else 'who won?' / 'what happened?' clear topicality on the
+        # bare verb and certify a confident answer over off-topic clips.
+        from memovox.augur.answer import _rel_tokens
+        for w in ["won", "wins", "winner", "winning", "happened", "happens",
+                  "lost", "lose", "beaten", "became"]:
+            self.assertNotIn(w, _rel_tokens(f"who {w} the thing here"), w)
+
+
+class TestDistinctiveCoverageRequirement(unittest.TestCase):
+    """A confident answer must be anchored to a citation that contains a DISTINCTIVE topic
+    token — generic verb/framing words alone cannot certify coverage ('what should I
+    recommend for dinner?' where no cited moment mentions 'dinner')."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.config = Config(store=pathlib.Path(self._tmp.name) / "s").ensure()
+        self.store = LoomStore(self.config)
+        self.store.upsert_video(Video("yt:v", "https://youtu.be/v", "talk"))
+        for i in range(55):  # > answer_relevance_min_moments
+            self.store.add_moment(Moment(f"yt:v#m{i:04d}", "yt:v", float(i), float(i) + 1.0,
+                                         f"a generic remark number {i} on everyday matters", index=i))
+        for i in range(6):  # 'glucose' is a genuine recurring topic (df above floor)
+            self.store.add_moment(Moment(f"yt:v#g{i:02d}", "yt:v", 900.0 + i, 901.0 + i,
+                                         "glucose metabolism produces energy via cellular respiration", index=900 + i))
+
+    def tearDown(self):
+        self.store.close()
+        self._tmp.cleanup()
+
+    def test_coverage_needs_distinctive_token_in_a_citation(self):
+        from memovox.augur.answer import _relevance_coverage
+        from memovox.augur.types import Citation
+        from memovox.config import Settings
+        s = Settings()
+        # Citations that share only the generic verb 'recommend', NOT the distinctive
+        # topic 'glucose' (which recurs in the store, so topicality passes).
+        generic = [Citation(index=i, video_id="yt:v", moment_id=f"yt:v#m{i:04d}",
+                            t_start_s=float(i), t_end_s=float(i) + 1.0,
+                            source_text="you should really recommend this approach")
+                   for i in range(1, 4)]
+        rel = _relevance_coverage(self.store, "what should I recommend about glucose?",
+                                  generic, min_moments=s.answer_relevance_min_moments)
+        self.assertLess(rel, s.answer_relevance_floor)
+        # A citation that DOES contain the distinctive topic clears coverage.
+        on_topic = [Citation(index=1, video_id="yt:v", moment_id="yt:v#g00",
+                             t_start_s=900.0, t_end_s=901.0,
+                             source_text="glucose is converted to energy in the cell")]
+        rel2 = _relevance_coverage(self.store, "what is glucose?",
+                                   on_topic, min_moments=s.answer_relevance_min_moments)
+        self.assertGreaterEqual(rel2, s.answer_relevance_floor)
+
     def test_advice_verbs_not_in_coverage_filler(self):
         # Regression: the verbs must live ONLY in topicality (_COMMON_WORDS), NOT in
         # _COVERAGE_FILLER — else a legit in-corpus "which Rolex should I buy?" loses its

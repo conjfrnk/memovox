@@ -82,6 +82,8 @@ world would write wrong year yes yet young
 recommend recommended recommends recommendation recommendations suggest suggests
 suggested suggestion suggestions advise advice purchase purchases purchased purchasing
 buy buys buying bought sell sells selling sold choose chooses choosing chose pick picks
+won wins winner winners winning lost lose loses losing beat beats beaten beating
+happen happened happens happening become became becomes consider considered considers
 """.split())
 
 
@@ -181,6 +183,13 @@ def _relevance_coverage(store, query: str, citations: List["Citation"],
     best = 0.0
     for c in citations:
         ctoks = _coverage_tokens((c.source_text or c.snippet or "") + " " + (c.title or ""))
+        # The covering citation must actually contain a DISTINCTIVE topic token, not only
+        # generic verb/framing words. Otherwise a verb-dominated query about a thin topic
+        # ("what should I recommend for DINNER?", "who WON the world cup?") clears the
+        # floor purely on shared "recommend/should/won" while the real subject is absent
+        # from every cited moment — a confident answer to evidence that never mentions it.
+        if not (distinctive & ctoks):
+            continue
         covered = sum(1 for t in cov_q if t in ctoks)
         frac = covered / len(cov_q)
         if frac > best:

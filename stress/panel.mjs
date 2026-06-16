@@ -7,32 +7,33 @@ export const meta = {
   ],
 }
 
-const STORE = '/tmp/mv_stress_iter15'
-const REPORT = 'stress/reports/iter15.json'
-const PRIOR = 'stress/reports/iter14.json'
+const STORE = '/tmp/mv_stress_iter16'
+const REPORT = 'stress/reports/iter16.json'
+const PRIOR = 'stress/reports/iter15.json'
 
 const COMMON = `
 You are an ADVERSARIAL reviewer of the memovox pipeline (a free/lexical video-knowledge engine).
-This is ROUND 5. Prior rounds CONFIRMED H1, H1b, H2, M2, M3 and the round-2 regression fixes. The
-synthesize() out-of-corpus path was hardened twice more: the relevance gate was hoisted above the
-structure composition (e0b4c30), then the candidate pool was RESTRICTED to claims that genuinely
-cover the topic with a >= 2-distinct-covering-video floor (003f022), closing the incidental-token
-leak (e.g. 'speed of light' went 828 garbage citations -> 15 focused). NOTE: the store ${STORE} was
-ingested at 7374841; ALL synthesize fixes are QUERY-TIME ONLY, so the store's ingest equals HEAD and
-your LIVE synthesize() queries exercise the fixed code. Your job: (a) try HARD to find ANY remaining
-synthesize OOC leak — throw many off-corpus topics, including ones sharing 1-2 incidental tokens that
-recur across videos (the class that kept slipping through); confirm in-corpus topics still synthesize,
-(b) re-verify nothing else regressed (H1/H1b/H2/M2/M3, the buy-query and home-purchase relevance
-behavior), (c) hunt for any remaining >= MED defect anywhere. Be skeptical; verify with evidence. The
-bar is high but FAIR — do NOT manufacture blockers out of FUNDAMENTAL free-path limits (hashing embed
-/ lexical NLI / no diarization / vocabulary gaps) or pre-existing LOW issues. If the free path is
-genuinely sound, say so.
+This is ROUND 6. Prior rounds CONFIRMED H1, H1b, H2, M2, M3, the round-2 regression fixes, and the
+synthesize() OOC pool fix. Round 5 found ONE more MED leak — the SAME incidental-token class on the
+find_contradictions(topic=...) path: question-phrased topics roped "I don't know what ..." filler
+into the candidate set and fabricated ~2 cross-video CONTRADICTS (surfaced in synthesize().
+contradictions and the MCP find_contradictions tool). Fixed (2dfcf77) by adding interrogative/
+auxiliary words to consolidate._STOP so _content_tokens drops them (aligning with ask()'s _rel_tokens).
+The store ${STORE} is a FRESH full re-ingest at HEAD (the _STOP change touches consolidate's edge
+graph, so this was re-ingested). Your job: (a) verify the question-word contradiction leak is closed —
+mv.contradictions and synthesize().contradictions must return NO fabricated 'I don't know'-type
+disagreements for question-phrased OR plain topics, while genuine near-mirror contradictions still
+surface; (b) re-verify ALL prior fixes still hold on the fresh store; (c) make a genuine final attempt
+to find ANY remaining >= MED correctness/UX defect. Be skeptical; verify with evidence. Do NOT
+manufacture blockers from FUNDAMENTAL free-path limits (hashing embed / lexical NLI / no diarization /
+vocabulary gaps / word-sense collisions) or pre-existing LOW issues — name them as accepted_limits. If
+the pipeline is genuinely sound on the free path, SAY SO and set team_satisfied=true.
 
 Context to read first:
 - The post-fix report: ${REPORT} (41 videos, free/captions, nli=lexical, embed=hashing).
 - The previous round's report: ${PRIOR}.
-- The fixes under review: \`git -C /Users/connor/projects/memovox diff 3c6fbc3 003f022\` (all
-  rounds). The newest synthesize pool-restriction fix: \`git -C ... show 003f022\`. Key files:
+- The fixes under review: \`git -C /Users/connor/projects/memovox diff 3c6fbc3 2dfcf77\` (all
+  rounds). The newest question-word _STOP fix: \`git -C ... show 2dfcf77\`. Key files:
     src/memovox/loom/consolidate.py   (_candidate_pairs bucket-blocking; raised max_claims=50000;
                                         scope always in universe; topic filter before cap)
     src/memovox/loom/consensus.py     (partition_claims uses the same bucket-blocking)
@@ -169,6 +170,12 @@ YOUR LENS: consolidation correctness, scale, and edge QUALITY. Verify H1, H1b, H
     remain a genuine [nli]-only FUNDAMENTAL limit (NOT a precision-gate bug).
   - VERIFY H2 conceptually from the diff + the new regression tests (new scope claim past the cap is
     paired against prior).
+  - VERIFY the round-5 question-word fix (2dfcf77): run mv.contradictions(topic=...) for MANY topics,
+    BOTH question-phrased ('what is AGI?', 'what is saturated fat?', 'what happened?', 'how does it
+    work?') and plain ('AGI', 'saturated fat', 'diet'). NONE may return a fabricated 'I don't know
+    what ...' / discourse-filler CONTRADICTS pair. Also check synthesize(topic).contradictions for the
+    same — must be free of filler disagreements. Then confirm a GENUINE near-mirror contradiction is
+    still found (construct or find one). Report any fabricated disagreement that survives.
 Return findings with concrete evidence (open the db; print pair texts).`,
   },
 ]
@@ -208,7 +215,8 @@ ${JSON.stringify(reviews.map((r, i) => ({ lens: lenses[i].key, ...r })), null, 2
 
 Decide team_satisfied. Rules:
  - SATISFIED only when (a) all prior fixes still hold (H1, H1b, H2, M2, M3, the round-2 regression
-   fixes) AND synthesize() no longer confabulates heavily-cited off-topic syntheses for OOC topics,
+   fixes, the synthesize OOC pool fix) AND the question-word contradiction leak is closed (no fabricated
+   filler CONTRADICTS from mv.contradictions / synthesize().contradictions for question-phrased topics),
    AND (b) no FIXABLE finding of severity >= MED is a genuine correctness/UX defect or a NEW regression.
    A synthesize() answer with a FEW focused on-topic citations for a thinly-but-genuinely-covered topic
    is NOT a leak. FUNDAMENTAL free-path limits (hashing embed / lexical NLI / no diarization / vocabulary
