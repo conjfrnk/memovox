@@ -354,6 +354,21 @@ class TestSynthesizeOutOfCorpusGate(unittest.TestCase):
         self.assertTrue(s["low_evidence"], "OOC topic that built structure was not refused")
         self.assertEqual(len(s["citations"]), 0)
 
+    def test_topic_covered_by_single_video_not_synthesizable(self):
+        # Cross-corpus floor: synthesis reports what MULTIPLE sources say, so a topic
+        # GENUINELY covered by only one video has nothing to synthesize across sources
+        # and must refuse (even though ask() could answer it from that one source).
+        from memovox.augur.synthesize import synthesize
+        for i in range(6):  # 6 covering claims, all in ONE video (yt:a)
+            mid = f"yt:a#n{i:04d}"
+            text = "neural networks learn useful representations from raw data"
+            self.store.add_moment(Moment(mid, "yt:a", float(i), float(i) + 1.0, text, index=0))
+            self.store.add_claim(Claim(f"{mid}.c0", mid, "yt:a", text,
+                                       t_start_s=float(i), t_end_s=float(i) + 1.0, salience=1.0))
+        s = synthesize(self.store, "neural networks representations", nli=self.nli).to_dict()
+        self.assertTrue(s["low_evidence"])
+        self.assertEqual(len(s["citations"]), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -13,19 +13,22 @@ const PRIOR = 'stress/reports/iter14.json'
 
 const COMMON = `
 You are an ADVERSARIAL reviewer of the memovox pipeline (a free/lexical video-knowledge engine).
-This is ROUND 3. Prior rounds fixed 6 defects (078d56a), added a precision gate (e25193d), and
-fixed 3 more — two MED REGRESSIONS the round-2 fixes themselves introduced plus a markdown leak
-(7374841). Round 2 already CONFIRMED H1, H1b, H2, M2, M3 as solid. Your job this round: (a) confirm
-the two round-2 regression fixes hold AND did not re-open anything or introduce a NEW regression,
-(b) re-verify nothing else regressed on the fresh run, (c) hunt for any remaining defect. Be
-skeptical; verify with evidence. The bar for satisfaction is high but FAIR — do not invent blockers
-out of FUNDAMENTAL free-path limits or pre-existing LOW issues.
+This is ROUND 4. Prior rounds CONFIRMED H1, H1b, H2, M2, M3 and the two round-2 regression fixes,
+and fixed the round-3 HIGH (SYNTH_OOC_STRUCTURED_BYPASS): synthesize()'s out-of-corpus relevance
+gate was hoisted ABOVE the consensus/contradiction composition (commit e0b4c30), so OOC topics
+refuse even when generic tokens build structure. NOTE: the store ${STORE} was ingested at 7374841;
+the round-3 fix is QUERY-TIME ONLY (synthesize.py), so the store's ingest is identical to HEAD and
+your LIVE synthesize() queries exercise the fixed code. Your job: (a) confirm the round-3 OOC fix
+holds on the structured path (the 4 probes that leaked must now refuse) without breaking in-corpus
+synthesis, (b) re-verify nothing else regressed, (c) hunt for any remaining >= MED defect. Be
+skeptical; verify with evidence. The bar is high but FAIR — do NOT invent blockers out of
+FUNDAMENTAL free-path limits (hashing embed / lexical NLI / no diarization) or pre-existing LOW issues.
 
 Context to read first:
 - The post-fix report: ${REPORT} (41 videos, free/captions, nli=lexical, embed=hashing).
 - The previous round's report: ${PRIOR}.
-- The fixes under review: \`git -C /Users/connor/projects/memovox diff 3c6fbc3 7374841\` (all
-  rounds). The newest (round-2 regression) fixes: \`git -C ... show 7374841\`. Key files:
+- The fixes under review: \`git -C /Users/connor/projects/memovox diff 3c6fbc3 e0b4c30\` (all
+  rounds). The newest (round-3 OOC-structured-path) fix: \`git -C ... show e0b4c30\`. Key files:
     src/memovox/loom/consolidate.py   (_candidate_pairs bucket-blocking; raised max_claims=50000;
                                         scope always in universe; topic filter before cap)
     src/memovox/loom/consensus.py     (partition_claims uses the same bucket-blocking)
@@ -134,11 +137,12 @@ YOUR LENS: retrieval, relevance gate, synthesize. Re-verify the round-2 regressi
     hold: 'which Rolex should I buy?' must ANSWER (low_evidence=False, citations) — rolex is a real
     48-claim topic. Try other legit in-corpus 'buy/recommend a <topic>' queries (iphone, watch — note
     'watch' the noun collides with 'watch' the verb, a PRE-EXISTING FUNDAMENTAL limit, not a regression).
-  - M1 + its round-2 fix: mv.synthesize('saturated fat') and ('diet') must return low_evidence=False
-    with a cited summary (grounded — the cited claim must actually contain the text). CRITICAL OOC gate:
-    synthesize('capital of Mongolia') and synthesize('underwater basket weaving') must now return
-    low_evidence=True with NO citations (round-2 regression fix). Confirm 'quantum chromodynamics' (in
-    corpus) behaviour is consistent with the gate.
+  - M1 + round-3 hoisted gate (THE KEY ONE): mv.synthesize('saturated fat')/('diet')/('AGI') must
+    return low_evidence=False with a cited, grounded summary. The 4 structured-path OOC probes that
+    leaked in round 3 — synthesize('what is the population of Brazil?'), ('what is the chemical formula
+    for table salt?'), ('how do volcanoes form?'), ('how do I knit a wool sweater?') — must NOW return
+    low_evidence=True with 0 citations. Also confirm 'capital of Mongolia' / 'underwater basket weaving'
+    still refuse. Try 3 MORE of your own generic-token OOC synthesize probes to confirm no residual leak.
   - Re-run 5 fresh out-of-corpus probes on BOTH ask() and synthesize() to confirm no fabrication leak.
 Return findings with concrete evidence (run the queries).`,
   },
@@ -195,11 +199,14 @@ REVIEWS:
 ${JSON.stringify(reviews.map((r, i) => ({ lens: lenses[i].key, ...r })), null, 2)}
 
 Decide team_satisfied. Rules:
- - SATISFIED only when (a) the prior-round fixes still hold (H1, H1b, H2, M2, M3) AND the two round-2
-   regression fixes hold (synthesize OOC refusal restored; legit "buy a <topic>" no longer over-refused),
-   AND (b) no FIXABLE finding of severity >= MED is a genuine correctness/UX defect or a NEW regression
-   (garbage edges, real contradictions newly missed, over-stripped content, over-refusal, ungrounded or
-   confabulated synthesis). FUNDAMENTAL free-path limits and pre-existing LOW issues NEVER block.
+ - SATISFIED only when (a) all prior fixes still hold (H1, H1b, H2, M2, M3, the two round-2 regression
+   fixes) AND the round-3 OOC fix holds (synthesize refuses OOC topics on BOTH the structured and the
+   fallback paths), AND (b) no FIXABLE finding of severity >= MED is a genuine correctness/UX defect or
+   a NEW regression (garbage edges, real contradictions newly missed, over-stripped content, over-
+   refusal, ungrounded or confabulated synthesis). FUNDAMENTAL free-path limits (hashing embed / lexical
+   NLI / no diarization / vocabulary gaps) and pre-existing LOW issues NEVER block — name them as
+   accepted_limits. Do not manufacture a blocker to avoid declaring satisfaction; if the pipeline is
+   genuinely sound on the free path, SAY SO.
  - A REGRESSION (e.g. over-stripped content, new over-refusal, garbage contradiction edges that mislead
    users) of severity >= MED blocks even if technically "fixable later".
  - FUNDAMENTAL (free-path) and ENV findings never block. Correct any reviewer misclassification.

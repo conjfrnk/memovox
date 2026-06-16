@@ -145,7 +145,26 @@ def synthesize(
     if not claims:
         return Synthesis(topic=topic, text=_LOW_EVIDENCE_MSG, low_evidence=True)
 
-    # Citation set: the distinct moments backing the topic's claims, ordered
+    # RELEVANT POOL + CROSS-CORPUS FLOOR. _topic_claims OR-matches EVERY topic token,
+    # including generic question words ("what"/"how") that _content_tokens keeps, so the
+    # raw pool spans the whole corpus: an out-of-corpus topic ("population of Brazil")
+    # then confabulates confident cross-video "consensus"/"contradictions" + hundreds of
+    # off-topic citations (the round-3/round-4 synthesize leaks). Restrict the pool to
+    # claims whose moment GENUINELY covers the topic (>= the relevance floor of the
+    # topic's content words), then require >= 2 distinct covering videos — a synthesis is
+    # cross-corpus by definition, so a topic no two sources genuinely cover has nothing to
+    # synthesize. This focuses citations on the real topic and is what ask()'s top-k
+    # retrieval gate achieves implicitly.
+    from .answer import _coverage_tokens, _relevance_coverage
+    cov_q = _coverage_tokens(topic)
+    if cov_q:
+        claims = [c for c in claims
+                  if len(cov_q & _coverage_tokens(c.text)) / len(cov_q)
+                  >= settings.answer_relevance_floor]
+    if len({c.video_id for c in claims}) < 2:
+        return Synthesis(topic=topic, text=_LOW_EVIDENCE_MSG, low_evidence=True)
+
+    # Citation set: the distinct moments backing the (covering) topic claims, ordered
     # deterministically so [n] markers are stable.
     seen: set = set()
     moment_ids: List[str] = []
@@ -156,15 +175,8 @@ def synthesize(
     citations = _build_citations(store, moment_ids)
     index_of: Dict[str, int] = {c.moment_id: c.index for c in citations}
 
-    # OUT-OF-CORPUS GATE (mirror ask()): refuse a topic that does not clear the
-    # topicality + coverage floor over its cited moments, BEFORE composing any
-    # consensus/contradiction structure. _topic_claims is pure token-overlap and
-    # _content_tokens keeps generic question words (what/how/form), so an OOC topic
-    # ("population of Brazil") OR-matches enough claims across the corpus to BUILD
-    # structure — which would otherwise bypass a fallback-only gate and confabulate a
-    # confident, heavily-cited synthesis of unrelated content. This must run on the
-    # structured path too, not just the salient fallback.
-    from .answer import _relevance_coverage
+    # Topicality guard (mirror ask()): the covering tokens must also name a genuine corpus
+    # topic (distinctive token with df >= min_df, not an incidental hapax).
     if _relevance_coverage(store, topic, citations,
                            min_moments=settings.answer_relevance_min_moments) \
             < settings.answer_relevance_floor:
