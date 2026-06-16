@@ -25,6 +25,14 @@ _STOP = {
     "the", "a", "an", "of", "to", "in", "on", "at", "for", "and", "or", "is",
     "are", "was", "were", "be", "been", "it", "this", "that", "these", "those",
     "as", "by", "with", "from", "we", "you", "they", "i", "not", "no",
+    # Interrogative/auxiliary function words: never CONTENT. Keeping them let a topic
+    # phrased as a question ("what is AGI?") rope the whole corpus — incl. "I don't know
+    # what ..." discourse filler — into the contradiction candidate set, where near-mirror
+    # filler pairs passed the precision gate as fabricated CONTRADICTS. ask() already
+    # strips these via _rel_tokens; align consolidate so topic-scoped contradiction /
+    # consensus / synthesize candidate selection matches.
+    "what", "which", "who", "whom", "whose", "when", "where", "why", "how",
+    "do", "does", "did", "can", "could", "would", "should", "will",
 }
 
 

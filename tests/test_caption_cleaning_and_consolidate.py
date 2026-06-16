@@ -229,6 +229,44 @@ class TestContradictionPrecisionGate(unittest.TestCase):
                          "unrelated short fragments were flagged as a contradiction")
 
 
+class TestQuestionWordTopicContradiction(unittest.TestCase):
+    """A topic phrased as a QUESTION must not rope generic 'I don't know what ...'
+    discourse filler into the contradiction candidate set (the question word would match
+    half the corpus), while a genuine near-mirror contradiction is still found."""
+
+    def test_question_words_are_not_content_tokens(self):
+        from memovox.loom.consolidate import _content_tokens
+        for w in ["what", "which", "who", "when", "where", "why", "how", "does", "do", "did"]:
+            self.assertNotIn(w, _content_tokens(f"{w} is the main thing here"))
+        self.assertEqual(_content_tokens("what is AGI?"), {"agi"})
+
+    def test_real_contradiction_found_under_question_topic_no_filler(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        store = LoomStore(Config(store=pathlib.Path(tmp.name) / "s").ensure())
+        self.addCleanup(store.close)
+        for v in ("yt:a", "yt:b"):
+            store.upsert_video(Video(v, f"https://youtu.be/{v[3:]}", "talk"))
+
+        def add(cid, mid, vid, text, t):
+            store.add_moment(Moment(mid, vid, float(t), float(t) + 1.0, text, index=0))
+            store.add_claim(Claim(cid, mid, vid, text, t_start_s=float(t), t_end_s=float(t) + 1.0))
+
+        # genuine near-mirror contradiction about the economy
+        add("yt:a#e.c0", "yt:a#e", "yt:a", "the national economy will fully recover next year", 0)
+        add("yt:b#e.c0", "yt:b#e", "yt:b", "the national economy will not recover next year", 0)
+        # off-topic 'I don't know what ...' filler that only shares question/discourse words
+        add("yt:a#f.c0", "yt:a#f", "yt:a", "honestly I do not know what that even means", 10)
+        add("yt:b#f.c0", "yt:b#f", "yt:b", "honestly I do not know what to do now", 10)
+        pairs = find_contradictions(store, nli=LexicalNLI(),
+                                    topic="what is happening to the economy?", write_edges=False)
+        flagged = {frozenset((p.claim_a.claim_id, p.claim_b.claim_id)) for p in pairs}
+        self.assertIn(frozenset(("yt:a#e.c0", "yt:b#e.c0")), flagged,
+                      "real economy contradiction missed under a question-phrased topic")
+        self.assertNotIn(frozenset(("yt:a#f.c0", "yt:b#f.c0")), flagged,
+                         "'I don't know what ...' filler was roped in by the question word")
+
+
 class TestRelevanceGenericVerbFilter(unittest.TestCase):
     """Generic advice/transaction verbs (recommend/suggest/purchase/buy) must not act as
     distinctive topicality tokens — the leak that let 'what is the best way to recommend a
