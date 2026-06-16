@@ -83,8 +83,16 @@ world would write wrong year yes yet young
 
 
 def _rel_tokens(text: str) -> set:
+    """DISTINCTIVE tokens (topic candidates): function + common words removed."""
     return {t for t in tokenize(text)
             if t not in _REL_STOP and t not in _COMMON_WORDS and len(t) > 2}
+
+
+def _coverage_tokens(text: str) -> set:
+    """CONTENT tokens for coverage: only function/question words removed — common
+    words ("save", "home", "dog") are KEPT so the gate checks that the cited moment
+    shares the query's CONTEXT, not just its topic word (the polysemy defense)."""
+    return {t for t in tokenize(text) if t not in _REL_STOP and len(t) > 2}
 
 
 # A query token counts as a genuine corpus TOPIC (vs an incidental hapax) when it
@@ -95,14 +103,27 @@ _RELEVANCE_TOPIC_DF_FRAC = 0.0009
 
 def _relevance_coverage(store, query: str, citations: List["Citation"],
                         min_moments: int = 0) -> float:
-    """IDF-weighted fraction of the query's distinctive content tokens that the
-    CITED moments actually cover. ~1.0 when the citations contain the query's rare
-    terms; ~0 when the query asks about something absent from the corpus. This is
-    the signal behind the W5.1 gate: out-of-corpus questions match only generic
-    tokens (their distinctive terms have no corpus support), so coverage collapses.
-    Returns 1.0 (never gate) when the query has no distinctive tokens."""
-    q = _rel_tokens(query)
-    if not q:
+    """Relevance of the CITED evidence to the query, in [0,1] (the W5 gate signal).
+    Two robust, count-based checks (NOT IDF mass, which a single token could dominate):
+
+      1. TOPICALITY — at least one DISTINCTIVE query token must be a genuine corpus
+         topic: it recurs across moments (df >= min_df) OR names a cited video's title.
+         This separates "what is AGI?" (agi in 14 moments) from "what time does the
+         BANK open?" (bank in 1 moment, an incidental hapax) -> refuse.
+      2. CONTEXT COVERAGE — the fraction of the query's CONTENT words (context words
+         kept, not just topic words) that ONE cited moment covers. This is the polysemy
+         defense: "how do I save ENERGY at home?" shares only "energy" with the physics
+         moments (save/home absent) -> low coverage -> refuse, even though "energy"
+         recurs (df=119) in a different sense.
+
+    FUNDAMENTAL LIMIT (free/lexical path): a query whose topic word genuinely co-occurs
+    with its context words in the corpus IN A DIFFERENT SENSE ("train my DOG to sit" vs
+    the CS229 'training a dog' RL analogy) cannot be distinguished lexically — word-sense
+    disambiguation needs semantics. The optional sentence-transformers [embed] backend
+    (dense query/moment similarity) resolves these residual sense collisions."""
+    distinctive = _rel_tokens(query)
+    cov_q = _coverage_tokens(query)
+    if not cov_q:
         return 1.0
     try:
         n = max(1, int(store.stats().get("moments", 1)))
@@ -111,28 +132,20 @@ def _relevance_coverage(store, query: str, citations: List["Citation"],
     if n < min_moments:
         return 1.0  # corpus too small for the df signal to be reliable
 
-    # TOPICALITY GATE. The query must mention at least one genuine corpus TOPIC — a
-    # distinctive token that recurs across several moments (df >= min_df), not an
-    # incidental hapax that merely appears once. This is what separates an answerable
-    # question ("what is AGI?", agi in 14 moments) from an out-of-corpus one whose only
-    # in-corpus token is incidental ("what time does the BANK open?", bank in 1 moment).
-    # IDF-mass coverage could not make this distinction: a lone rare-but-present token
-    # scored 1.0 (fabrication) while a lone rare-but-absent token scored ~0 (over-
-    # refusal). Counting, not mass, is the robust signal.
     min_df = max(2, round(_RELEVANCE_TOPIC_DF_FRAC * n))
-    df_map = {t: store.doc_freq(t) for t in q}
-    if not any(df >= min_df for df in df_map.values()):
+    title_tokens: set = set()
+    for c in citations:
+        title_tokens |= _rel_tokens(c.title or "")
+    topical = (any(store.doc_freq(t) >= min_df for t in distinctive)
+               or bool(distinctive & title_tokens))
+    if not topical:
         return 0.0  # no genuine corpus topic in the query -> refuse
 
-    # COUNT-BASED single-moment coverage (max over citations): the fraction of the
-    # query's distinctive tokens that ONE cited moment covers (its video TITLE included
-    # so questions naming the speaker/event match metadata). Count, not IDF mass, so no
-    # single rare token can dominate the score in either direction.
     best = 0.0
     for c in citations:
-        ctoks = _rel_tokens(" ".join(filter(None, (c.source_text or c.snippet or "", c.title or ""))))
-        covered = sum(1 for t in q if t in ctoks)
-        frac = covered / len(q)
+        ctoks = _coverage_tokens((c.source_text or c.snippet or "") + " " + (c.title or ""))
+        covered = sum(1 for t in cov_q if t in ctoks)
+        frac = covered / len(cov_q)
         if frac > best:
             best = frac
     return best

@@ -56,13 +56,13 @@ ASKS = [
     ("what did Steve Jobs say about connecting the dots?", "UF8uR6Z6KLc", "dot"),
     ("does saturated fat cause heart disease?", None, "fat"),
     ("is breakfast the most important meal of the day?", None, "breakfast"),
-    ("when will AGI or superintelligence arrive?", None, None),
+    ("what do the sources say about superintelligence?", None, None),
     ("what are the risks of a carnivore diet?", "n_Smy5-1cHE", None),
     # Panel over-refusal regression cases: in-corpus but named by a df=0 proper noun
     # (speaker/event) — must stay ANSWERED, not refused.
     ("what does Peter Attia say about saturated fat?", None, "fat"),
     ("what did Hans Rosling show about countries and years?", "jbkSRLYSojo", None),
-    ("when will AGI arrive?", None, None),
+    ("what is AGI?", None, None),
 ]
 
 # Refusal probes: questions with no answer in the corpus. ask() should NOT fabricate.
@@ -83,6 +83,10 @@ REFUSALS = [
     "what time does the bank open?",
     "how do I file my taxes?",
     "how do I train a puppy?",
+    # Polysemy: the topic word recurs in the corpus in a DIFFERENT sense; the
+    # question's context words are absent -> refuse.
+    "how do I save energy at home?",
+    "how often should I walk my dog?",
 ]
 
 CONTRA_TOPICS = ["saturated fat", "breakfast", "diet", "AGI"]

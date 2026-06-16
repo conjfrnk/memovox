@@ -108,6 +108,24 @@ class TestRelevanceGate(unittest.TestCase):
         self.assertFalse(ans.low_evidence)
         self.assertTrue(ans.citations)
 
+    def test_polysemy_context_mismatch_refused(self):
+        # "energy" recurs in the corpus (photosynthesis: "chemical energy"), but a
+        # question about household energy shares only that one word — its context
+        # words (save/home) are absent -> refuse. The polysemy defense: the count
+        # signal uses CONTEXT words, not just the topic word.
+        ans = augur.ask(self.store, "how do I save energy at home?",
+                        embedder=self.emb, settings=Settings())
+        self.assertTrue(ans.low_evidence)
+        self.assertEqual(ans.citations, [])
+
+    def test_title_only_subject_is_answered(self):
+        # A distinctive subject that appears ONLY in the video title (df=0 in
+        # transcripts) is still a genuine topic -> title-aware topicality keeps it.
+        ans = augur.ask(self.store, "what does Halvorsen explain about glucose?",
+                        embedder=self.emb, settings=Settings())
+        self.assertFalse(ans.low_evidence)
+        self.assertTrue(ans.citations)
+
     def test_small_corpus_is_not_gated(self):
         # Below answer_relevance_min_moments the IDF signal is unreliable; an
         # out-of-corpus query on a tiny store must NOT be spuriously refused.
