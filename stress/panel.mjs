@@ -7,21 +7,22 @@ export const meta = {
   ],
 }
 
-const STORE = '/tmp/mv_stress_iter13'
-const REPORT = 'stress/reports/iter13.json'
-const PRIOR = 'stress/reports/iter12.json'
+const STORE = '/tmp/mv_stress_iter14'
+const REPORT = 'stress/reports/iter14.json'
+const PRIOR = 'stress/reports/iter13.json'
 
 const COMMON = `
 You are an ADVERSARIAL reviewer of the memovox pipeline (a free/lexical video-knowledge engine).
-This is ROUND 2. A prior panel found 6 FIXABLE defects; they have now been fixed (commit 078d56a).
+This is ROUND 2. A prior panel found 6 FIXABLE defects; they were fixed (commit 078d56a), and a
+7th fix (commit e25193d) was added because fixing H1 EXPOSED a latent lexical-NLI precision problem.
 Your job: CONFIRM or REFUTE each fix on the fresh 41-video run, AND — critically — hunt for any
 REGRESSION the fixes introduced, plus any remaining/new defect. Be skeptical; verify with evidence.
 
 Context to read first:
 - The post-fix report: ${REPORT} (41 videos, free/captions, nli=lexical, embed=hashing).
 - The previous round's report: ${PRIOR}.
-- The fixes under review: \`git -C /Users/connor/projects/memovox show 078d56a --stat\` and
-  \`git -C /Users/connor/projects/memovox diff 3c6fbc3 078d56a\`. Key files:
+- The fixes under review: \`git -C /Users/connor/projects/memovox diff 3c6fbc3 e25193d\` (both
+  the 6 fixes AND the precision gate). Key files:
     src/memovox/loom/consolidate.py   (_candidate_pairs bucket-blocking; raised max_claims=50000;
                                         scope always in universe; topic filter before cap)
     src/memovox/loom/consensus.py     (partition_claims uses the same bucket-blocking)
@@ -31,9 +32,18 @@ Context to read first:
 
 The 6 fixes claimed (all must be CONFIRMED, and none may have caused a regression):
   H1 consolidation no longer 94% blind: the offline pass + consensus now scan the WHOLE corpus via
-     inverted-index blocking with a per-bucket cap; persistent CONTRADICTS/SUPPORTS edges should now
-     span many videos (was 0/2). VERIFY the edge graph; CHECK the new edges are not garbage (lexical-NLI
-     false positives) — sample some CONTRADICTS pairs and judge plausibility.
+     inverted-index blocking with a per-bucket cap. VERIFY all claims are scanned (report
+     aggregate.consolidate.claims_scanned ~= total claims, capped=False) and consolidate wall-time is
+     affordable.
+  H1b PRECISION GATE (e25193d): the full scan first emitted 534 garbage CONTRADICTS + 2256 SUPPORTS
+     (unrelated short claims sharing 2 generic tokens + a negation/agreement cue). A near-mirror gate
+     (>=3 shared content tokens AND Jaccard >=0.5; consensus min_shared 2->3) was added. VERIFY the
+     resulting edge graph is now SMALL and CLEAN: open the db, count CONTRADICTS/SUPPORTS, sample ALL
+     CONTRADICTS and many SUPPORTS, and judge each as real vs false-positive. CRITICALLY also check the
+     gate did NOT over-suppress: golden-style near-mirror contradictions ("X is harmful"/"X is not
+     harmful", >=3 shared, J>=0.5) must still be found — confirm via the new regression tests and by
+     reasoning about the diff. Report if edges are still garbage (precision too low) OR if real
+     contradictions are now missed (recall regression).
   H2 incremental new-vs-ALL holds past the cap (scope always in the universe).
   H3 relevance gate: generic advice verbs no longer leak OOC queries. VERIFY the home-purchase leak now
      refuses, AND that no LEGITIMATE in-corpus query is now over-refused by the added verbs (e.g. a watch
@@ -131,16 +141,17 @@ Return findings with concrete evidence (run the queries).`,
     key: 'consolidation-synthesis',
     prompt: `${COMMON}
 
-YOUR LENS: consolidation correctness + the new cross-video edges. Verify H1 and H2.
-  - VERIFY H1: open the store db; count CONTRADICTS and SUPPORTS edges and the number of DISTINCT video
-    pairs they span. Confirm it is no longer 0/2 over 5 videos. Then ADVERSARIALLY judge QUALITY: sample
-    15-20 CONTRADICTS edges, print both claim texts, and classify each as a real contradiction vs a
-    lexical-NLI false positive. If the new edges are mostly garbage, that is a NEW finding (precision of
-    the now-complete scan) — classify FIXABLE (e.g. raise threshold / require min overlap) or FUNDAMENTAL.
-  - Confirm the planted diet pairs' status is honestly the lexical-NLI limit (FUNDAMENTAL), not a cap bug.
-  - VERIFY H2 conceptually from the diff + the new regression tests.
-  - Check consolidate wall-time in ${REPORT} (aggregate.consolidate.metrics) — is the full-corpus pass
-    affordable, or did the rewrite blow up runtime? Report the contradictions/consensus stage timings.
+YOUR LENS: consolidation correctness, scale, and edge QUALITY. Verify H1, H1b, H2.
+  - VERIFY H1: from ${REPORT} aggregate.consolidate — claims_scanned ~= total committed, capped=False,
+    and the contradictions/consensus stage wall-times (should be a few seconds, topics dominates).
+  - VERIFY H1b (THE KEY ONE): open the store db; count CONTRADICTS and SUPPORTS edges. They should now be
+    FEW (was 534/2256). Print EVERY CONTRADICTS pair's two claim texts and classify real vs false-positive.
+    Sample many SUPPORTS likewise. Decide: is the graph now clean? Is the precision gate too lenient
+    (garbage remains -> FIXABLE) or too strict (you can argue a real near-mirror contradiction in this
+    corpus is now missed -> recall regression)? Note: the planted diet pairs are differently-phrased and
+    remain a genuine [nli]-only FUNDAMENTAL limit (NOT a precision-gate bug).
+  - VERIFY H2 conceptually from the diff + the new regression tests (new scope claim past the cap is
+    paired against prior).
 Return findings with concrete evidence (open the db; print pair texts).`,
   },
 ]
@@ -179,8 +190,10 @@ REVIEWS:
 ${JSON.stringify(reviews.map((r, i) => ({ lens: lenses[i].key, ...r })), null, 2)}
 
 Decide team_satisfied. Rules:
- - SATISFIED only when (a) all 6 fixes are CONFIRMED (no REFUTED), AND (b) no FIXABLE finding of
-   severity >= MED is a genuine correctness/UX defect or a REGRESSION introduced by the fixes.
+ - SATISFIED only when (a) all 7 fixes (the 6 round-1 fixes + the H1b precision gate) are CONFIRMED
+   (no REFUTED), AND (b) no FIXABLE finding of severity >= MED is a genuine correctness/UX defect or a
+   REGRESSION introduced by the fixes (garbage edges remaining, real contradictions newly missed,
+   over-stripped content, new over-refusal, ungrounded synthesis text).
  - A REGRESSION (e.g. over-stripped content, new over-refusal, garbage contradiction edges that mislead
    users) of severity >= MED blocks even if technically "fixable later".
  - FUNDAMENTAL (free-path) and ENV findings never block. Correct any reviewer misclassification.

@@ -93,6 +93,19 @@ class TestBracketAnnotationLeak(unittest.TestCase):
         self.assertIn("logits[b,t]", text)
         self.assertIn("x[i]", text)
 
+    def test_markdown_link_label_kept_url_dropped(self):
+        text, ev = clean_text("see [this short essay](https://example.com/p/x) for details")
+        self.assertEqual(text, "see this short essay for details")
+        self.assertNotIn("http", text)
+        self.assertEqual(ev, [])  # the label is NOT recorded as a bogus audio event
+
+    def test_orphaned_url_after_sentence_split_stripped(self):
+        # the markdown link split across a sentence boundary leaves "label](url)"
+        text, _ = clean_text("short](https://helentoner.substack.com/p/long).” She pointed out")
+        self.assertNotIn("http", text)
+        self.assertNotIn("](", text)
+        self.assertIn("She pointed out", text)
+
     def test_fragment_prefix_not_hoisted_to_speaker(self):
         # "But caveat: ..." is content, not a speaker turn -> speaker stays unset
         # and the text is preserved (not stripped as a label).
@@ -222,16 +235,26 @@ class TestRelevanceGenericVerbFilter(unittest.TestCase):
     first home purchase?' be answered confidently against an unrelated corpus."""
 
     def test_advice_verbs_not_distinctive(self):
-        from memovox.augur.answer import _coverage_tokens, _rel_tokens
+        # The verbs must NOT be distinctive TOPICALITY tokens (that's what closes the
+        # OOC leak). They DO remain COVERAGE tokens (see test_advice_verbs_not_in_
+        # coverage_filler) so a legit "buy a <topic>" query is not over-refused.
+        from memovox.augur.answer import _rel_tokens
         for v in ["recommend", "recommended", "suggest", "purchase", "buy", "bought"]:
             self.assertNotIn(v, _rel_tokens(f"please {v} something"),
                              f"{v} still a distinctive topicality token")
-            self.assertNotIn(v, _coverage_tokens(f"please {v} something"),
-                             f"{v} still a coverage token")
 
     def test_real_topic_word_still_distinctive(self):
         from memovox.augur.answer import _rel_tokens
         self.assertIn("submariner", _rel_tokens("recommend the rolex submariner"))
+
+    def test_advice_verbs_not_in_coverage_filler(self):
+        # Regression: the verbs must live ONLY in topicality (_COMMON_WORDS), NOT in
+        # _COVERAGE_FILLER — else a legit in-corpus "which Rolex should I buy?" loses its
+        # coverage token and over-refuses. They must still be COVERAGE content tokens.
+        from memovox.augur.answer import _coverage_tokens
+        cov = _coverage_tokens("which rolex should I buy")
+        self.assertIn("buy", cov)
+        self.assertIn("rolex", cov)
 
 
 class TestSynthesizeSalientFallback(unittest.TestCase):
@@ -276,6 +299,42 @@ class TestSynthesizeSalientFallback(unittest.TestCase):
     def test_genuinely_empty_topic_still_low_evidence(self):
         from memovox.augur.synthesize import synthesize
         s = synthesize(self.store, "quantum chromodynamics", nli=self.nli).to_dict()
+        self.assertTrue(s["low_evidence"])
+        self.assertEqual(len(s["citations"]), 0)
+
+
+class TestSynthesizeOutOfCorpusGate(unittest.TestCase):
+    """The salient fallback must NOT confabulate a synthesis for an OUT-OF-CORPUS topic
+    whose claims merely share a polysemous token (the panel's 'capital of Mongolia'
+    regression). synthesize must apply the same topicality/coverage gate ask() uses."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.config = Config(store=pathlib.Path(self._tmp.name) / "s").ensure()
+        self.store = LoomStore(self.config)
+        self.nli = LexicalNLI()
+        self.store.upsert_video(Video("yt:a", "https://youtu.be/a", "talk"))
+        # 60 off-topic claims that share the polysemous token "capital" (city / money
+        # senses) but nothing about Mongolia.
+        senses = ["the capital city is lovely this spring",
+                  "raising capital is hard for a new startup",
+                  "capital letters begin every sentence here"]
+        for i in range(60):
+            mid = f"yt:a#m{i:04d}"
+            text = senses[i % 3] + f" number {i}"
+            self.store.add_moment(Moment(mid, "yt:a", float(i), float(i) + 1.0, text, index=0))
+            self.store.add_claim(Claim(f"{mid}.c0", mid, "yt:a", text,
+                                       t_start_s=float(i), t_end_s=float(i) + 1.0, salience=1.0))
+
+    def tearDown(self):
+        self.store.close()
+        self._tmp.cleanup()
+
+    def test_polysemous_ooc_topic_refused(self):
+        from memovox.augur.synthesize import synthesize
+        # "capital" recurs, but "mongolia" is absent from every moment -> a single cited
+        # moment never covers the topic -> coverage below floor -> refuse, no citations.
+        s = synthesize(self.store, "capital of Mongolia", nli=self.nli).to_dict()
         self.assertTrue(s["low_evidence"])
         self.assertEqual(len(s["citations"]), 0)
 

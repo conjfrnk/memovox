@@ -33,6 +33,12 @@ EVENT_RE = re.compile(
 _RESIDUAL_BRACKET_RE = re.compile(r"\[[^\]\n]{1,60}\]")
 _BRACKET_WORD_RE = re.compile(r"[A-Za-z]{3,}")
 _BRACKET_CENSOR_RE = re.compile(r"^[\s_]+$")
+#: Markdown link ``[label](url)`` (captions sometimes embed article links): keep the
+#: visible label, drop the URL. Must run BEFORE residual-bracket stripping so the label
+#: survives. ``_URL_PAREN_RE`` mops up an orphaned ``](url)`` / bare ``(url)`` left when
+#: the sentence splitter broke inside a link (e.g. "…crazy short](https://…) post").
+_MD_LINK_RE = re.compile(r"\[([^\]\n]{0,200})\]\((https?://[^)\s]+)\)")
+_URL_PAREN_RE = re.compile(r"\]?\((https?://[^)\s]+)\)")
 #: Musical-note markers wrap sung lyrics in captions. A line carrying one is music
 #: (a song), NOT spoken video content, so it becomes a timeline event rather than a
 #: claim. Unambiguous: these glyphs appear only for music, so there is no false
@@ -238,6 +244,10 @@ def clean_text(raw: str) -> Tuple[str, List[str]]:
     """Return (cleaned speech text, list of audio-event keywords)."""
     events = [e.lower() for e in EVENT_RE.findall(raw)]
     stripped = EVENT_RE.sub(" ", raw)
+    # Markdown links first (keep label, drop URL), then any orphaned ](url)/(url) — both
+    # BEFORE residual-bracket stripping so a [label](url) is not deleted as an annotation.
+    stripped = _MD_LINK_RE.sub(r"\1", stripped)
+    stripped = _URL_PAREN_RE.sub(" ", stripped)
 
     def _strip_bracket(m: re.Match) -> str:
         inner = m.group(0)[1:-1].strip()

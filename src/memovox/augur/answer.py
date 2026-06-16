@@ -106,9 +106,12 @@ show shows showed showing tell explain explains explaining describe describes me
 mentions discuss discusses discussing cover covers covering talk talks talking
 source sources video videos clip clips talk speaker speakers lecture episode podcast
 thing things way ways kind sort lot stuff topic topics idea ideas point points part parts
-recommend recommended recommends recommendation suggest suggests suggested suggestion
-advise advice purchase purchases purchased buy buys buying bought best better way
 """.split())
+# NOTE: generic advice/transaction verbs (recommend/suggest/buy/purchase...) live ONLY in
+# _COMMON_WORDS (the TOPICALITY signal), NOT here in _COVERAGE_FILLER. Keeping them out of
+# topicality closes the OOC leak ("recommend a first home purchase?" — no distinctive topic
+# token); adding them to COVERAGE too would over-refuse a legitimate in-corpus query whose
+# real subject IS a topic word ("which Rolex should I buy?" — rolex is a real 48-claim topic).
 
 
 def _coverage_tokens(text: str) -> set:

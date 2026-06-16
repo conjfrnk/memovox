@@ -207,14 +207,22 @@ def synthesize(
             emitted.add(claim.claim_id)
             parts.append(_cite(claim.text, idx))
 
-    # SALIENT FALLBACK: the topic IS covered (we gathered claims + built citations) but
-    # the free/lexical path extracted no agreement/contradiction STRUCTURE (token-Jaccard
-    # consensus + lexical NLI both empty). Rather than report low_evidence + "ingest more
-    # sources" — actively misleading when the corpus is rich on the topic — emit the most
-    # salient on-topic claims (distinct moments, cited). Reserve the low-evidence message
-    # for the genuine zero-citation case handled above. Cross-video agreement/contradiction
-    # detection needs the optional [embed]/[nli] backends; this keeps synthesize useful.
+    # SALIENT FALLBACK: when the free/lexical path extracts no agreement/contradiction
+    # STRUCTURE (token-Jaccard consensus + lexical NLI both empty) but the topic IS
+    # genuinely covered, emit the most salient on-topic claims (distinct moments, cited)
+    # instead of a misleading "ingest more sources". GATE it on the same topicality +
+    # coverage signal ask() uses: _topic_claims is pure token-overlap, so without this
+    # gate an OUT-OF-CORPUS topic ("capital of Mongolia") would confabulate a confident
+    # synthesis from unrelated claims sharing only a polysemous token ("capital"). If the
+    # topic is not genuinely in-corpus, fall through to the low-evidence message below.
     if not parts:
+        from .answer import _relevance_coverage
+        relevance = _relevance_coverage(
+            store, topic, citations, min_moments=settings.answer_relevance_min_moments)
+        if relevance < settings.answer_relevance_floor:
+            # Out-of-corpus topic whose claims merely share a polysemous token
+            # ("capital of Mongolia"): refuse cleanly, like ask(), with no citations.
+            return Synthesis(topic=topic, text=_LOW_EVIDENCE_MSG, low_evidence=True)
         seen_m: set = set()
         for c in sorted(claims, key=lambda c: (-c.salience, c.video_id, c.t_start_s, c.claim_id)):
             idx = index_of.get(c.moment_id)
