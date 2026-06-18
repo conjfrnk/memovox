@@ -162,6 +162,10 @@ def main():
     ap.add_argument("--store", default="/tmp/mv_stress")
     ap.add_argument("--nli", default="lexical")
     ap.add_argument("--embed", default="hashing")
+    ap.add_argument("--rerank", default="identity",
+                    help="reranker backend (identity | cross-encoder)")
+    ap.add_argument("--consensus-cosine", type=float, default=0.0, dest="consensus_cosine",
+                    help="embedding-cosine consensus floor (0=off; e.g. 0.7 with real embeddings)")
     ap.add_argument("--out", default="stress/reports/report.json")
     ap.add_argument("--md", default=None)
     ap.add_argument("--stamp", default=None, help="iteration timestamp/label")
@@ -178,6 +182,7 @@ def main():
     report = {
         "stamp": args.stamp or "unstamped",
         "nli": args.nli, "embed": args.embed,
+        "rerank": args.rerank, "consensus_cosine": args.consensus_cosine,
         "videos": [], "asks": [], "refusals": [],
         "contradictions": {}, "synthesize": {}, "evolution": {},
         "aggregate": {}, "findings": [], "errors": [],
@@ -188,7 +193,8 @@ def main():
                                  "trace": traceback.format_exc()[-1500:]})
 
     mv = Memovox(store=args.store, embed_backend=args.embed, nli_backend=args.nli,
-                 llm_backend="none", rerank_backend="identity", entity_backend="none")
+                 llm_backend="none", rerank_backend=args.rerank, entity_backend="none",
+                 consensus_cosine=args.consensus_cosine)
 
     # ---- ingest all ----
     for cid, group, label in MANIFEST:

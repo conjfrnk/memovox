@@ -31,7 +31,10 @@ class RerankerInterfaceTest(unittest.TestCase):
             get_reranker("bogus")
 
     def test_identity_rerank_is_unchanged(self):
-        r = get_reranker("auto")
+        # Pin "identity" explicitly: this asserts the IDENTITY reranker's contract, which
+        # must hold regardless of whether the optional cross-encoder is installed (with it
+        # present "auto" upgrades — see test_auto_and_none_resolve_to_free_fallback).
+        r = get_reranker("identity")
         self.assertIsInstance(r, Reranker)
         cands = [("m2", 0.9), ("m1", 0.8), ("m3", 0.7)]
         self.assertEqual(r.rerank("any query", cands), cands)  # same ids, order, scores

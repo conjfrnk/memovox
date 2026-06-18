@@ -1667,7 +1667,22 @@ def run_benchmark(golden_dir=GOLDEN_DIR, configs=None, k: int = DEFAULT_K):
     fresh temp store), returning an ordered ``[(config_name, report), ...]`` (FREE
     first). The FREE row's report is metric-identical to bare run_eval(). M3.4."""
     configs = configs if configs is not None else available_configs(golden_dir)
-    return [(c.name, run_eval(golden_dir, config=c, k=k)) for c in configs]
+    # An upgrade row's backend may be *installed* (is_available True) yet still fail to
+    # LOAD its model — offline with the weights uncached, a corrupt download, an OOM.
+    # _config_available cannot detect that without paying the load cost, so guard here:
+    # a failed UPGRADE row drops out (logged), but the FREE row is the gate and must
+    # always run — its failure is a real error and propagates.
+    results = []
+    for c in configs:
+        try:
+            results.append((c.name, run_eval(golden_dir, config=c, k=k)))
+        except Exception as exc:  # noqa: BLE001 - degrade gracefully, never crash on an upgrade row
+            if c.name == "free":
+                raise
+            import sys
+            print(f"benchmark: dropping upgrade row {c.name!r} — its model could not be "
+                  f"loaded ({type(exc).__name__}: {exc}); offline/uncached?", file=sys.stderr)
+    return results
 
 
 def _benchmark_rows(results) -> dict:
