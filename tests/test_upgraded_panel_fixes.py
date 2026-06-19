@@ -32,17 +32,73 @@ class TestValueFramingNotTopical(unittest.TestCase):
 
 # ---- Fix 3: mid-cue speaker label -------------------------------------------
 class TestMidCueSpeakerLabel(unittest.TestCase):
-    def test_mid_cue_label_stripped(self):
+    def _speech(self, segs):
         from memovox.stentor.transcript import clean_segments
+        out = [s for s in clean_segments(segs) if s.kind == "speech"]
+        return " ".join(s.text for s in out)
+
+    def test_mid_cue_label_stripped(self):
         from memovox.backends.base import Segment
         # one cue whose content has a mid-text speaker change "ADDIS :"
         segs = [Segment(start=0.0, end=4.0,
                         text="that was the question. ADDIS :When we go to retrieve that memory")]
-        out = [s for s in clean_segments(segs) if s.kind == "speech"]
-        joined = " ".join(s.text for s in out)
+        joined = self._speech(segs)
         self.assertNotIn("ADDIS :", joined)
         self.assertNotIn("ADDIS:", joined)
         self.assertIn("retrieve that memory", joined)
+
+    def test_bare_no_colon_confirmed_speaker_stripped(self):
+        # Round-2 panel UNDER-LEAK: a BARE (no-colon) occurrence of a speaker that is
+        # confirmed elsewhere in the SAME document must also be stripped (it was leaking
+        # into claim text + live answer snippets: "ADDIS So, the fact that we reconstruct...").
+        from memovox.backends.base import Segment
+        segs = [
+            Segment(start=0.0, end=4.0, text="ADDIS: Memory is reconstructed in stages."),
+            Segment(start=4.0, end=8.0,
+                    text="ADDIS So, the fact that we reconstruct episodic memory matters."),
+        ]
+        joined = self._speech(segs)
+        self.assertNotIn("ADDIS", joined)
+        self.assertIn("the fact that we reconstruct episodic memory", joined)
+
+    def test_bare_label_after_sentence_boundary_stripped(self):
+        from memovox.backends.base import Segment
+        segs = [
+            Segment(start=0.0, end=4.0, text="ADDIS: Memory is reconstructed in stages."),
+            Segment(start=4.0, end=8.0,
+                    text="that was the question. ADDIS When we go to retrieve that memory."),
+        ]
+        joined = self._speech(segs)
+        self.assertNotIn("ADDIS", joined)
+        self.assertIn("that was the question", joined)
+        self.assertIn("When we go to retrieve that memory", joined)
+
+    def test_no_space_colon_label_still_stripped(self):
+        # Guards against the REJECTED naive "require whitespace before the colon" fix,
+        # which would re-leak the no-space "ADDIS:" form (4 corpus occurrences).
+        from memovox.backends.base import Segment
+        segs = [
+            Segment(start=0.0, end=4.0, text="ADDIS :Memory is reconstructed in stages."),
+            Segment(start=4.0, end=8.0, text="The story continues. ADDIS:So this poses a question."),
+        ]
+        joined = self._speech(segs)
+        self.assertNotIn("ADDIS", joined)
+        self.assertIn("So this poses a question", joined)
+
+    def test_prose_appositive_subject_preserved(self):
+        # Round-2 panel OVER-STRIP: a "Subject: predicate" prose appositive whose subject
+        # is NOT a confirmed speaker must keep its subject noun (the topic word retrieval
+        # needs). Previously "Steve Jobs: a visionary" -> " a visionary" (subject deleted).
+        from memovox.backends.base import Segment
+        segs = [
+            Segment(start=0.0, end=5.0,
+                    text="My third story is about Steve Jobs: a visionary who changed computing."),
+            Segment(start=5.0, end=9.0,
+                    text="Let us discuss the Submariner: a classic dive watch."),
+        ]
+        joined = self._speech(segs)
+        self.assertIn("Steve Jobs", joined)
+        self.assertIn("Submariner", joined)
 
 
 # ---- Fix 1: consensus must be NLI-entailment-confirmed ----------------------

@@ -10,6 +10,7 @@ from __future__ import annotations
 import html
 import json
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -99,16 +100,61 @@ def _speaker_prefix(text: str) -> Optional[re.Match]:
 
 #: A speaker change can occur MID-cue (parse_cues joins all of a cue's content lines into
 #: one string), e.g. "...the question. ADDIS :When we go to retrieve...". The leading-only
-#: _speaker_prefix never sees it, so the label "ADDIS :" leaks into claim text + answer
-#: snippets. Strip any INTERIOR "Name:" the speaker heuristic accepts (gated on
-#: _looks_like_speaker so "Note:" / "the point:" are untouched).
-_MID_SPEAKER_RE = re.compile(r"([A-Z][A-Za-z0-9.'’-]*(?:\s+[A-Z][A-Za-z0-9.'’-]*){0,2})\s*:\s*")
+#: _speaker_prefix never sees it, so the label leaks into claim text + answer snippets.
+#: Two forms leak, and stripping each safely needs the document's CONFIRMED-speaker set
+#: (collected by :func:`_collect_speakers`) so we never eat ordinary prose:
+#:   * COLON form ("ADDIS:", "ADDIS :", "Rob Wiblin:") — captured by ``_MID_SPEAKER_RE``
+#:     with group(2) holding any whitespace before the colon. A "Subject: predicate" prose
+#:     appositive ("Steve Jobs: a visionary") is ALSO a `_looks_like_speaker` colon match,
+#:     so we strip only when the name is a confirmed speaker OR uses the WebVTT "Name :"
+#:     space-before-colon convention (which prose never does) — preserving the appositive.
+#:   * BARE form ("ADDIS So, the fact...") — a cue/sentence-initial occurrence of a
+#:     confirmed speaker with no colon at all. Gated strictly on the confirmed set so an
+#:     arbitrary sentence-initial proper noun is never eaten.
+_MID_SPEAKER_RE = re.compile(r"([A-Z][A-Za-z0-9.'’-]*(?:\s+[A-Z][A-Za-z0-9.'’-]*){0,2})(\s*):\s*")
 
 
-def _strip_mid_speaker_labels(text: str) -> str:
-    def repl(m: re.Match) -> str:
-        return " " if _looks_like_speaker(m.group(1)) else m.group(0)
-    return _MID_SPEAKER_RE.sub(repl, text)
+def _collect_speakers(segments: List[Segment]) -> "frozenset[str]":
+    """Casefolded set of names CONFIRMED as speakers somewhere in the document:
+    a ``<v Name>`` tag, a leading ``Name:`` label, or a mid-cue ``Name :`` (space before
+    the colon — the WebVTT convention that distinguishes a label from a prose colon)."""
+    names: set = set()
+    for seg in segments:
+        if seg.speaker:
+            names.add(seg.speaker.strip().casefold())
+        raw = seg.text or ""
+        m = _speaker_prefix(raw)
+        if m:
+            names.add(m.group(1).strip().casefold())
+        for sm in _MID_SPEAKER_RE.finditer(raw):
+            if sm.group(2) and _looks_like_speaker(sm.group(1)):  # space before colon
+                names.add(sm.group(1).casefold())
+    return frozenset(names)
+
+
+@lru_cache(maxsize=128)
+def _bare_speaker_re(speakers: "frozenset[str]") -> "Optional[re.Pattern]":
+    """Match a cue/sentence-initial bare (no-colon) occurrence of a confirmed speaker."""
+    if not speakers:
+        return None
+    alts = sorted((re.escape(n) for n in speakers), key=len, reverse=True)
+    return re.compile(r"(^|[.!?]\s+)(?:" + "|".join(alts) + r")\s+(?=\S)", re.IGNORECASE)
+
+
+def _strip_mid_speaker_labels(text: str, speakers: "frozenset[str]" = frozenset()) -> str:
+    def colon_repl(m: re.Match) -> str:
+        name = m.group(1)
+        if not _looks_like_speaker(name):
+            return m.group(0)
+        if m.group(2) or name.casefold() in speakers:  # "Name :" convention, or confirmed
+            return " "
+        return m.group(0)  # bare-colon prose appositive ("Steve Jobs:") -> keep the subject
+
+    text = _MID_SPEAKER_RE.sub(colon_repl, text)
+    bare = _bare_speaker_re(speakers)
+    if bare is not None:
+        text = bare.sub(lambda m: m.group(1), text)
+    return text
 #: ``>>`` (optionally ``>>>``) marks a speaker change in CEA-608 / broadcast-style
 #: captions. We strip it from the knowledge text and use it to start a new
 #: (anonymous) speaker turn so multi-speaker captions don't collapse onto spk_0.
@@ -254,8 +300,12 @@ def load_transcript(path: "str | Path", *, duration: Optional[float] = None) -> 
     return parse_plain(raw, duration=duration)
 
 
-def clean_text(raw: str) -> Tuple[str, List[str]]:
-    """Return (cleaned speech text, list of audio-event keywords)."""
+def clean_text(raw: str, speakers: "frozenset[str]" = frozenset()) -> Tuple[str, List[str]]:
+    """Return (cleaned speech text, list of audio-event keywords).
+
+    ``speakers`` is the document's confirmed-speaker set (see :func:`_collect_speakers`),
+    used to strip mid-cue/bare interior speaker labels without eating prose appositives.
+    """
     events = [e.lower() for e in EVENT_RE.findall(raw)]
     stripped = EVENT_RE.sub(" ", raw)
     # Markdown links first (keep label, drop URL), then any orphaned ](url)/(url) — both
@@ -283,7 +333,7 @@ def clean_text(raw: str) -> Tuple[str, List[str]]:
     m = _speaker_prefix(stripped)
     if m:
         stripped = stripped[m.end():]
-    stripped = _strip_mid_speaker_labels(stripped)  # interior "ADDIS :" speaker changes
+    stripped = _strip_mid_speaker_labels(stripped, speakers)  # interior speaker changes
     words = [w for w in stripped.split() if _normalize_word(w) not in FILLERS]
     text = re.sub(r"\s+", " ", " ".join(words)).strip()
     return text, events
@@ -302,6 +352,10 @@ def clean_segments(segments: List[Segment]) -> List[Segment]:
     (speaker stays None -> :func:`assign_speakers` applies the single-speaker
     default), so the free auto-caption path is unchanged."""
     out: List[Segment] = []
+    # First pass: collect every name confirmed as a speaker anywhere in the document, so
+    # the per-segment cleaner can strip a bare/no-space label that is confirmed elsewhere
+    # (e.g. "ADDIS So, the fact...") without eating a prose appositive ("Steve Jobs:").
+    speakers = _collect_speakers(segments)
     current: Optional[str] = None  # persistent speaker across ">>"-delimited turns
     anon_idx = 0
     saw_turn = False
@@ -320,7 +374,7 @@ def clean_segments(segments: List[Segment]) -> List[Segment]:
         if seg.kind != "event" and _MUSIC_NOTE_RE.search(seg.text or ""):
             out.append(Segment(start=seg.start, end=seg.start, text="[music]", kind="event"))
             continue
-        text, events = clean_text(seg.text)
+        text, events = clean_text(seg.text, speakers)
         speaker = seg.speaker
         if not speaker:
             m = _speaker_prefix(seg.text)
