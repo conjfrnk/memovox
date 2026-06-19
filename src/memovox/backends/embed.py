@@ -47,6 +47,7 @@ class HashingEmbedder(Embedder):
 
 class SentenceTransformerEmbedder(Embedder):
     name = "sentence-transformers"
+    is_semantic = True
     _model_cache: dict = {}
 
     def __init__(self, config=None, model: str = "BAAI/bge-m3", **options) -> None:

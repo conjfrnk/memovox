@@ -185,13 +185,22 @@ def synthesize(
     # Consensus: token-equivalence clusters, NLI-verified to exclude disagreements.
     # W5.6: when consensus_cosine is enabled AND an embedder is available, also group
     # paraphrases/synonyms by embedding cosine (embedded lazily so the default free
-    # path pays nothing and stays byte-identical).
+    # path pays nothing and stays byte-identical). DENSE/semantic: block candidates on the
+    # induced topic clusters so no-token-overlap synonyms ("AGI" / "artificial general
+    # intelligence") are cosine-grouped — the lexical token-overlap blocking misses them.
     vectors = None
     cosine = settings.consensus_cosine
+    dense = bool(cosine > 0.0 and embedder is not None
+                 and getattr(embedder, "is_semantic", False))
+    claim_topic = None
     if cosine > 0.0 and embedder is not None:
         vectors = {c.claim_id: embedder.embed_one(c.text) for c in claims}
+    if dense:
+        moment_topic = store.moment_topics()
+        claim_topic = {c.claim_id: moment_topic.get(c.moment_id) for c in claims}
     groups, _ = partition_claims(claims, jaccard=settings.consensus_jaccard,
-                                 cosine=cosine, vectors=vectors)
+                                 cosine=cosine, vectors=vectors,
+                                 dense=dense, claim_topic=claim_topic)
     clusters = clusters_from_groups(store, groups)
     consensus_points: List[dict] = []
     for cl in sorted(clusters, key=lambda c: (-c.support_count, -c.consensus)):
