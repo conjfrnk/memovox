@@ -187,7 +187,10 @@ class Config:
 
     @property
     def models_dir(self) -> Path:
-        return self.store / "models"
+        # MEMOVOX_MODELS_DIR separates the (multi-GB, reusable) model cache from the data
+        # store, so wiping/replacing a store doesn't force a re-download. Default unchanged.
+        override = os.environ.get("MEMOVOX_MODELS_DIR")
+        return Path(override).expanduser() if override else self.store / "models"
 
     @property
     def subscriptions_path(self) -> Path:
