@@ -58,8 +58,35 @@ class ContradictionPair:
         }
 
 
+#: Discourse-filler words: high-frequency tokens that carry no TOPICAL content. A
+#: cross-video "near-mirror" whose only shared tokens are filler is not a real claim
+#: relationship — DeBERTa hallucinates high-confidence entailment/contradiction on phatic
+#: fragments that coincide on generic discourse ("okay let's try X" / "okay let's try Y";
+#: "one thought is..." / "I thought...one of..."), producing garbage SUPPORTS/CONTRADICTS
+#: edges. The near-mirror gate therefore requires >= 1 shared DISTINCTIVE (non-filler)
+#: token. NB: salience cannot do this job — real short-form contradictions score salience
+#: 0.20-0.27 (e.g. "scaling laws will/won't hold"), identical to the phatic fragments, so a
+#: salience floor would suppress genuine contradictions while still admitting the garbage.
+_FILLER = frozenset("""
+okay ok oh yeah yep yes nope well just really actually basically literally honestly
+seriously like know knows knew think thinks thinking thought guess mean means meant
+say says said get gets got getting gonna wanna gotta want wants wanted let lets letting
+try tries trying tried one two three thing things stuff kind sort lot lots way ways bit
+going goes went come comes came make makes made take takes took look looks looking
+see sees seen something someone somebody anything anyone everything nothing nobody
+today now here there back around maybe perhaps right sure fine very much many also
+even still yet ever never always again pretty quite rather almost enough though however
+thank thanks hello hey alright anyway okay
+""".split())
+
+
 def _content_tokens(text: str) -> set:
     return {t for t in tokenize(text) if t not in _STOP and len(t) > 2}
+
+
+def _distinctive_tokens(tokens: set) -> set:
+    """Content tokens with discourse filler removed (the topical signal of a claim)."""
+    return tokens - _FILLER
 
 
 #: Default universe ceiling for the offline consolidation job. High enough that real
@@ -186,6 +213,12 @@ def find_contradictions(
             continue
         union = token_set[cid_a] | token_set[cid_b]
         if union and len(shared) / len(union) < min_jaccard:
+            continue
+        # DISTINCTIVE-OVERLAP GATE: the shared tokens must include >= 1 non-filler
+        # (topical) token. A pair whose entire overlap is generic discourse filler
+        # ("okay/let/try", "thought/just/one") is phatic coincidence, not a substantive
+        # near-mirror, and NLI fabricates a high-confidence edge on it.
+        if not _distinctive_tokens(shared):
             continue
 
         nli_calls += 1

@@ -100,6 +100,34 @@ class TestMidCueSpeakerLabel(unittest.TestCase):
         self.assertIn("Steve Jobs", joined)
         self.assertIn("Submariner", joined)
 
+    def test_titlecase_content_name_preserved_even_when_speaker(self):
+        # Round-3 panel C_BARE_OVERSTRIP: the bare (no-colon) strip must fire ONLY on the
+        # ALLCAPS broadcast-label form. A confirmed Title-case speaker whose name is also a
+        # sentence-initial CONTENT word must keep that word in prose ("Mark my words...",
+        # "Reagan was the president..."). Previously the IGNORECASE bare strip ate them.
+        from memovox.backends.base import Segment
+        segs = [
+            Segment(start=0.0, end=4.0, text="Mark: Today we discuss the news."),
+            Segment(start=4.0, end=8.0, text="Reagan: I want to address the nation."),
+            Segment(start=8.0, end=12.0, text="Mark my words, this will change everything."),
+            Segment(start=12.0, end=16.0, text="Reagan was the president during that era."),
+        ]
+        joined = self._speech(segs)
+        self.assertIn("Mark my words", joined)
+        self.assertIn("Reagan was the president", joined)
+
+    def test_allcaps_bare_label_of_titlecase_speaker_stripped(self):
+        # The ALLCAPS broadcast form of a confirmed (here Title-case) speaker IS a bare
+        # label and must still be stripped — the strip is not weakened, only narrowed.
+        from memovox.backends.base import Segment
+        segs = [
+            Segment(start=0.0, end=4.0, text="Reagan: I want to address the nation."),
+            Segment(start=4.0, end=8.0, text="The crowd waited. REAGAN We begin with the economy."),
+        ]
+        joined = self._speech(segs)
+        self.assertNotIn("REAGAN", joined)
+        self.assertIn("We begin with the economy", joined)
+
 
 # ---- Fix 1: consensus must be NLI-entailment-confirmed ----------------------
 class _FakeEmbedder(Embedder):
@@ -185,6 +213,58 @@ class TestConsensusEntailmentConfirmed(unittest.TestCase):
                        settings=Settings(consensus_cosine=0.9)).to_dict()
         self.assertGreaterEqual(len(s["consensus_points"]), 1,
                                 "genuine cross-video entailment dropped from consensus")
+
+
+# ---- Fix: garbage SUPPORTS/CONTRADICTS on filler-only phatic overlap ---------
+class TestPhaticOverlapRejected(unittest.TestCase):
+    """GARBAGE_SUPPORTS_PHATIC (round-3 panel): a cross-video near-mirror pair whose
+    shared tokens are ALL generic discourse filler (e.g. "okay let's try one thing" /
+    "okay let's try one thing") must NOT produce a SUPPORTS/CONTRADICTS edge — DeBERTa
+    hallucinates high-confidence entailment on phatic fragments. A pair that shares a
+    DISTINCTIVE topical token still forms an edge. (Salience can't separate these: real
+    short-form contradictions score 0.20-0.27, identical to the phatic fragments.)"""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.config = Config(store=pathlib.Path(self._tmp.name) / "s").ensure()
+        self.store = LoomStore(self.config)
+        for v in ("yt:a", "yt:b"):
+            self.store.upsert_video(Video(v, f"https://youtu.be/{v[3:]}", "talk"))
+
+    def tearDown(self):
+        self.store.close()
+        self._tmp.cleanup()
+
+    def _add(self, cid, vid, text, salience=0.5):
+        mid = f"{vid}#m_{cid[-2:]}"
+        if self.store.get_moment(mid) is None:
+            self.store.add_moment(Moment(mid, vid, 0.0, 5.0, text, index=0))
+        self.store.add_claim(Claim(cid, mid, vid, text, salience=salience, t_start_s=0.0, t_end_s=5.0))
+
+    def test_filler_only_overlap_makes_no_edge(self):
+        from memovox.loom.consolidate import find_contradictions
+        # shared tokens are all discourse filler (okay/let/try/one/thing) -> no edge,
+        # even with HIGH salience (proving it is the content gate, not a salience floor).
+        a = "okay let us try one thing today"
+        b = "okay let us try one thing now"
+        self._add("yt:a#c0", "yt:a", a, salience=0.9)
+        self._add("yt:b#c0", "yt:b", b, salience=0.9)
+        nli = _FakeNLI(entailing=[(a, b), (b, a)])
+        pairs = find_contradictions(self.store, nli=nli, include_supports=True)
+        self.assertEqual(len(pairs), 0, "filler-only phatic pair wrongly produced an edge")
+
+    def test_distinctive_overlap_still_makes_edge_even_low_salience(self):
+        from memovox.loom.consolidate import find_contradictions
+        # genuine short-form contradiction-style near-mirror with LOW salience (0.22):
+        # it shares DISTINCTIVE topical tokens, so it must STILL form an edge — a salience
+        # floor would have wrongly dropped it (this is the golden-gate failure mode).
+        a = "scaling laws will keep holding beyond current compute budgets"
+        b = "scaling laws will keep holding beyond current compute budgets entirely"
+        self._add("yt:a#c0", "yt:a", a, salience=0.22)
+        self._add("yt:b#c0", "yt:b", b, salience=0.24)
+        nli = _FakeNLI(entailing=[(a, b), (b, a)])
+        pairs = find_contradictions(self.store, nli=nli, include_supports=True)
+        self.assertGreaterEqual(len(pairs), 1, "distinctive near-mirror wrongly dropped")
 
 
 if __name__ == "__main__":

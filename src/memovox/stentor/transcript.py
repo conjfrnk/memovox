@@ -134,11 +134,16 @@ def _collect_speakers(segments: List[Segment]) -> "frozenset[str]":
 
 @lru_cache(maxsize=128)
 def _bare_speaker_re(speakers: "frozenset[str]") -> "Optional[re.Pattern]":
-    """Match a cue/sentence-initial bare (no-colon) occurrence of a confirmed speaker."""
+    """Match a cue/sentence-initial bare (no-colon) occurrence of a confirmed speaker,
+    written in the ALLCAPS broadcast-label convention. The match is CASE-SENSITIVE on the
+    uppercased name: prose writes "Reagan was the president" (Title case) but a caption
+    speaker change writes "REAGAN ..." (ALLCAPS), so matching only ALLCAPS strips the
+    leaked label without ever eating a sentence-initial CONTENT use of a name that happens
+    to coincide with a speaker (Mark/Will/Hope/Reagan/Armstrong/...)."""
     if not speakers:
         return None
-    alts = sorted((re.escape(n) for n in speakers), key=len, reverse=True)
-    return re.compile(r"(^|[.!?]\s+)(?:" + "|".join(alts) + r")\s+(?=\S)", re.IGNORECASE)
+    alts = sorted({re.escape(n.upper()) for n in speakers}, key=len, reverse=True)
+    return re.compile(r"(^|[.!?]\s+)(?:" + "|".join(alts) + r")\s+(?=\S)")
 
 
 def _strip_mid_speaker_labels(text: str, speakers: "frozenset[str]" = frozenset()) -> str:
