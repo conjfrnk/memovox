@@ -84,6 +84,7 @@ suggested suggestion suggestions advise advice purchase purchases purchased purc
 buy buys buying bought sell sells selling sold choose chooses choosing chose pick picks
 won wins winner winners winning lost lose loses losing beat beats beaten beating
 happen happened happens happening become became becomes consider considered considers
+invest invests investing invested investment investments worth value valued values
 """.split())
 
 
@@ -108,7 +109,13 @@ show shows showed showing tell explain explains explaining describe describes me
 mentions discuss discusses discussing cover covers covering talk talks talking
 source sources video videos clip clips talk speaker speakers lecture episode podcast
 thing things way ways kind sort lot stuff topic topics idea ideas point points part parts
+good bad great best better worse worst nice fine invest invests investing invested
+investment investments worth value valued values
 """.split())
+# Value-judgment framing ('a GOOD INVESTMENT', 'WORTH it') is dropped from COVERAGE too —
+# else "are watches a good investment?" over-refuses (cov_q {good,investment,watches} -> a
+# watch moment covers only {watches}=1/3 < floor) despite the corpus being watch-purchase
+# advice. df-based topicality is still the OOC guard (crypto/bitcoin df=0 -> still refuse).
 # NOTE: generic advice/transaction verbs (recommend/suggest/buy/purchase...) live ONLY in
 # _COMMON_WORDS (the TOPICALITY signal), NOT here in _COVERAGE_FILLER. Keeping them out of
 # topicality closes the OOC leak ("recommend a first home purchase?" — no distinctive topic

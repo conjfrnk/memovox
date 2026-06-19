@@ -95,6 +95,20 @@ def _speaker_prefix(text: str) -> Optional[re.Match]:
     if m and _looks_like_speaker(m.group(1)):
         return m
     return None
+
+
+#: A speaker change can occur MID-cue (parse_cues joins all of a cue's content lines into
+#: one string), e.g. "...the question. ADDIS :When we go to retrieve...". The leading-only
+#: _speaker_prefix never sees it, so the label "ADDIS :" leaks into claim text + answer
+#: snippets. Strip any INTERIOR "Name:" the speaker heuristic accepts (gated on
+#: _looks_like_speaker so "Note:" / "the point:" are untouched).
+_MID_SPEAKER_RE = re.compile(r"([A-Z][A-Za-z0-9.'’-]*(?:\s+[A-Z][A-Za-z0-9.'’-]*){0,2})\s*:\s*")
+
+
+def _strip_mid_speaker_labels(text: str) -> str:
+    def repl(m: re.Match) -> str:
+        return " " if _looks_like_speaker(m.group(1)) else m.group(0)
+    return _MID_SPEAKER_RE.sub(repl, text)
 #: ``>>`` (optionally ``>>>``) marks a speaker change in CEA-608 / broadcast-style
 #: captions. We strip it from the knowledge text and use it to start a new
 #: (anonymous) speaker turn so multi-speaker captions don't collapse onto spk_0.
@@ -269,6 +283,7 @@ def clean_text(raw: str) -> Tuple[str, List[str]]:
     m = _speaker_prefix(stripped)
     if m:
         stripped = stripped[m.end():]
+    stripped = _strip_mid_speaker_labels(stripped)  # interior "ADDIS :" speaker changes
     words = [w for w in stripped.split() if _normalize_word(w) not in FILLERS]
     text = re.sub(r"\s+", " ", " ".join(words)).strip()
     return text, events

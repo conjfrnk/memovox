@@ -105,6 +105,27 @@ def _cluster_contradicts(cluster, nli: NLIBackend, threshold: float) -> bool:
     return False
 
 
+def _cluster_entails(cluster, nli: NLIBackend, threshold: float) -> bool:
+    """True iff some CROSS-video member pair is an NLI ENTAILMENT (either direction).
+
+    Symmetric to :func:`_cluster_contradicts`: a cluster grouped only by embedding-cosine
+    co-location ("breakfast IS the most important meal" vs a video DEBUNKING that thesis —
+    both about breakfast, cosine-near, but NEUTRAL) must NOT be reported as agreement. The
+    cosine fallback proposes candidates; the NLI must CONFIRM real agreement before it is
+    consensus — the agreement-side analog of why contradictions are NLI-verified. Token-
+    equivalent clusters (the free path) trivially pass (near-identical text -> entailment)."""
+    claims = cluster.claims
+    for i in range(len(claims)):
+        for j in range(i + 1, len(claims)):
+            a, b = claims[i], claims[j]
+            if a.video_id == b.video_id:
+                continue
+            if (nli.classify(a.text, b.text).entail >= threshold
+                    or nli.classify(b.text, a.text).entail >= threshold):
+                return True
+    return False
+
+
 def _cite(text: str, index: int) -> str:
     snippet = (text or "").strip()
     if snippet and snippet[-1] not in ".!?":
@@ -198,6 +219,12 @@ def synthesize(
         if cl.support_count < 2:
             continue
         if _cluster_contradicts(cl, nli, settings.contradiction_threshold):
+            continue
+        # CONSENSUS must be NLI-CONFIRMED, not pure cosine co-location: a cluster the cosine
+        # fallback grouped by topic similarity but the NLI finds no cross-video entailment in
+        # is a topic neighborhood, not an agreement (a debunking source presented as endorsing
+        # the thesis it debunks). Token-equivalent clusters pass trivially (near-identical text).
+        if not _cluster_entails(cl, nli, settings.entailment_threshold):
             continue
         rep = max(cl.claims, key=lambda c: (c.salience, c.claim_id))
         consensus_points.append({
