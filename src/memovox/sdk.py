@@ -192,15 +192,8 @@ class Memovox:
     def contradictions(self, topic: Optional[str] = None) -> List[ContradictionPair]:
         with LoomStore(self.config) as store:
             nli = get_nli(self.settings.nli_backend, config=self.config)
-            # DENSE candidate generation when both backends are semantic: topic-cluster
-            # blocking + precise NLI (no lexical Jaccard prefilter), so differently-phrased
-            # cross-video contradictions surface. Free path stays lexical/byte-identical.
-            embedder = get_embedder(self.settings.embed_backend, config=self.config)
-            dense = bool(getattr(embedder, "is_semantic", False)
-                         and getattr(nli, "is_semantic", False))
             return find_contradictions(
-                store, nli=nli, topic=topic,
-                threshold=self.settings.contradiction_threshold, dense=dense,
+                store, nli=nli, topic=topic, threshold=self.settings.contradiction_threshold
             )
 
     def consolidate(self) -> dict:
@@ -212,11 +205,7 @@ class Memovox:
         depend on this inline path. ``enqueue_consolidate`` is the async alternative."""
         with LoomStore(self.config) as store:
             nli = get_nli(self.settings.nli_backend, config=self.config)
-            # The embedder lets consolidation use DENSE (topic-cluster + cosine) candidate
-            # generation when both it and the NLI are semantic; the free path ignores it.
-            embedder = get_embedder(self.settings.embed_backend, config=self.config)
-            return run_consolidation(store, nli=nli, settings=self.settings,
-                                     embedder=embedder).to_dict()
+            return run_consolidation(store, nli=nli, settings=self.settings).to_dict()
 
     # -- async jobs (M3.3) -------------------------------------------------
 

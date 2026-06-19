@@ -67,7 +67,6 @@ class LexicalNLI(NLIBackend):
 
 class TransformersNLI(NLIBackend):
     name = "deberta-nli"
-    is_semantic = True
     _pipe_cache: dict = {}
     DEFAULT_MODEL = "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"
 

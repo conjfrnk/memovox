@@ -474,15 +474,6 @@ class LoomStore:
         ).fetchall()
         return [_row_to_moment(r) for r in rows]
 
-    def moment_topics(self) -> dict:
-        """Map of ``moment_id -> topic_id`` for moments stamped by topic induction
-        (None topic_id excluded). The read side of the dense/semantic contradiction +
-        consensus candidate generation, which blocks on shared induced topic cluster."""
-        rows = self.conn.execute(
-            "SELECT moment_id, topic_id FROM moments WHERE topic_id IS NOT NULL"
-        ).fetchall()
-        return {r["moment_id"]: r["topic_id"] for r in rows}
-
     def moment_vectors(self) -> List[Tuple[str, List[float]]]:
         """All (moment_id, text vector) pairs, ordered by moment_id (deterministic).
 

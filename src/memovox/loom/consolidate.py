@@ -104,32 +104,6 @@ def _candidate_pairs(token_set: dict, *, bucket_cap: int = _BUCKET_CAP):
                 yield pair
 
 
-def _topic_candidate_pairs(claim_topic: dict, *, bucket_cap: int = _BUCKET_CAP):
-    """Yield unique ``(cid_a, cid_b)`` (cid_a < cid_b) pairs whose claims share an induced
-    TOPIC cluster — the SEMANTIC blocking for the [embed]/[nli] path. Topic clusters are
-    cosine-derived (induce_topics), so this surfaces the semantically-related-but-lexically-
-    different pairs that lexical token-overlap blocking can never generate (the iterE gap).
-    A precise NLI judges them with no Jaccard prefilter. Bounded per cluster by bucket_cap
-    (deterministically, by claim_id) so a huge cluster cannot explode the NLI-call count."""
-    by_topic: dict = defaultdict(list)
-    for cid, tid in claim_topic.items():
-        if tid:
-            by_topic[tid].append(cid)
-    seen: set = set()
-    for cids in by_topic.values():
-        if len(cids) > bucket_cap:
-            cids = sorted(cids)[:bucket_cap]
-        for i in range(len(cids)):
-            a = cids[i]
-            for j in range(i + 1, len(cids)):
-                b = cids[j]
-                pair = (a, b) if a < b else (b, a)
-                if pair in seen:
-                    continue
-                seen.add(pair)
-                yield pair
-
-
 def find_contradictions(
     store: LoomStore,
     *,
@@ -144,7 +118,6 @@ def find_contradictions(
     span: Optional[Span] = None,
     scope: Optional[set] = None,
     bucket_cap: int = _BUCKET_CAP,
-    dense: bool = False,
 ) -> List[ContradictionPair]:
     all_committed = store.list_claims(status="committed")
     # Topic filter BEFORE the cap: a topic-scoped query wants the most relevant
@@ -186,19 +159,10 @@ def find_contradictions(
             video_cache[claim.video_id] = v
         return deep_link(v.source_url, claim.t_start_s) if v else None
 
-    # Candidate generation. DENSE/semantic path ([embed]+[nli]): pairs come from the
-    # induced TOPIC clusters (cosine-derived) and a precise NLI judges them with NO lexical
-    # Jaccard prefilter — so differently-phrased cross-video contradictions are finally
-    # reachable (the free-path token-overlap gate filtered them out). FREE/lexical path:
-    # inverted-index token blocking + the near-mirror precision gate, unchanged.
-    if dense:
-        moment_topic = store.moment_topics()
-        claim_topic = {c.claim_id: moment_topic.get(c.moment_id) for c in claims}
-        pair_iter = _topic_candidate_pairs(claim_topic, bucket_cap=bucket_cap)
-    else:
-        pair_iter = _candidate_pairs(token_set, bucket_cap=bucket_cap)
-
-    for cid_a, cid_b in pair_iter:
+    # Inverted-index blocking (bucket-capped) generates each cross-video candidate pair
+    # once. The whole universe participates — no per-claim O(|C|^2) over a truncated
+    # prefix — so cross-video discovery is no longer blind past the first max_claims.
+    for cid_a, cid_b in _candidate_pairs(token_set, bucket_cap=bucket_cap):
         # Incremental scope (M0.2): when scanning only NEW claims, skip any pair where
         # neither side is new — that pair was already scored in an earlier pass. The
         # candidate UNIVERSE includes all scope claims, so a new claim is still paired
@@ -208,21 +172,21 @@ def find_contradictions(
         a, b = by_id[cid_a], by_id[cid_b]
         if a.video_id == b.video_id:
             continue  # cross-corpus only
-        if not dense:
-            # PRECISION GATE (free/lexical path): only NLI-compare claims that are
-            # substantive NEAR-MIRRORS — they must share >= min_shared content tokens AND
-            # overlap by >= min_jaccard. Lexical NLI reliably scores opposing-polarity
-            # near-duplicates ("X is harmful" / "X is not harmful") but FALSELY flags
-            # unrelated short fragments that share a couple of generic tokens plus a
-            # negation cue. Without this gate a full-corpus scan emits hundreds of garbage
-            # cross-video edges. The dense path doesn't need it: topic-cluster candidates
-            # are already semantically related and a precise NLI tells real from coincidence.
-            shared = token_set[cid_a] & token_set[cid_b]
-            if len(shared) < min_shared:
-                continue
-            union = token_set[cid_a] | token_set[cid_b]
-            if union and len(shared) / len(union) < min_jaccard:
-                continue
+        # PRECISION GATE (free/lexical path): only NLI-compare claims that are
+        # substantive NEAR-MIRRORS — they must share >= min_shared content tokens AND
+        # overlap by >= min_jaccard. Lexical NLI reliably scores opposing-polarity
+        # near-duplicates ("X is harmful" / "X is not harmful") but FALSELY flags
+        # unrelated short fragments that share a couple of generic tokens plus a
+        # negation cue. Without this gate a full-corpus scan emits hundreds of garbage
+        # cross-video edges (the 600-claim cap used to hide them by barely scanning
+        # cross-video pairs). Genuine differently-phrased contradictions need a real
+        # [nli] backend; the free path cannot tell them from coincidence.
+        shared = token_set[cid_a] & token_set[cid_b]
+        if len(shared) < min_shared:
+            continue
+        union = token_set[cid_a] | token_set[cid_b]
+        if union and len(shared) / len(union) < min_jaccard:
+            continue
 
         nli_calls += 1
         res = nli.classify(a.text, b.text)
@@ -337,7 +301,7 @@ _WATERMARK_KEY = "consolidation_watermark"
 def consolidate(
     store: LoomStore, *, nli: NLIBackend, settings: Optional[Settings] = None,
     tracer: Optional[Tracer] = None, since_watermark: Optional[int] = None,
-    max_claims: int = DEFAULT_MAX_CLAIMS, embedder: Optional[object] = None,
+    max_claims: int = DEFAULT_MAX_CLAIMS,
 ) -> ConsolidationReport:
     """Run cross-corpus consolidation (spec §4 stage 7), incrementally (M0.2 W5).
 
@@ -367,14 +331,6 @@ def consolidate(
     from .consensus import cluster_claims
     from .topics import induce_topics
 
-    # DENSE/semantic mode: only when BOTH the embedder and the NLI are semantic. Then
-    # contradiction/consensus candidates come from the induced topic clusters (judged by
-    # the precise NLI / cosine), instead of lexical token-overlap blocking — so
-    # differently-phrased contradictions and no-overlap synonyms are reachable. With the
-    # free (hashing+lexical) backends this is False and the path is byte-identical.
-    dense = bool(embedder is not None and getattr(embedder, "is_semantic", False)
-                 and getattr(nli, "is_semantic", False))
-
     watermark = (
         since_watermark if since_watermark is not None
         else int(store.get_meta(_WATERMARK_KEY, "0") or 0)
@@ -393,7 +349,7 @@ def consolidate(
         pairs = find_contradictions(
             store, nli=nli, threshold=settings.contradiction_threshold,
             include_supports=True, write_edges=True, span=_sp,
-            scope=scope, max_claims=max_claims, dense=dense,
+            scope=scope, max_claims=max_claims,
         )
         # This pass's NEW findings (0 on an idempotent re-run); the report's totals
         # below reflect the whole graph so a re-run never misreports "0".
@@ -413,8 +369,7 @@ def consolidate(
     supports = store.count_edges(rel="SUPPORTS")
 
     with tracer.span("consensus") as _sp:
-        clusters = cluster_claims(store, write_edges=False, max_claims=max_claims,
-                                  dense=dense, cosine=settings.consensus_cosine)
+        clusters = cluster_claims(store, write_edges=False, max_claims=max_claims)
         consensus_clusters = sum(1 for c in clusters if c.support_count >= 2)
         _sp.add_counter("clusters", consensus_clusters)
 

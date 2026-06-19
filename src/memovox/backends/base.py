@@ -74,10 +74,6 @@ class ASRBackend(Backend):
 
 class Embedder(Backend):
     dim: int = 0
-    #: True iff the embedding geometry is SEMANTIC (a real sentence-transformer), not the
-    #: deterministic hashing free fallback. Gates the dense (topic-cluster + cosine)
-    #: candidate generation in consolidation/synthesis — meaningless on hashing geometry.
-    is_semantic: bool = False
 
     @abstractmethod
     def embed(self, texts: List[str]) -> List[List[float]]:
@@ -96,11 +92,6 @@ class NLIResult:
 
 
 class NLIBackend(Backend):
-    #: True iff this NLI is PRECISE (a real entailment model, e.g. DeBERTa) rather than the
-    #: lexical free fallback. When True the dense candidate path drops the Jaccard prefilter
-    #: and lets the model judge low-lexical-overlap pairs directly.
-    is_semantic: bool = False
-
     @abstractmethod
     def classify(self, premise: str, hypothesis: str) -> NLIResult:
         raise NotImplementedError

@@ -19,13 +19,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from ..util import parse_iso
-from .consolidate import (
-    _BUCKET_CAP,
-    DEFAULT_MAX_CLAIMS,
-    _candidate_pairs,
-    _content_tokens,
-    _topic_candidate_pairs,
-)
+from .consolidate import _BUCKET_CAP, DEFAULT_MAX_CLAIMS, _candidate_pairs, _content_tokens
 from .models import Claim
 
 # Consensus weighting. Source count dominates (more independent sources asserting
@@ -152,20 +146,18 @@ def _cosine(a, b) -> float:
 def partition_claims(
     claims: List[Claim], *, min_shared: int = 3, jaccard: float = 0.5,
     cosine: float = 0.0, vectors: Optional[Dict[str, list]] = None,
-    bucket_cap: int = _BUCKET_CAP, dense: bool = False,
-    claim_topic: Optional[Dict[str, str]] = None,
+    bucket_cap: int = _BUCKET_CAP,
 ):
     """Union-find partition of claims into equivalence groups (pure, no store).
 
     Two claims are equivalent when they share at least ``min_shared`` content
     tokens AND their content-token Jaccard is ``>= jaccard`` — OR (W5.6, opt-in)
-    when ``cosine > 0`` and their embedding cosine is ``>= cosine``.
-
-    Candidate generation. FREE/lexical path: inverted-index token blocking, so the
-    cosine fallback only fires among token-SHARING pairs — which misses true synonyms
-    with no overlap ("AGI" / "artificial general intelligence"). DENSE/semantic path
-    (``dense=True`` + ``claim_topic``): candidates come from the induced TOPIC clusters,
-    so cosine groups synonyms regardless of shared tokens. Returns ``(groups, cross_video_pairs)``.
+    when ``cosine > 0`` and their embedding cosine is ``>= cosine``. The cosine
+    fallback groups paraphrases/synonyms that token-Jaccard misses ("AGI is coming
+    soon" / "AGI will arrive imminently" share only the token 'agi'); it only fires
+    among the inverted-index candidate pairs (claims sharing >=1 token), and is a
+    no-op by default (``cosine=0``) and with the lexical hashing embedder (whose
+    geometry is not semantic). Returns ``(groups, cross_video_pairs)``.
     """
     by_id = {c.claim_id: c for c in claims}
     tokens = {c.claim_id: _content_tokens(c.text) for c in claims}
@@ -173,9 +165,10 @@ def partition_claims(
 
     uf = _UnionFind(by_id.keys())
     cross_video: List[tuple] = []
-    pair_iter = (_topic_candidate_pairs(claim_topic or {}, bucket_cap=bucket_cap)
-                 if dense else _candidate_pairs(tokens, bucket_cap=bucket_cap))
-    for cid_a, cid_b in pair_iter:
+    # Inverted-index blocking (bucket-capped) over claims sharing >=1 token — the same
+    # candidate generator the contradiction pass uses, so consensus clustering also
+    # scales to the full corpus instead of a 600-claim prefix.
+    for cid_a, cid_b in _candidate_pairs(tokens, bucket_cap=bucket_cap):
         toks_a, toks_b = tokens[cid_a], tokens[cid_b]
         token_equiv = (len(toks_a & toks_b) >= min_shared
                        and _jaccard(toks_a, toks_b) >= jaccard)
@@ -228,31 +221,19 @@ def cluster_claims(
     jaccard: Optional[float] = None,
     max_claims: int = DEFAULT_MAX_CLAIMS,
     write_edges: bool = True,
-    dense: bool = False,
-    cosine: float = 0.0,
 ) -> List[ClaimCluster]:
     """Partition committed claims into scored clusters of equivalent claims.
 
     Returns ALL clusters (including singletons), each scored. For every
     CROSS-video equivalent pair a provenanced ``SUPPORTS`` edge is written
     (``write_edges``); within-video equivalence is left to dedup (W5). ``jaccard``
-    defaults to ``settings.consensus_jaccard``. ``dense`` (semantic backends) blocks on
-    induced topic clusters + ``cosine`` equivalence over the persisted moment vectors, so
-    no-token-overlap synonyms group; the free path (dense=False) is byte-identical.
+    defaults to ``settings.consensus_jaccard``.
     """
     if jaccard is None:
         jaccard = getattr(store.config.settings, "consensus_jaccard", 0.5)
 
     claims = store.list_claims(status="committed")[:max_claims]
-    claim_topic = vectors = None
-    if dense:
-        moment_topic = store.moment_topics()
-        moment_vec = dict(store.moment_vectors())
-        claim_topic = {c.claim_id: moment_topic.get(c.moment_id) for c in claims}
-        vectors = {c.claim_id: moment_vec[c.moment_id] for c in claims if c.moment_id in moment_vec}
-    groups, cross_video = partition_claims(
-        claims, min_shared=min_shared, jaccard=jaccard,
-        dense=dense, claim_topic=claim_topic, cosine=cosine, vectors=vectors)
+    groups, cross_video = partition_claims(claims, min_shared=min_shared, jaccard=jaccard)
     if write_edges:
         for a, b in cross_video:
             store.add_edge(
