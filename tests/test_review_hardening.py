@@ -1265,5 +1265,58 @@ class TestRound10Hardening(unittest.TestCase):
         mv.close()
 
 
+# --------------------------------------------------------------------------- #
+# Round 11 — gate non-ASCII next-sentence leak + per-token doc_freq CPU DoS
+# --------------------------------------------------------------------------- #
+
+
+class TestRound11Hardening(unittest.TestCase):
+    def _cits(self, n=1):
+        from memovox.augur.types import Citation
+        return [Citation(index=i, video_id="v", moment_id=f"v#m{i}", t_start_s=0, t_end_s=1,
+                         source_text="x") for i in range(1, n + 1)]
+
+    def test_gate_non_ascii_next_sentence_after_abbreviation(self):
+        # round-11 (MED): the next-sentence detector was ASCII [A-Z][a-z], so an uncited
+        # sentence ending in an abbreviation before a NON-ASCII capital ("etc. Élément …",
+        # Cyrillic/Greek) merged into the next cited clause and leaked.
+        from memovox.augur.answer import _llm_citations_valid as V
+        c = self._cits()
+        for t in ["Napoleon invented ribosomes etc. Élément cite ici les proteines [1]",
+                  "Napoleon made them etc. Авторы note a decline [1]",
+                  "Napoleon made them etc. States note a decline [1]"]:  # ASCII control
+            self.assertFalse(V(t, c), f"non-ASCII next-sentence leak accepted: {t!r}")
+        # faithful answers still accepted (initialism, title, accented word mid-sentence)
+        for t in ["The U.S. economy grew [1].", "Mr. Jones disagreed [1].",
+                  "Les ribosomes synthétisent des protéines [1]."]:
+            self.assertTrue(V(t, c), f"faithful answer wrongly rejected: {t!r}")
+
+    def test_relevance_gate_doc_freq_probes_are_capped(self):
+        # round-11 (MED): the topicality gate ran one doc_freq (FTS/LIKE) per DISTINCT query
+        # token; a giant out-of-corpus query was a per-token CPU DoS (the FTS term cap is a
+        # different call site). Cap the probes; a giant query must not pin CPU.
+        from memovox.augur import answer as A
+        from memovox.backends.embed import HashingEmbedder
+        from memovox.config import Config
+        from memovox.loom import LoomStore, Moment, Video
+        s = LoomStore(Config(store=pathlib.Path(tempfile.mkdtemp()) / "s").ensure())
+        e = HashingEmbedder(dim=32)
+        s.upsert_video(Video(video_id="vid:a", source_url="https://x", title="A", content_hash="a"))
+        # enough moments that the small-corpus exemption doesn't apply
+        for i in range(60):
+            m = Moment(f"vid:a#m{i:04d}", "vid:a", float(i), float(i + 1),
+                       f"chunk size retrieval moment number {i}", "spk", index=i)
+            s.add_moment(m, e.embed_one(m.transcript))
+        cits = self._cits()
+        big = " ".join(f"qword{i}" for i in range(120000))
+        t0 = time.perf_counter()
+        rel = A._relevance_coverage(s, big, cits, min_moments=0)
+        elapsed = time.perf_counter() - t0
+        self.assertLess(elapsed, 5.0, f"doc_freq DoS not bounded: {elapsed:.1f}s for a 120k-token query")
+        self.assertTrue(0.0 <= rel <= 1.0)
+        s.close()
+        self.assertLessEqual(A._REL_TOPICALITY_MAX, 1000)
+
+
 if __name__ == "__main__":
     unittest.main()

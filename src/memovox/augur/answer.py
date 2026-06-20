@@ -151,6 +151,10 @@ def _coverage_tokens(text: str) -> set:
 # appears in at least this fraction of moments (with a small absolute floor). Used by
 # the topicality gate in _relevance_coverage.
 _RELEVANCE_TOPIC_DF_FRAC = 0.0009
+#: Max distinctive query tokens whose corpus doc_freq the topicality gate probes — bounds the
+#: per-token FTS/LIKE work so a giant out-of-corpus query can't pin a CPU (a real question has
+#: far fewer; the gate decision is unchanged for any realistic query).
+_REL_TOPICALITY_MAX = 200
 
 
 def _relevance_coverage(store, query: str, citations: List["Citation"],
@@ -197,8 +201,15 @@ def _relevance_coverage(store, query: str, citations: List["Citation"],
     title_tokens: set = set()
     for c in citations:
         title_tokens |= _rel_tokens(c.title or "")
-    topical = (any(store.doc_freq(t) >= min_df for t in distinctive)
-               or bool(distinctive & title_tokens))
+    # Cap the per-token doc_freq probes (each is an FTS5 MATCH / LIKE scan): an out-of-corpus
+    # GIANT query (hundreds of thousands of distinct tokens, none matching) would otherwise run
+    # one DB query PER token — a single-request CPU DoS NOT bounded by _fts_query's term cap
+    # (this is a different call site). A real question has tens of distinctive tokens, so the
+    # any() decision is identical; ``sorted`` keeps the capped subset deterministic (the gate
+    # must be PYTHONHASHSEED-independent). The cheap title-set intersection is checked first.
+    topical = (bool(distinctive & title_tokens)
+               or any(store.doc_freq(t) >= min_df
+                      for t in sorted(distinctive)[:_REL_TOPICALITY_MAX]))
     if not topical:
         return 0.0  # no genuine corpus topic in the query -> refuse
 
@@ -311,12 +322,26 @@ _GATE_ABBREVIATIONS = frozenset(
 #: capitalized word is NOT a sentence boundary, so they stay non-boundaries even under the
 #: "<abbrev>. <Capital-word>" rule below (which otherwise splits "U.S. The"/"etc. The").
 _GATE_TITLES = frozenset("mr mrs ms dr st sr jr prof rev gen sen hon capt lt sgt fr gov".split())
-#: A NEW sentence starts here: optional same-line whitespace then a Capital followed by a
-#: lowercase letter (a real Word). The trailing [a-z] is what keeps an initialism's own
-#: continuation letter from looking like a sentence start — "U.S." has "U." then "S." (the
-#: "S" is followed by ".", not a lowercase), so the internal period is NOT split, while
-#: "U.S. The" (the final period then " The") IS.
-_GATE_NEXT_SENTENCE_RE = re.compile(r"[^\S\n]*[A-Z][a-z]")
+def _starts_new_sentence(line: str, i: int) -> bool:
+    """True iff a NEW sentence begins at ``line[i]`` (after skipping same-line whitespace):
+    an UPPERCASE/titlecase letter followed by a LOWERCASE letter — a real capitalized Word.
+    Done in code (unicode ``str`` case methods), NOT an ``[A-Z][a-z]`` regex, so a non-ASCII
+    capital ("États", "Über", "Ñandú", Cyrillic/Greek) that opens a sentence is recognized
+    just like "States" — an ASCII-only pattern silently MISSED these and let an uncited
+    fabrication ending in an abbreviation ("... etc. États …") merge into the next cited
+    clause and leak. The lowercase-second-letter requirement is what keeps an initialism's
+    own continuation letter from looking like a sentence start — "U.S." has "U." then "S."
+    (the "S" is followed by ".", not a lowercase), so the internal period is NOT split, while
+    "U.S. The"/"U.S. États" (the final period then a Word) IS. Same-line whitespace only
+    ([^\\S\\n] equivalent): a line break never reaches here (lines are pre-split)."""
+    j = i
+    while j < len(line) and line[j] != "\n" and line[j].isspace():
+        j += 1
+    if j + 1 >= len(line):
+        return False
+    a, b = line[j], line[j + 1]
+    return (a.isalpha() and a.upper() == a and a.lower() != a
+            and b.isalpha() and b.lower() == b)
 
 
 def _is_sentence_boundary(line: str, i: int) -> bool:
@@ -350,7 +375,7 @@ def _is_sentence_boundary(line: str, i: int) -> bool:
     # economy", "e.g. cost"). But "<abbrev>. <Capital-word>" almost always starts a NEW
     # sentence ("U.S. The data ...", "etc. The transcript ..."), so split there to catch an
     # uncited sentence that ends in an abbreviation — EXCEPT a title before a name ("Mr. Jones").
-    if (_GATE_NEXT_SENTENCE_RE.match(line, i + 1) is not None
+    if (_starts_new_sentence(line, i + 1)
             and token.lower() not in _GATE_TITLES):
         return True
     return False
