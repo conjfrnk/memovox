@@ -803,13 +803,33 @@ class TestRound5Hardening(unittest.TestCase):
         self.assertEqual(T._TAG_RE.sub(" ", "<v Alice>hi<00:00:01.199> there</v>").strip(),
                          "hi  there".strip())
 
-    def test_redos_safe_through_full_clean_pipeline(self):
-        # the public clean path must not hang on an adversarial single cue
+    def test_event_and_speaker_tag_regexes_are_bounded(self):
+        # round-6 preempt (same ReDoS class): EVENT_RE "[music"-repeated and _SPEAKER_VTT_RE
+        # "<v "-repeated (no closing bracket) were O(n^2).
         from memovox.stentor import transcript as T
-        for payload in ("[a](https://x" * 8000, "<" * 80000, "(https://x" * 8000):
+        t0 = time.perf_counter()
+        T.EVENT_RE.sub(" ", "[music" * 40000)
+        self.assertLess(time.perf_counter() - t0, 1.0, "EVENT_RE quadratic")
+        t0 = time.perf_counter()
+        T._SPEAKER_VTT_RE.search("<v " * 40000)
+        self.assertLess(time.perf_counter() - t0, 1.0, "_SPEAKER_VTT_RE quadratic")
+        # correctness preserved
+        self.assertEqual(T.clean_text("Then [applause] the crowd cheered"),
+                         ("Then the crowd cheered", ["applause"]))
+        segs = T.parse_cues("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n<v Alice>Hello there\n")
+        self.assertEqual(segs[0].speaker, "Alice")
+
+    def test_redos_safe_through_full_clean_pipeline(self):
+        # the public clean/parse path must not hang on an adversarial single cue
+        from memovox.stentor import transcript as T
+        for payload in ("[a](https://x" * 8000, "<" * 80000, "(https://x" * 8000,
+                        "[music" * 8000):
             t0 = time.perf_counter()
             T.clean_text(payload)
             self.assertLess(time.perf_counter() - t0, 1.0, f"clean_text hung on {payload[:12]!r}…")
+        t0 = time.perf_counter()
+        T.parse_cues("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n" + ("<v " * 30000) + "\n")
+        self.assertLess(time.perf_counter() - t0, 1.0, "parse_cues hung on a long <v run")
 
 
 if __name__ == "__main__":

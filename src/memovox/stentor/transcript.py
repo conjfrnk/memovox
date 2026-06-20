@@ -23,9 +23,9 @@ EVENT_RE = re.compile(
     r"\[\s*(music|applause|laughs?|laughter|laughing|silence|inaudible|noise|"
     r"crosstalk|cheering|chuckles?|singing|humming|instrumental|sighs?|groans?|"
     r"coughs?|gasps?|clears throat|beep|static|whistling|ticking|sizzling|"
-    r"ringing|rings|dings?|bells?|footsteps|wind|rain|thunder)[^\]]*\]",
+    r"ringing|rings|dings?|bells?|footsteps|wind|rain|thunder)[^\]]{0,80}\]",
     re.IGNORECASE,
-)
+)  # bounded body {0,80}: "[music"-repeated with no "]" is otherwise an O(n^2) ReDoS
 #: After the whitelist pass, a RESIDUAL ``[...]`` span in caption text is a non-speech
 #: annotation the whitelist did not name — sound effects ([clock ticking]), foreign-
 #: language markers ([speaking in Thai]), bracketed speaker labels ([Mark Wiens]), or
@@ -58,7 +58,7 @@ _MUSIC_NOTE_RE = re.compile(r"[♪♫♬\U0001f3b5\U0001f3b6]")
 #: backtracking in _decode_entities — real caption tags (<v Name>, <00:00:01.199>, <i>) are
 #: short and single-line.
 _TAG_RE = re.compile(r"<[^>\n]{1,200}>")
-_SPEAKER_VTT_RE = re.compile(r"<v\s+([^>]+)>")
+_SPEAKER_VTT_RE = re.compile(r"<v\s+([^>\n]{1,200})>")  # bounded body: ReDoS-safe on a long "<v "-run
 _SPEAKER_PREFIX_RE = re.compile(r"^\s*([A-Z][A-Za-z0-9 ._'-]{0,30}):\s+")
 #: A leading ``Name:`` is only a speaker label if it *looks* like a name, not a
 #: sentence that happens to contain a colon. Real caption labels are ALL-CAPS
