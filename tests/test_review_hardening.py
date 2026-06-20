@@ -694,7 +694,14 @@ class TestRound4Hardening(unittest.TestCase):
         for t in ["Ribosomes were invented by Napoleon in labs.Real proteins are made [1]",
                   "Napoleon made them!Real proteins [1]",
                   "Napoleon made them;Real proteins [1]",
-                  "Claim one [1]. uncited middle sentence. Claim two [2]."]:
+                  "Claim one [1]. uncited middle sentence. Claim two [2].",
+                  # sentence ending in a digit / year / percent / acronym then an uncited one
+                  "Sales grew 3.Then Napoleon invaded uncited [1]",
+                  "He works at NASA.Napoleon was uncited here [1]",
+                  "He works at NASA. Napoleon was uncited here [1]",
+                  "The study ran in 2019. Napoleon invented them uncited [1]",
+                  "It scored 90%. Napoleon made them uncited [1]",
+                  "Built in labs.real uncited continuation then cited [1]"]:
             self.assertFalse(V(t, c), f"no-space/mid bypass accepted: {t!r}")
 
     def test_gate_accepts_abbreviations_no_over_refusal(self):
@@ -707,6 +714,9 @@ class TestRound4Hardening(unittest.TestCase):
                   "Apple Inc. announced the results [1].",
                   "Many factors (e.g. cost) were cited [1].",
                   "See Fig. 3 for details [1].",
+                  "It cost $5.99 in total [1].",        # decimal, not a boundary
+                  "Released in v2.0 last year [1].",     # version, not a boundary
+                  "The ratio was 3.14 exactly [1].",     # decimal, not a boundary
                   "Ribosomes, which are organelles, make proteins [1]."]:
             self.assertTrue(V(t, c), f"faithful answer wrongly rejected: {t!r}")
 
@@ -761,6 +771,45 @@ class TestRound4Hardening(unittest.TestCase):
         self.assertEqual(captured["obj"], {"error": "internal server error"})
         self.assertNotIn("SECRET", str(captured["obj"]))
         mv.close()
+
+
+# --------------------------------------------------------------------------- #
+# Round 5 — ReDoS in the sibling caption regexes (found re-reviewing round-4)
+# --------------------------------------------------------------------------- #
+
+
+class TestRound5Hardening(unittest.TestCase):
+    def test_md_link_regex_is_linear_not_redos(self):
+        # round-5 (HIGH): _MD_LINK_RE had the same O(n^2) URL-body backtracking that round-1
+        # fixed in its sibling _URL_PAREN_RE (and runs BEFORE it in clean_text).
+        from memovox.stentor import transcript as T
+        payload = "[a](https://x" * 20000
+        t0 = time.perf_counter()
+        T._MD_LINK_RE.sub(r"\1", payload)
+        elapsed = time.perf_counter() - t0
+        self.assertLess(elapsed, 0.5, f"_MD_LINK_RE took {elapsed:.3f}s — quadratic ReDoS")
+        # benign markdown link still collapses to its label
+        self.assertEqual(T._MD_LINK_RE.sub(r"\1", "see [docs](https://example.com/x) here"),
+                         "see docs here")
+
+    def test_tag_regex_is_bounded_not_redos(self):
+        # round-5 (MED): _TAG_RE <[^>]+> was O(n^2) on a long unclosed '<' run.
+        from memovox.stentor import transcript as T
+        t0 = time.perf_counter()
+        T._TAG_RE.sub(" ", "<" * 200000)
+        elapsed = time.perf_counter() - t0
+        self.assertLess(elapsed, 1.0, f"_TAG_RE took {elapsed:.3f}s — quadratic ReDoS")
+        # real caption tags still strip
+        self.assertEqual(T._TAG_RE.sub(" ", "<v Alice>hi<00:00:01.199> there</v>").strip(),
+                         "hi  there".strip())
+
+    def test_redos_safe_through_full_clean_pipeline(self):
+        # the public clean path must not hang on an adversarial single cue
+        from memovox.stentor import transcript as T
+        for payload in ("[a](https://x" * 8000, "<" * 80000, "(https://x" * 8000):
+            t0 = time.perf_counter()
+            T.clean_text(payload)
+            self.assertLess(time.perf_counter() - t0, 1.0, f"clean_text hung on {payload[:12]!r}…")
 
 
 if __name__ == "__main__":

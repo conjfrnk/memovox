@@ -39,7 +39,7 @@ _BRACKET_CENSOR_RE = re.compile(r"^[\s_]+$")
 #: visible label, drop the URL. Must run BEFORE residual-bracket stripping so the label
 #: survives. ``_URL_PAREN_RE`` mops up an orphaned ``](url)`` / bare ``(url)`` left when
 #: the sentence splitter broke inside a link (e.g. "…crazy short](https://…) post").
-_MD_LINK_RE = re.compile(r"\[([^\]\n]{0,200})\]\((https?://[^)\s]+)\)")
+_MD_LINK_RE = re.compile(r"\[([^\]\n]{0,200})\]\((https?://[^)\s(]+)\)")  # [^)\s(]: ReDoS-safe (see _URL_PAREN_RE)
 #: Excludes ``(`` from the URL body so a fresh ``(`` terminates the run instead of
 #: letting the body span the whole string — without it, ``"(http://x"`` repeated makes
 #: the outer ``\(`` retry at every paren offset, an O(n²) ReDoS (a ~600KB cue hangs for
@@ -54,7 +54,10 @@ _TS_SIDE_RE = re.compile(r"^[\d:.,]+$")
 #: positive. (Sung lyrics transcribed as PLAIN text with no marker -- e.g. some
 #: YouTube auto-captions -- can't be told apart from speech without audio.)
 _MUSIC_NOTE_RE = re.compile(r"[♪♫♬\U0001f3b5\U0001f3b6]")
-_TAG_RE = re.compile(r"<[^>]+>")
+#: Bounded body ({1,200}, single-line) so a long unclosed "<" run can't drive O(n^2)
+#: backtracking in _decode_entities — real caption tags (<v Name>, <00:00:01.199>, <i>) are
+#: short and single-line.
+_TAG_RE = re.compile(r"<[^>\n]{1,200}>")
 _SPEAKER_VTT_RE = re.compile(r"<v\s+([^>]+)>")
 _SPEAKER_PREFIX_RE = re.compile(r"^\s*([A-Z][A-Za-z0-9 ._'-]{0,30}):\s+")
 #: A leading ``Name:`` is only a speaker label if it *looks* like a name, not a

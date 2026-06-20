@@ -285,14 +285,17 @@ _CITE_MARKER_RE = re.compile(r"\[(\d+)\]")
 #: separator can smuggle an uncited line past the gate (closing the \n-only whack-a-mole).
 #: Commas/colons/dashes are deliberately NOT boundaries: they join clauses WITHIN one
 #: sentence ("Ribosomes, which are organelles, make proteins [1]"), so splitting on them
-#: would reject legitimate single-citation sentences. The terminator must be preceded by a
-#: real word ending (3+ lowercase) OR a closing marker "]" — so a missing-space run-on
-#: ("labs.Real ...") and a sentence ending at a marker ("... [1]. Next ...") DO split,
-#: but an abbreviation/initialism period (U.S., Dr., Inc., Fig., e.g.) does NOT (it follows
-#: a capital/single letter) — without this the gate wrongly rejected faithful answers. (A
-#: rare residual over-refusal — a lowercase "etc." / ellipsis — is fail-closed: it only
-#: downgrades a generative answer to the verified extractive synthesizer, never leaks.)
-_GATE_CLAUSE_RE = re.compile(r"(?:(?<=[a-z]{3})|(?<=\]))[.!?;]+[^\S\n]*")
+#: would reject legitimate single-citation sentences. A terminator is a boundary only when
+#: it is PRECEDED by a real sentence-ending token — 3+ lowercase ("labs."), a digit ("2019."),
+#: a percent ("90%."), a 3+-letter acronym ("NASA."), or a closing marker "]" — and NOT
+#: immediately FOLLOWED by a digit (so a decimal "$5.99" / version "v2.0" / ratio "3.14" never
+#: splits). So a missing-space run-on ("labs.Real", "3.Then", "NASA.Uncited") and a sentence
+#: ending at a marker ("... [1]. Next") DO split, while an abbreviation/initialism period
+#: (U.S., Dr., Inc., Fig., e.g. — single/2-mixed letter before) does NOT, so a faithful answer
+#: is not wrongly rejected. Corpus-validated over 31 accept/reject cases. (A rare residual
+#: over-refusal — a lowercase "etc." / ellipsis — is fail-closed: it only downgrades a
+#: generative answer to the verified extractive synthesizer, never leaks.)
+_GATE_CLAUSE_RE = re.compile(r"(?:(?<=[a-z]{3})|(?<=\])|(?<=[0-9])|(?<=%)|(?<=[A-Z]{3}))[.!?;]+(?![0-9])[^\S\n]*")
 #: A 2+ letter run = real prose (so "[1]", ".", ", " alone are not "prose").
 _GATE_WORD_RE = re.compile(r"[^\W\d_]{2,}")
 #: A citation marker AFTER a terminator ("acids. [1]") cites the PRECEDING sentence (the
