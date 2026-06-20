@@ -675,5 +675,69 @@ class TestRound3Hardening(unittest.TestCase):
         mv.close()
 
 
+# --------------------------------------------------------------------------- #
+# Round 4 — residual defects found re-reviewing the round-3 fixes
+# --------------------------------------------------------------------------- #
+
+
+class TestRound4Hardening(unittest.TestCase):
+    def _cits(self, n=2):
+        from memovox.augur.types import Citation
+        return [Citation(index=i, video_id="v", moment_id=f"v#m{i}", t_start_s=0, t_end_s=1,
+                         source_text="x") for i in range(1, n + 1)]
+
+    def test_gate_rejects_no_space_terminator_bypass(self):
+        # round-4 (CRIT): a hard terminator with NO trailing space (".Real"/"!Real"/";Real")
+        # merged an uncited sentence into the cited clause.
+        from memovox.augur.answer import _llm_citations_valid as V
+        c = self._cits()
+        for t in ["Ribosomes were invented by Napoleon in labs.Real proteins are made [1]",
+                  "Napoleon made them!Real proteins [1]",
+                  "Napoleon made them;Real proteins [1]",
+                  "Claim one [1]. uncited middle sentence. Claim two [2]."]:
+            self.assertFalse(V(t, c), f"no-space/mid bypass accepted: {t!r}")
+
+    def test_gate_accepts_abbreviations_no_over_refusal(self):
+        # round-4 (MED): the splitter must NOT split abbreviation/initialism periods, else
+        # a faithful fully-cited answer is wrongly discarded for the extractive synthesizer.
+        from memovox.augur.answer import _llm_citations_valid as V
+        c = self._cits()
+        for t in ["The U.S. economy grew three percent [1].",
+                  "Mr. Jones and Dr. Lee disagreed [1].",
+                  "Apple Inc. announced the results [1].",
+                  "Many factors (e.g. cost) were cited [1].",
+                  "See Fig. 3 for details [1].",
+                  "Ribosomes, which are organelles, make proteins [1]."]:
+            self.assertTrue(V(t, c), f"faithful answer wrongly rejected: {t!r}")
+
+    def test_no_space_fabrication_not_surfaced_via_ask(self):
+        from memovox import augur
+        from memovox.config import Settings
+        tmp = tempfile.mkdtemp()
+        store, emb = _bio_store(tmp)
+        llm = _make_llm("Ribosomes were invented by Napoleon in titanium labs.Real proteins [1]")
+        ans = augur.ask(store, "what are ribosomes?", embedder=emb, llm=llm, settings=Settings())
+        self.assertNotIn("Napoleon", ans.text)
+        store.close()
+
+    def test_lone_surrogate_string_field_returns_400(self):
+        # round-4 (MED): a lone-surrogate video_id/query/topic crashed the SQLite bind -> 500.
+        from memovox.sdk import Memovox
+        from memovox.server import routes
+        tmp = tempfile.mkdtemp()
+        mv = Memovox(store=str(pathlib.Path(tmp) / "s"))
+        for body in ({"query": "hi", "video_id": "\ud800"},
+                     {"query": "\ud834hello"},
+                     {"topic": "\udfff"}):
+            fn = routes.route_synthesize if "topic" in body else routes.route_query
+            status, payload, _ = fn(mv, body)
+            self.assertEqual(int(status), 400, f"{body} -> {status}")
+            self.assertIn("invalid characters", payload["error"])
+        # legitimate unicode (CJK, emoji, accents) must NOT be rejected
+        status, _, _ = routes.route_query(mv, {"query": "日本語 \U0001f600 café"})
+        self.assertNotEqual(int(status), 400)
+        mv.close()
+
+
 if __name__ == "__main__":
     unittest.main()

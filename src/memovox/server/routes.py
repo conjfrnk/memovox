@@ -27,13 +27,22 @@ def _bad_request(msg: str):
 
 
 def _wrong_type(body, key: str):
-    """Return a 400 if ``body[key]`` is present but NOT a string, else None. Guards the
-    POST routes so a non-string field (``{"query": 123}``, ``{"video_id": ["x"]}``) is
-    rejected at the boundary with a generic message — instead of flowing into ``.strip()``
-    /a SQLite bound parameter and surfacing a raw Python/SQLite error string in a 500."""
+    """Return a 400 if ``body[key]`` is present but NOT a usable string, else None. Guards
+    the POST routes so a non-string field (``{"query": 123}``, ``{"video_id": ["x"]}``)
+    is rejected at the boundary instead of flowing into ``.strip()`` / a SQLite bound
+    parameter and surfacing a raw Python/SQLite error in a 500. Also rejects a string that
+    json.loads accepts but is not encodable — a LONE SURROGATE (``"\\ud800"``) — which would
+    otherwise crash the SQLite parameter bind (UnicodeEncodeError) deep in a query; the
+    encode check raises ONLY for lone surrogates (emoji / CJK / accents all pass)."""
     val = body.get(key)
-    if val is not None and not isinstance(val, str):
+    if val is None:
+        return None
+    if not isinstance(val, str):
         return _bad_request(f"{key!r} must be a string")
+    try:
+        val.encode("utf-8")
+    except UnicodeEncodeError:
+        return _bad_request(f"{key!r} contains invalid characters")
     return None
 
 

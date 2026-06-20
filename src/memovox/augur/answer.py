@@ -285,8 +285,14 @@ _CITE_MARKER_RE = re.compile(r"\[(\d+)\]")
 #: separator can smuggle an uncited line past the gate (closing the \n-only whack-a-mole).
 #: Commas/colons/dashes are deliberately NOT boundaries: they join clauses WITHIN one
 #: sentence ("Ribosomes, which are organelles, make proteins [1]"), so splitting on them
-#: would reject legitimate single-citation sentences.
-_GATE_CLAUSE_RE = re.compile(r"[.!?;]+[^\S\n]+")
+#: would reject legitimate single-citation sentences. The terminator must be preceded by a
+#: real word ending (3+ lowercase) OR a closing marker "]" — so a missing-space run-on
+#: ("labs.Real ...") and a sentence ending at a marker ("... [1]. Next ...") DO split,
+#: but an abbreviation/initialism period (U.S., Dr., Inc., Fig., e.g.) does NOT (it follows
+#: a capital/single letter) — without this the gate wrongly rejected faithful answers. (A
+#: rare residual over-refusal — a lowercase "etc." / ellipsis — is fail-closed: it only
+#: downgrades a generative answer to the verified extractive synthesizer, never leaks.)
+_GATE_CLAUSE_RE = re.compile(r"(?:(?<=[a-z]{3})|(?<=\]))[.!?;]+[^\S\n]*")
 #: A 2+ letter run = real prose (so "[1]", ".", ", " alone are not "prose").
 _GATE_WORD_RE = re.compile(r"[^\W\d_]{2,}")
 #: A citation marker AFTER a terminator ("acids. [1]") cites the PRECEDING sentence (the
