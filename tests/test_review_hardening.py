@@ -738,6 +738,30 @@ class TestRound4Hardening(unittest.TestCase):
         self.assertNotEqual(int(status), 400)
         mv.close()
 
+    def test_catchall_500_does_not_leak_internal_exception(self):
+        # round-4 root fix: an UNEXPECTED route error must yield a GENERIC 500, never echo
+        # str(exc) (the recurring catch-all-leak class). Closes the whole class at the handler.
+        from memovox.sdk import Memovox
+        from memovox.server import routes
+        from memovox.server.rest import make_handler
+        tmp = tempfile.mkdtemp()
+        mv = Memovox(store=str(pathlib.Path(tmp) / "s"))
+        Handler = make_handler(mv)
+        h = Handler.__new__(Handler)
+        captured = {}
+        h._send = lambda obj, status=None: captured.update(obj=obj, status=status)
+        h.path, h.command = "/videos", "GET"
+        orig = routes.route_videos
+        routes.route_videos = lambda _mv: (_ for _ in ()).throw(RuntimeError("SECRET /etc/passwd leak"))
+        try:
+            h.do_GET()
+        finally:
+            routes.route_videos = orig
+        self.assertEqual(int(captured["status"]), 500)
+        self.assertEqual(captured["obj"], {"error": "internal server error"})
+        self.assertNotIn("SECRET", str(captured["obj"]))
+        mv.close()
+
 
 if __name__ == "__main__":
     unittest.main()

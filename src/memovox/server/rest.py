@@ -63,6 +63,18 @@ def make_handler(mv: Memovox):
                 return {}
             return data if isinstance(data, dict) else {}  # non-object body -> {}
 
+        def _fail(self):
+            """Last-resort handler for an UNEXPECTED error: log the detail to stderr and
+            return a GENERIC 500 — never echo str(exc), which would leak internal Python/
+            SQLite/path details to the client (known client errors are already turned into
+            clean 400s inside the routes). Matches FastAPI/Starlette's generic 500 body, so
+            the two servers stay in parity on the error path too."""
+            import sys
+            import traceback
+            print(f"memovox: unhandled error in {self.command} {self.path}:\n"
+                  f"{traceback.format_exc()}", file=sys.stderr)
+            self._send({"error": "internal server error"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+
         # -- adapter: parse → call the pure route → serialize ------------
 
         def _respond(self, result):
@@ -98,8 +110,8 @@ def make_handler(mv: Memovox):
                 if path.startswith("/job/"):
                     return self._respond(routes.route_job_status(mv, path[len("/job/"):]))
                 return self._send({"error": "not found"}, HTTPStatus.NOT_FOUND)
-            except Exception as exc:  # pragma: no cover - defensive
-                self._send({"error": str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            except Exception:
+                self._fail()
 
         # -- POST ---------------------------------------------------------
 
@@ -116,8 +128,8 @@ def make_handler(mv: Memovox):
                 if parsed.path == "/consolidate":
                     return self._respond(routes.route_consolidate(mv, data))
                 return self._send({"error": "not found"}, HTTPStatus.NOT_FOUND)
-            except Exception as exc:  # pragma: no cover - defensive
-                self._send({"error": str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            except Exception:
+                self._fail()
 
     return Handler
 
