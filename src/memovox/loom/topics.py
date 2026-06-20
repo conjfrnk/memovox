@@ -40,6 +40,21 @@ def _topic_label(texts: Sequence[str], *, top: int = 3) -> Optional[str]:
     return " ".join(tok for tok, _ in ranked)
 
 
+#: Cap on cluster representatives scanned per moment. The greedy pass compares each moment
+#: against every existing cluster rep, so a topically-DIVERSE corpus (reps grows ~O(n)) makes
+#: induce_topics O(n_moments x n_clusters) — and the moment count is attacker-controlled by a
+#: single uncapped ingest, so a 60k-moment transcript could pin the (offline) consolidate worker
+#: for hours. Scanning only the first this-many reps bounds per-moment work to O(cap x dim).
+#: It is OUTPUT-IDENTICAL for any corpus whose total distinct-topic count stays under the cap
+#: (reps never exceeds it, so the break never fires) — i.e. every realistic library; only a
+#: pathologically diverse corpus past the cap clusters approximately (still deterministic).
+#: Topic induction is a non-critical browsing aid (citations/grounding don't depend on it), so
+#: a generous-but-bounding ceiling is the right trade: 512 distinct topics far exceeds the eval
+#: corpus and a realistic library, while bounding even an 8000-moment all-distinct worst case to
+#: ~6s (vs ~3 min unbounded) and a 60k-moment adversarial ingest to seconds (vs hours).
+_MAX_TOPIC_REPS = 512
+
+
 def _greedy_clusters(
     pairs: Sequence[Tuple[str, Sequence[float]]], *, threshold: float
 ) -> List[List[str]]:
@@ -49,13 +64,16 @@ def _greedy_clusters(
     member) vector is ``>= threshold``, else opens its own. Dimension mismatches
     are a non-match (never fed to cosine, which would compare only the shared
     prefix). Iteration follows the input order, which the caller fixes (sorted by
-    id), so the partition is deterministic.
+    id), so the partition is deterministic. The rep scan is bounded by
+    ``_MAX_TOPIC_REPS`` to keep the pass near-linear (see that constant).
     """
     clusters: List[List[str]] = []
     reps: List[Sequence[float]] = []
     for mid, vec in pairs:
         placed = False
         for i, rep in enumerate(reps):
+            if i >= _MAX_TOPIC_REPS:
+                break  # bound per-moment comparisons (transparent below the cap)
             if len(vec) != len(rep):
                 continue
             if cosine(vec, rep) >= threshold:

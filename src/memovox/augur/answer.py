@@ -299,9 +299,13 @@ _CITE_MARKER_RE = re.compile(r"\[(\d+)\]")
 #: would reject legitimate single-citation sentences. Sentence boundaries within a line are
 #: detected in code (see :func:`_is_sentence_boundary` / :func:`_gate_clauses`), not a single
 #: regex, so short words, accents, CJK, acronyms, decimals and abbreviations are all handled.
-#: A 2+ letter run = real prose (so "[1]", ".", ", " alone are not "prose"). Unicode-aware,
-#: so accented / CJK / non-Latin words count as prose, like the boundary detector below.
-_GATE_WORD_RE = re.compile(r"[^\W\d_]{2,}")
+#: "Real prose" = a 2+ letter run (unicode-aware, so accented/CJK/non-Latin words count) OR a
+#: multi-digit NUMBER (with grouping/decimal/percent/range punctuation). The number alternative
+#: is essential: a bare fabricated figure ("... [1]. 226,000" — a death toll/price/date that IS
+#: the high-stakes answer) is an uncited ASSERTION just like a fabricated word, and the letter-
+#: only class let it slip past the uncited-tail/clause checks. (A lone single digit or a marker's
+#: own digits aren't matched, so "[12]" / a trailing "." stay non-prose.)
+_GATE_WORD_RE = re.compile(r"[^\W\d_]{2,}|\d[\d.,/:%\-]*\d")
 #: SAME-LINE whitespace for the marker-bind: \s MINUS every char str.splitlines() treats as
 #: a line break. It must exclude ALL of them (not just \n) — otherwise the bind pulls the
 #: NEXT line's marker backward across a \r / \v / \f / \x1c-\x1e / NEL / LS / PS that

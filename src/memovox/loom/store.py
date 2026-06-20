@@ -18,6 +18,7 @@ import sqlite3
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from ..config import Config
+from ..errors import SchemaVersionError
 from ..observe import Tracer
 from ..util import now_iso
 from ..vectormath import normalize, pack_floats, unpack_floats
@@ -171,7 +172,7 @@ class LoomStore:
         # user_version + running older code against a future schema risks corruption.
         current = self.conn.execute("PRAGMA user_version").fetchone()[0]
         if current > SCHEMA_VERSION:
-            raise RuntimeError(
+            raise SchemaVersionError(
                 f"store schema version {current} is newer than this memovox "
                 f"(supports {SCHEMA_VERSION}); upgrade memovox or use a separate store."
             )

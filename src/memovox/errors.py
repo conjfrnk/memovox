@@ -27,6 +27,14 @@ class IngestionError(MemovoxError):
     """A pipeline stage failed irrecoverably."""
 
 
+class SchemaVersionError(MemovoxError):
+    """The store was written by a NEWER memovox than this one (refuse to open it).
+
+    A MemovoxError (not a bare RuntimeError) so every front-end — the CLI's error
+    handler, the REST/MCP servers — surfaces the clean 'upgrade memovox' message
+    instead of an uncaught traceback. Expected once memovox is multi-version (v0.1.0+)."""
+
+
 class NotFoundError(MemovoxError):
     """A requested entity does not exist."""
 

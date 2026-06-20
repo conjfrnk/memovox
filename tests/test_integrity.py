@@ -156,6 +156,7 @@ class SchemaVersionGuardTest(unittest.TestCase):
     def test_refuses_store_from_the_future(self):
         import sqlite3
 
+        from memovox.errors import MemovoxError
         from memovox.loom.store import SCHEMA_VERSION
         with tempfile.TemporaryDirectory() as tmp:
             config = Config(store=pathlib.Path(tmp) / "s").ensure()
@@ -163,7 +164,9 @@ class SchemaVersionGuardTest(unittest.TestCase):
             con = sqlite3.connect(str(config.db_path))
             con.execute(f"PRAGMA user_version = {SCHEMA_VERSION + 5}")
             con.commit(); con.close()
-            with self.assertRaises(RuntimeError):
+            # raises SchemaVersionError (a MemovoxError, so every front-end — CLI/REST/MCP —
+            # surfaces a clean message, not an uncaught RuntimeError traceback)
+            with self.assertRaises(MemovoxError):
                 LoomStore(config)  # newer schema -> refuse, don't down-stamp
 
 

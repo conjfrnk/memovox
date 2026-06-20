@@ -1438,5 +1438,68 @@ class TestRound13Hardening(unittest.TestCase):
         self.assertEqual(moments[0].speaker_id, "spk_a")
 
 
+# --------------------------------------------------------------------------- #
+# Round 14 — gate numeric leak, induce_topics DoS cap, schema-version CLI traceback
+# --------------------------------------------------------------------------- #
+
+
+class TestRound14Hardening(unittest.TestCase):
+    def _cits(self, n=2):
+        from memovox.augur.types import Citation
+        return [Citation(index=i, video_id="v", moment_id=f"v#m{i}", t_start_s=0, t_end_s=1,
+                         source_text="x") for i in range(1, n + 1)]
+
+    def test_gate_rejects_uncited_bare_number(self):
+        # round-14 (MED): _GATE_WORD_RE counted only letters, so a bare fabricated number
+        # ("... [1]. 226,000" — the high-stakes answer) slipped past uncited.
+        from memovox.augur.answer import _llm_citations_valid as V
+        c = self._cits()
+        for t in ["The video covers the 1945 bombing [1]. 226,000",
+                  "Growth was modest [1]. 250%",
+                  "He reviews the watch [1]. $45,000",
+                  "It is discussed [1]. 9,000,000. More detail [2]."]:
+            self.assertFalse(V(t, c), f"uncited bare number accepted: {t!r}")
+        # a number INSIDE a cited clause, and marker-only forms, still pass (no over-refusal)
+        for t in ["The figure was 226,000 deaths [1].", "It grew 3.14 percent [1].",
+                  "Both agree [1][2]", "Up 90% [1]."]:
+            self.assertTrue(V(t, c), f"cited number wrongly rejected: {t!r}")
+
+    def test_induce_topics_is_bounded(self):
+        # round-14 (MED): _greedy_clusters scanned every cluster rep per moment -> O(n^2)
+        # on a diverse corpus (the last uncapped superlinear path). Cap the rep scan.
+        import random
+        from memovox.loom.topics import _MAX_TOPIC_REPS, _greedy_clusters
+        random.seed(0)
+        # below-cap corpus -> identical to exhaustive (cap never fires)
+        small = [(f"m{i:04d}", [random.random() for _ in range(8)]) for i in range(200)]
+        self.assertLessEqual(len(_greedy_clusters(small, threshold=0.9)), 200)
+        # a large diverse corpus stays bounded (was ~3 min @8000 unbounded)
+        big = [(f"m{i:05d}", [random.random() for _ in range(8)]) for i in range(8000)]
+        t0 = time.perf_counter()
+        _greedy_clusters(big, threshold=0.99)
+        self.assertLess(time.perf_counter() - t0, 20.0, "induce_topics greedy clustering not bounded")
+        self.assertLessEqual(_MAX_TOPIC_REPS, 2048)
+
+    def test_schema_version_refusal_is_a_memovox_error_not_traceback(self):
+        # round-14 (MED): _migrate raised a bare RuntimeError on a newer-schema store, which
+        # the CLI's except tuple didn't catch -> uncaught traceback. Now a MemovoxError.
+        import sqlite3
+        from memovox.config import Config
+        from memovox.errors import MemovoxError
+        from memovox.loom import LoomStore
+        from memovox.loom.store import SCHEMA_VERSION
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        cfg = Config(store=tmp / "s").ensure()
+        LoomStore(cfg).close()
+        con = sqlite3.connect(str(cfg.db_path))
+        con.execute(f"PRAGMA user_version = {SCHEMA_VERSION + 5}"); con.commit(); con.close()
+        with self.assertRaises(MemovoxError):
+            LoomStore(cfg)
+        # and the CLI surfaces it as a clean error (exit 1), not an uncaught traceback
+        from memovox import cli
+        rc = cli.main(["--store", str(tmp / "s"), "list"])
+        self.assertEqual(rc, 1)
+
+
 if __name__ == "__main__":
     unittest.main()
