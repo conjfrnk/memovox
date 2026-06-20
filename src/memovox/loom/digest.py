@@ -24,11 +24,27 @@ from .store import LoomStore
 _INLINE_BREAK_RE = re.compile(r"[\r\n  \x0b\x0c\x00-\x08\x0e-\x1f\x7f]+")
 
 
+# Even on a single line, untrusted text can still inject INLINE Markdown: a
+# ``[label](url)`` link (phishing / ``javascript:``) or — worse, because it fires
+# with zero interaction — a ``![x](http://evil/beacon.png)`` image that auto-loads
+# when the digest is previewed (GitHub/VS Code/Obsidian), silently leaking the
+# viewer's IP and that they opened the file. Raw ``<img src=…>`` / ``<a href=…>`` HTML
+# does the same. Backslash-escape the characters that open these constructs so
+# untrusted text renders as literal characters, never as an active link/image/HTML/
+# emphasis. Trusted structure (deep-link headers, claim list items) is assembled
+# OUTSIDE _inline, so escaping here cannot dull a real link.
+_MD_META_RE = re.compile(r"[\\`*_\[\]<>]")
+
+
 def _inline(text: Optional[str]) -> str:
-    """Flatten untrusted text to a single Markdown line (no structure breakout)."""
+    """Flatten untrusted text to a single Markdown line (no structure breakout) and
+    neutralize inline Markdown/HTML so a hostile source cannot forge a clickable link
+    or an auto-loading tracking-beacon image."""
     if not text:
         return ""
-    return _INLINE_BREAK_RE.sub(" ", text).strip()
+    flat = _INLINE_BREAK_RE.sub(" ", text)
+    flat = _MD_META_RE.sub(lambda m: "\\" + m.group(0), flat)
+    return flat.strip()
 
 
 def _safe_link(url: Optional[str]) -> Optional[str]:

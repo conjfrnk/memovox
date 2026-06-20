@@ -295,9 +295,10 @@ _GATE_WORD_RE = re.compile(r"[^\W\d_]{2,}")
 #: sentence (the extractive synthesizer writes "acids. [1]"). Pull it BEFORE the terminator
 #: before clause-splitting — only across SAME-LINE whitespace ([^\S\n]), so a marker on the
 #: next line never binds backward across a line break.
-_MARKER_BIND_RE = re.compile(r"([.!?;。！？]+)([^\S\n]+)(\[\d+\](?:[^\S\n]*\[\d+\])*)")
-#: Sentence terminators: ASCII . ! ? ; plus the CJK ideographic/fullwidth 。 ！ ？.
-_GATE_TERMINATORS = ".!?;。！？"
+_MARKER_BIND_RE = re.compile(r"([.!?;。！？…]+)([^\S\n]+)(\[\d+\](?:[^\S\n]*\[\d+\])*)")
+#: Sentence terminators: ASCII . ! ? ; the CJK ideographic/fullwidth 。 ！ ？, and the unicode
+#: ellipsis … (U+2026) — many LLMs emit "…" for "...", so it must gate like ASCII "...".
+_GATE_TERMINATORS = ".!?;。！？…"
 #: KNOWN abbreviations whose trailing period is NOT a sentence boundary. An ALLOWLIST (not
 #: "any short Capitalized word"): a short proper noun ("Pope", "God", "Rome", "King") is a
 #: real word that DOES end a sentence — treating it as an abbreviation let an uncited
@@ -318,8 +319,8 @@ def _is_sentence_boundary(line: str, i: int) -> bool:
     abbreviation-bearing generative answer is downgraded to the faithful extractive
     synthesizer, which never leaks an uncited assertion."""
     ch = line[i]
-    if ch in "。！？":
-        return True  # CJK/fullwidth terminator: no abbreviation convention
+    if ch in "。！？…":
+        return True  # CJK/fullwidth terminator or unicode ellipsis: always a boundary
     nxt = line[i + 1] if i + 1 < len(line) else ""
     if ch == "." and nxt.isdigit():
         return False  # decimal / version (5.99, v2.0, 3.14)

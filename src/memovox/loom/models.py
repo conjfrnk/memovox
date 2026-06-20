@@ -6,6 +6,7 @@ Plus the Provenance object attached to every retrievable fact — the heart of t
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Dict, List, NamedTuple, Optional
 
@@ -52,7 +53,13 @@ class Video:
     pipeline_version: Optional[str] = None
 
     def to_dict(self) -> dict:
-        return dict(self.__dict__)
+        d = dict(self.__dict__)
+        # Coerce a non-finite duration (inf/nan — e.g. from an old pre-clamp ingest) to None
+        # so json.dumps never emits invalid `Infinity`/`NaN` that strict clients reject.
+        dur = d.get("duration_s")
+        if dur is not None and not math.isfinite(dur):
+            d["duration_s"] = None
+        return d
 
 
 @dataclass

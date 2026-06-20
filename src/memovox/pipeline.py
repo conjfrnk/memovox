@@ -141,6 +141,13 @@ def ingest(
     meta = st.meta
     video_id = make_video_id(meta.source_url or source, content_hash=meta.content_hash)
 
+    # Clamp a non-finite duration to None at the boundary (a corrupt container / hand-supplied
+    # info.json can yield inf). Segment timings are already isfinite-guarded (_parse_ts/_to_float);
+    # duration_s flowed unguarded -> stored inf -> `memovox list` (seconds_to_hms) OverflowError
+    # and invalid `"duration_s": Infinity` JSON from the list API.
+    import math as _math
+    duration_s = st.duration if (st.duration is not None and _math.isfinite(st.duration)) else None
+
     video = Video(
         video_id=video_id,
         source_url=meta.source_url,
@@ -148,7 +155,7 @@ def ingest(
         channel=meta.channel,
         # None -> use the source's date; an explicit "" is a real blank override (M0.3).
         published_at=published_at if published_at is not None else meta.published_at,
-        duration_s=st.duration,
+        duration_s=duration_s,
         lang=st.language,
         content_hash=meta.content_hash,
         pipeline_version=PIPELINE_VERSION,
@@ -308,7 +315,7 @@ def ingest(
             asr_backend=st.asr_backend,
             embed_backend=embedder.name,
             nli_backend=nli.name,
-            duration_s=st.duration,
+            duration_s=duration_s,
             visual_available=visual.available,
             n_visual_events=len(visual.events),
             vlm_backend=visual.vlm_backend,

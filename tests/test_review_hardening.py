@@ -674,6 +674,24 @@ class TestRound3Hardening(unittest.TestCase):
             self.assertEqual(int(status), 400, f"{bad!r} -> {status} {payload}")
         mv.close()
 
+    def test_ingest_local_only_remote_url_returns_400_not_500(self):
+        # round-8 (MED): with local_only set, an http(s) source makes pipeline.ingest
+        # raise IngestionError — an EXPECTED, client-driven egress refusal. route_ingest
+        # caught only (AcquisitionError, DemuxError), so it escaped as a generic 500 +
+        # stderr traceback (the MCP ingest_video tool already returned it cleanly). The
+        # REST/FastAPI path must MATCH: a clean 400 with the actionable refusal message.
+        from memovox.config import Settings
+        from memovox.sdk import Memovox
+        from memovox.server import routes
+        tmp = tempfile.mkdtemp()
+        mv = Memovox(store=str(pathlib.Path(tmp) / "s"),
+                     settings=Settings(local_only=True))
+        for url in ("http://example.com/v.mp4", "https://example.com/v.mp4"):
+            status, payload, _ = routes.route_ingest(mv, {"source": url})
+            self.assertEqual(int(status), 400, f"{url!r} -> {status} {payload}")
+            self.assertIn("local_only", payload["error"])
+        mv.close()
+
 
 # --------------------------------------------------------------------------- #
 # Round 4 — residual defects found re-reviewing the round-3 fixes
@@ -903,6 +921,35 @@ class TestRound6DigestInjection(unittest.TestCase):
         self.assertNotIn("](", header, "source_url produced a Markdown link breakout")
         self.assertIn("## [0:00", header)  # the span text is still shown
 
+    def test_inline_image_beacon_and_link_are_neutralized(self):
+        # digest-F2 (MED): even with newlines collapsed, untrusted single-line text
+        # could still inject INLINE Markdown — a clickable phishing link and, worse, an
+        # ``![x](http://evil/beacon.png)`` image that auto-loads on preview (GitHub/VS
+        # Code/Obsidian), leaking the viewer's IP with zero interaction. Every untrusted
+        # field (remote title, OCR text, transcript, claim text) must render the bracket
+        # syntax literally, never as an active link/image.
+        from memovox.loom.digest import render_digest
+        from memovox.loom.models import Claim
+        v = self._video(title="![t](http://evil/title.png)")
+        m = self._moment(transcript="see [phish](http://evil) and ![b](http://evil/x.png)",
+                         ocr_text="![ocr](http://evil/ocr.png)")
+        c = Claim(claim_id="vid:x#m0000.c00", moment_id="vid:x#m0000", video_id="vid:x",
+                  text="[claimlink](http://evil) ![cb](http://evil/c.png)",
+                  claim_type="fact", status="committed", t_start_s=0.0, t_end_s=5.0,
+                  entailment_score=0.5)
+        out = render_digest(v, [m], [c])
+        # An active inline image requires an UNescaped ``![label](`` and an active link
+        # an UNescaped ``[label](``. Every untrusted opening bracket must be escaped, so
+        # no un-escaped image/link opener may appear anywhere in the rendered digest.
+        import re as _re
+        self.assertFalse(_re.search(r"(?<!\\)!\[[^\]]*\]\(http://evil", out),
+                         f"untrusted field rendered an ACTIVE auto-loading image:\n{out!r}")
+        self.assertFalse(_re.search(r"(?<!\\)\[[^\]]*\]\(http://evil", out),
+                         f"untrusted field rendered an ACTIVE clickable link:\n{out!r}")
+        # the text content is still present (escaped), just inert
+        self.assertIn("phish", out)
+        self.assertIn("claimlink", out)
+
     def test_benign_digest_unchanged(self):
         from memovox.loom.digest import render_digest
         from memovox.loom.models import Claim
@@ -1043,6 +1090,61 @@ class TestRound7Hardening(unittest.TestCase):
         a_dir.mkdir()
         rc = cli.main(["--store", str(store), "export", rep.video_id, "--out", str(a_dir)])
         self.assertEqual(rc, 1)  # clean error + exit 1, not an uncaught traceback
+
+
+# --------------------------------------------------------------------------- #
+# Round 8 — gate unicode-ellipsis leak + non-finite duration crash
+# --------------------------------------------------------------------------- #
+
+
+class TestRound8Hardening(unittest.TestCase):
+    def _cits(self, n=2):
+        from memovox.augur.types import Citation
+        return [Citation(index=i, video_id="v", moment_id=f"v#m{i}", t_start_s=0, t_end_s=1,
+                         source_text="x") for i in range(1, n + 1)]
+
+    def test_gate_unicode_ellipsis_is_a_boundary(self):
+        # round-8 (MED): U+2026 "…" wasn't a gate terminator, leaking an uncited sentence
+        # ended with it — asymmetric with ASCII "..." which IS gated.
+        from memovox.augur.answer import _llm_citations_valid as V
+        c = self._cits()
+        self.assertFalse(V("Ribosomes are titanium invented by Napoleon… Ribosomes make proteins [1]", c))
+        self.assertFalse(V("Ribosomes are titanium... Ribosomes make proteins [1]", c))  # ASCII parity
+        # a legitimate trailing-off cited sentence still binds its marker (no over-refusal)
+        self.assertTrue(V("Ribosomes make proteins from amino acids… [1]", c))
+        self.assertTrue(V("Ribosomes make proteins [1]… Amino acids matter [2].", c))
+
+    def test_nonfinite_duration_does_not_crash_or_emit_invalid_json(self):
+        # round-8 (MED): a non-finite Video.duration_s crashed `memovox list` (seconds_to_hms
+        # OverflowError) and emitted invalid `"duration_s": Infinity` JSON from list_videos.
+        import json
+        import math
+        from memovox import util
+        from memovox.config import Config
+        from memovox.loom import LoomStore, Video
+        # the formatters degrade gracefully on inf/nan
+        self.assertEqual(util.seconds_to_hms(float("inf")), "?")
+        self.assertEqual(util.seconds_to_hms(float("nan")), "?")
+        util.deep_link("https://youtu.be/AAAAAAAAAAA", float("inf"))  # must not raise
+        util.deep_link_range("https://youtu.be/AAAAAAAAAAA", float("nan"), float("inf"))
+        # an already-stored inf serializes to valid JSON (to_dict coerces non-finite -> None)
+        tmp = tempfile.mkdtemp()
+        s = LoomStore(Config(store=pathlib.Path(tmp) / "s").ensure())
+        s.upsert_video(Video(video_id="vid:t", source_url="https://x", title="T",
+                             duration_s=float("inf"), content_hash="t"))
+        d = s.get_video("vid:t").to_dict()
+        self.assertIsNone(d["duration_s"])
+        self.assertNotIn("Infinity", json.dumps(d))
+        s.close()
+        # a normal ingest stores a finite-or-None duration
+        mv_dir = pathlib.Path(tempfile.mkdtemp()) / "s"
+        from memovox.sdk import Memovox
+        mv = Memovox(store=str(mv_dir))
+        _ingest_vtt(mv, "WEBVTT\n\n00:00:00.000 --> 00:00:05.000\nhello world here.\n",
+                    source_url="https://youtu.be/AAAAAAAAAAA")
+        dur = mv.list_videos()[0].duration_s
+        self.assertTrue(dur is None or math.isfinite(dur))
+        mv.close()
 
 
 if __name__ == "__main__":

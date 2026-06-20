@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 import unicodedata
 from datetime import datetime, timezone
@@ -44,8 +45,8 @@ def parse_iso(value: str) -> Optional[datetime]:
 
 def seconds_to_hms(seconds: Optional[float]) -> str:
     """Format seconds as ``H:MM:SS`` (or ``M:SS`` under an hour)."""
-    if seconds is None:
-        return "?"
+    if seconds is None or not math.isfinite(seconds):
+        return "?"  # a non-finite (inf/nan) time -> unknown, never int(inf)->OverflowError
     total = int(round(max(0.0, float(seconds))))
     hours, rem = divmod(total, 3600)
     minutes, secs = divmod(rem, 60)
@@ -135,7 +136,7 @@ def deep_link(source_url: Optional[str], t_start: Optional[float]) -> Optional[s
     """Build a timestamped deep link into the source, if possible."""
     if not source_url:
         return None
-    t = int(t_start or 0)
+    t = int(t_start) if (t_start is not None and math.isfinite(t_start)) else 0
     yt = youtube_id(source_url)
     if yt:
         return f"https://youtu.be/{yt}?t={t}"
@@ -152,8 +153,9 @@ def deep_link_range(source_url: Optional[str], t_start: Optional[float],
         return None
     yt = youtube_id(source_url)
     if yt:
-        return (f"https://www.youtube.com/watch?v={yt}"
-                f"&start={int(t_start or 0)}&end={int(t_end or 0)}")
+        t0 = int(t_start) if (t_start is not None and math.isfinite(t_start)) else 0
+        t1 = int(t_end) if (t_end is not None and math.isfinite(t_end)) else 0
+        return f"https://www.youtube.com/watch?v={yt}&start={t0}&end={t1}"
     return deep_link(source_url, t_start)
 
 

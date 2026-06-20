@@ -14,7 +14,7 @@ from http import HTTPStatus
 
 import math
 
-from ..errors import AcquisitionError, DemuxError
+from ..errors import AcquisitionError, DemuxError, IngestionError
 from ..loom import LoomStore
 from ..util import deep_link
 
@@ -144,10 +144,13 @@ def route_ingest(mv, body):
     try:
         report = mv.ingest(body["source"], source_url=body.get("source_url"),
                            title=body.get("title"))
-    except (AcquisitionError, DemuxError) as exc:
+    except (AcquisitionError, DemuxError, IngestionError) as exc:
         # a bad client-supplied source (missing file, bad URL, unsupported type, ffmpeg
         # failure) is a CLIENT error -> 400, not a catch-all 500 that leaks the internal
         # exception (mirrors the route_export ValueError->400 fix; keeps FastAPI parity).
+        # IngestionError covers the local_only egress refusal (pipeline.ingest raises it
+        # for an http(s) source when private): an EXPECTED, client-driven refusal that the
+        # MCP ingest_video tool already returns cleanly — REST/FastAPI must match, not 500.
         return _bad_request(str(exc))
     return (HTTPStatus.OK, report.to_dict(), JSON)
 
