@@ -45,6 +45,21 @@ class TestCorpusTopicWordsAreDistinctive(unittest.TestCase):
         self.assertEqual(_rel_tokens("what watch is best for a first purchase"), {"watch"})
         self.assertEqual(_rel_tokens("what car should I buy"), {"car"})
 
+    def test_political_role_words_dropped_but_chess_pieces_kept(self):
+        # PRESIDENT_ROLE_WORD_OOC_LEAK (round-6 panel): a generic political/leadership ROLE
+        # word must NOT clear topicality on its own (else "who is the president of Brazil?"
+        # leaks — 'president' df=10 passes while the real subject 'brazil' df=3 is below
+        # floor). Only the real subject survives, and it must be below the df floor to refuse.
+        from memovox.augur.answer import _rel_tokens
+        self.assertEqual(_rel_tokens("who is the president of brazil"), {"brazil"})
+        self.assertEqual(_rel_tokens("what is the vice president"), set())
+        for w in ("president", "minister", "senator", "governor", "mayor", "chancellor"):
+            self.assertNotIn(w, _rel_tokens(f"who is the {w} now"), w)
+        # chess pieces are genuine corpus SUBJECTS (king df=40, queen df=37) and must stay
+        # distinctive — they were DELIBERATELY excluded from the role-word stoplist.
+        self.assertIn("king", _rel_tokens("who has the king on g1"))
+        self.assertIn("queen", _rel_tokens("where is the queen"))
+
 
 # ---- Fix 3: mid-cue speaker label -------------------------------------------
 class TestMidCueSpeakerLabel(unittest.TestCase):

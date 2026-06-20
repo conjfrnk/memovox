@@ -91,7 +91,16 @@ buy buys buying bought sell sells selling sold choose chooses choosing chose pic
 won wins winner winners winning lost lose loses losing beat beats beaten beating
 happen happened happens happening become became becomes consider considered considers
 invest invests investing invested investment investments worth value valued values
+president presidents vice minister ministers senator senators governor governors mayor
+mayors chancellor premier dictator
 """.split())
+# Generic political/leadership ROLE words are zero-domain-term for a tech/diet/watches/cars
+# corpus: a query like "who is the president of Brazil?" must NOT clear topicality on the
+# bare role word "president" (df=10, a recurring incidental mention) while its actual
+# subject "brazil" (df=3, below floor) is absent — the round-4 "where can I watch the
+# game?" leak class applied to role words. NB king/queen/prince/emperor are DELIBERATELY
+# EXCLUDED: this corpus discusses them AS subjects (chess pieces — "king on G1", "queen on
+# C7", df=40/37), so stripping them would over-refuse legitimate chess queries.
 
 
 def _rel_tokens(text: str) -> set:
