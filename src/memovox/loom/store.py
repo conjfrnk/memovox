@@ -362,42 +362,69 @@ class LoomStore:
         # forget (redaction) leaves the cumulative ledger consistent with reality
         # rather than still counting the deleted video's moments/claims.
         ledger_delta = self._ledger_contribution(video_id)
-        if self.fts and moment_ids:
-            self.conn.executemany("DELETE FROM moments_fts WHERE moment_id = ?",
-                                  [(i,) for i in moment_ids])
-        cur = self.conn.execute("DELETE FROM videos WHERE video_id = ?", (video_id,))
-        if cur.rowcount > 0:
-            # (a) every edge stamped with this video (edges have no FK cascade) —
-            # catches SAME_AS speaker edges (both endpoints are Speaker nodes).
-            self.conn.execute("DELETE FROM edges WHERE video_id = ?", (video_id,))
-            # (b) cross-video edges (stamped with another video's id) pointing AT the
-            # now-deleted nodes.
-            node_ids = moment_ids + claim_ids
-            if node_ids:
-                ph = ",".join("?" * len(node_ids))
+        # ONE atomic transaction (``with self.conn``): if any statement fails mid-way —
+        # e.g. the edge IN-list exceeding the legacy 999 bound-variable limit, now also
+        # chunked below — the whole delete ROLLS BACK rather than leaving the video gone
+        # but its cross-video edges dangling (a non-atomic half-redaction).
+        with self.conn:
+            if self.fts and moment_ids:
+                self.conn.executemany("DELETE FROM moments_fts WHERE moment_id = ?",
+                                      [(i,) for i in moment_ids])
+            cur = self.conn.execute("DELETE FROM videos WHERE video_id = ?", (video_id,))
+            if cur.rowcount > 0:
+                # (a) every edge stamped with this video (edges have no FK cascade) —
+                # catches SAME_AS speaker edges (both endpoints are Speaker nodes).
+                self.conn.execute("DELETE FROM edges WHERE video_id = ?", (video_id,))
+                # (b) cross-video edges (stamped with another video's id) pointing AT the
+                # now-deleted nodes — chunked, two single-column passes (see helper).
+                self._delete_edges_referencing(moment_ids + claim_ids)
+                # (c) per-video speaker rows ("<video_id>:<label>") have NO FK to videos,
+                # so the moment/claim cascade never reaches them. Delete them explicitly
+                # (substr-prefix match, not LIKE — a YouTube id can contain '_', a LIKE
+                # wildcard) so a redaction leaves behind no orphaned — possibly NAMED —
+                # speaker row (PII surviving the delete).
+                prefix = f"{video_id}:"
+                self.conn.execute("DELETE FROM speakers WHERE substr(speaker_id, 1, ?) = ?",
+                                  (len(prefix), prefix))
+                # ...then GC any canonical "spk:*" identity no surviving per-video speaker
+                # still points at (a cross-video name fed only by the deleted video).
                 self.conn.execute(
-                    f"DELETE FROM edges WHERE src IN ({ph}) OR dst IN ({ph})",
-                    node_ids + node_ids)
-            # GC corpus nodes this redaction left member-less.
-            self.conn.execute(
-                "DELETE FROM entities WHERE entity_id NOT IN (SELECT entity_id FROM mentions)")
-            self.conn.execute(
-                "DELETE FROM topics WHERE topic_id NOT IN "
-                "(SELECT topic_id FROM moments WHERE topic_id IS NOT NULL)")
-            # ...and inbound edges from SURVIVING videos that now point at a GC'd node.
-            self.conn.execute(
-                "DELETE FROM edges WHERE rel = 'MENTIONS' AND dst NOT IN "
-                "(SELECT entity_id FROM entities)")
-            self.conn.execute(
-                "DELETE FROM edges WHERE rel = 'ABOUT' AND dst NOT IN "
-                "(SELECT topic_id FROM topics)")
-            # rowid reuse safety: force a full re-scan on the next consolidation.
-            self.conn.execute(
-                "INSERT OR REPLACE INTO meta (key, value) VALUES ('consolidation_watermark', '0')")
-            # undo the video's contribution to the cumulative metrics ledger.
-            self._decrement_ledger(ledger_delta)
-        self.conn.commit()
+                    "DELETE FROM speakers WHERE speaker_id LIKE 'spk:%' "
+                    "AND speaker_id NOT IN (SELECT canonical_id FROM speakers "
+                    "WHERE canonical_id IS NOT NULL AND speaker_id NOT LIKE 'spk:%')")
+                # GC corpus nodes this redaction left member-less.
+                self.conn.execute(
+                    "DELETE FROM entities WHERE entity_id NOT IN (SELECT entity_id FROM mentions)")
+                self.conn.execute(
+                    "DELETE FROM topics WHERE topic_id NOT IN "
+                    "(SELECT topic_id FROM moments WHERE topic_id IS NOT NULL)")
+                # ...and inbound edges from SURVIVING videos that now point at a GC'd node.
+                self.conn.execute(
+                    "DELETE FROM edges WHERE rel = 'MENTIONS' AND dst NOT IN "
+                    "(SELECT entity_id FROM entities)")
+                self.conn.execute(
+                    "DELETE FROM edges WHERE rel = 'ABOUT' AND dst NOT IN "
+                    "(SELECT topic_id FROM topics)")
+                # rowid reuse safety: force a full re-scan on the next consolidation.
+                self.conn.execute(
+                    "INSERT OR REPLACE INTO meta (key, value) VALUES ('consolidation_watermark', '0')")
+                # undo the video's contribution to the cumulative metrics ledger.
+                self._decrement_ledger(ledger_delta)
         return cur.rowcount > 0
+
+    def _delete_edges_referencing(self, node_ids: Sequence[str], *, batch: int = 400) -> None:
+        """Delete every edge whose ``src`` OR ``dst`` is in ``node_ids``, in chunks small
+        enough to stay under the SQLite bound-variable limit (legacy default 999). Two
+        single-column passes keep the per-statement placeholder count at len(chunk), so a
+        video with thousands of moments+claims is redacted without "too many SQL variables".
+        Caller runs this inside the ``delete_video`` transaction."""
+        for i in range(0, len(node_ids), batch):
+            chunk = node_ids[i:i + batch]
+            if not chunk:
+                continue
+            ph = ",".join("?" * len(chunk))
+            self.conn.execute(f"DELETE FROM edges WHERE src IN ({ph})", chunk)
+            self.conn.execute(f"DELETE FROM edges WHERE dst IN ({ph})", chunk)
 
     # -- moments -----------------------------------------------------------
 

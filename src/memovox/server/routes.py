@@ -21,6 +21,21 @@ JSON = "application/json"
 MARKDOWN = "text/markdown; charset=utf-8"
 
 
+def _bad_request(msg: str):
+    return (HTTPStatus.BAD_REQUEST, {"error": msg}, JSON)
+
+
+def _wrong_type(body, key: str):
+    """Return a 400 if ``body[key]`` is present but NOT a string, else None. Guards the
+    POST routes so a non-string field (``{"query": 123}``, ``{"video_id": ["x"]}``) is
+    rejected at the boundary with a generic message — instead of flowing into ``.strip()``
+    /a SQLite bound parameter and surfacing a raw Python/SQLite error string in a 500."""
+    val = body.get(key)
+    if val is not None and not isinstance(val, str):
+        return _bad_request(f"{key!r} must be a string")
+    return None
+
+
 def _finite_float(value, default: float):
     """Parse a query param to a FINITE float (rejecting nan/inf and junk). Returns
     ``default`` when the value is None/empty, or ``None`` when it's unparseable —
@@ -106,8 +121,12 @@ def route_job_status(mv, job_id):
 
 
 def route_ingest(mv, body):
+    for key in ("source", "source_url", "title"):
+        err = _wrong_type(body, key)
+        if err:
+            return err
     if not body.get("source"):
-        return (HTTPStatus.BAD_REQUEST, {"error": "missing 'source'"}, JSON)
+        return _bad_request("missing 'source'")
     report = mv.ingest(body["source"], source_url=body.get("source_url"),
                        title=body.get("title"))
     return (HTTPStatus.OK, report.to_dict(), JSON)
@@ -116,16 +135,23 @@ def route_ingest(mv, body):
 def route_query(mv, body):
     # Accept 'question' as an alias for 'query' — the CLI (ask), SDK (.ask) and MCP
     # (search_knowledge) all phrase it as a question, so a client need not guess.
+    for key in ("query", "question", "video_id"):
+        err = _wrong_type(body, key)
+        if err:
+            return err
     query = body.get("query") or body.get("question")
     if not query:
-        return (HTTPStatus.BAD_REQUEST, {"error": "missing 'query' (or 'question')"}, JSON)
+        return _bad_request("missing 'query' (or 'question')")
     answer = mv.ask(query, video_id=body.get("video_id"))
     return (HTTPStatus.OK, answer.to_dict(), JSON)
 
 
 def route_synthesize(mv, body):
+    err = _wrong_type(body, "topic")
+    if err:
+        return err
     if not body.get("topic"):
-        return (HTTPStatus.BAD_REQUEST, {"error": "missing 'topic'"}, JSON)
+        return _bad_request("missing 'topic'")
     return (HTTPStatus.OK, mv.synthesize(body["topic"]).to_dict(), JSON)
 
 

@@ -332,13 +332,19 @@ class Memovox:
             return store.delete_video(video_id)
 
     def get_provenance(self, claim_id: str) -> Optional[dict]:
+        from .loom.models import STATUS_COMMITTED, make_provenance
+
         with LoomStore(self.config) as store:
             claim = store.get_claim(claim_id)
             if not claim:
                 return None
-            video = store.get_video(claim.video_id)
-            from .loom.models import make_provenance
-
+            # Only a COMMITTED claim (one that passed the entailment gate) carries trusted
+            # provenance. An unsupported/superseded claim is retained for the audit trail,
+            # but every other user-facing surface excludes it — so do NOT hand back a
+            # verified-looking deep link for one. Withhold provenance and flag trusted=False
+            # so a client can't mistake a rejected claim's citation for a vetted one.
+            trusted = claim.status == STATUS_COMMITTED
+            video = store.get_video(claim.video_id) if trusted else None
             prov = make_provenance(
                 video, claim.t_start_s, claim.t_end_s, speaker=claim.speaker_id,
                 confidence=claim.entailment_score,
@@ -346,6 +352,7 @@ class Memovox:
             return {
                 "claim": claim.to_dict(),
                 "provenance": prov.to_dict() if prov else None,
+                "trusted": trusted,
             }
 
     def extract(self, video_id: str, *, use_llm: bool = False) -> dict:

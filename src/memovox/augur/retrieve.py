@@ -28,7 +28,11 @@ def rrf_fuse(
     for lst in ranked_lists:
         for rank, (item_id, _score) in enumerate(lst):
             scores[item_id] = scores.get(item_id, 0.0) + 1.0 / (k + rank + 1)
-    fused = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    # Tiebreak on moment_id so equal fused scores rank identically regardless of leg
+    # order / dict insertion order — this is the user-visible top_k cut (citations, [n]
+    # markers, deep links), so it must be byte-stable. Matches the defensive secondary
+    # sort already used at consensus.py and sqlite.py.
+    fused = sorted(scores.items(), key=lambda x: (-x[1], x[0]))
     if span is not None:
         span.add_cap("top_k", limit=top_k, dropped=max(0, len(fused) - top_k))
     return fused[:top_k]
@@ -122,5 +126,5 @@ def _apply_decay(store: LoomStore, fused, settings: Settings):
         w = recency_weight(dates.get(_video_of(mid)), reference_date,
                            halflife=settings.decay_halflife_days, default=1.0)
         reweighted.append((mid, score * w))
-    reweighted.sort(key=lambda x: x[1], reverse=True)  # stable: undated keeps order
+    reweighted.sort(key=lambda x: (-x[1], x[0]))  # moment_id tiebreak: stable under ties
     return reweighted

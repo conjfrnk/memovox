@@ -9,6 +9,7 @@ configured. Low-evidence queries are flagged rather than confabulated.
 from __future__ import annotations
 
 import math
+import re
 from typing import List, Optional, Tuple
 
 from ..backends.base import Embedder, LLMBackend, Reranker
@@ -278,6 +279,28 @@ _LLM_SYSTEM = (
 )
 
 
+_CITE_MARKER_RE = re.compile(r"\[(\d+)\]")
+
+
+def _llm_citations_valid(text: str, citations: List[Citation]) -> bool:
+    """True iff a GENERATED answer is safe to surface as-is (the never-break invariant).
+
+    A generative LLM can return uncited assertions, fabricated quotes, or a ``[n]`` that
+    points at no source — none of which the relevance gate (which inspects the retrieved
+    EVIDENCE, not the generated TEXT) catches. We require, minimally, that the text is
+    citation-grounded: every sentence carries at least one ``[n]`` AND every ``[n]``
+    resolves to a real citation index. A compliant grounded answer passes unchanged; any
+    failure makes the caller fall back to the verified extractive synthesizer (which cites
+    every sentence) rather than emit an uncited claim."""
+    if not text.strip():
+        return False
+    valid = {c.index for c in citations}
+    markers = {int(m) for m in _CITE_MARKER_RE.findall(text)}
+    if not markers or (markers - valid):
+        return False  # no citation at all, or a dangling marker -> reject
+    return all(_CITE_MARKER_RE.search(s) for s in split_sentences(text))
+
+
 def _synthesize_llm(llm: LLMBackend, query: str, citations: List[Citation]) -> str:
     # Give the LLM each citation's FULL content (source_text) rather than the
     # one-sentence display snippet, so an answer-bearing sentence with no
@@ -463,6 +486,12 @@ def ask(
                 print(f"memovox: LLM answer synthesis failed ({type(exc).__name__}: "
                       f"{exc}); using the extractive synthesizer.", file=sys.stderr)
                 text = _synthesize_extractive(citations)
+            else:
+                # GROUNDING GATE: a well-formed but uncited / fabricated-quote / dangling-
+                # marker LLM answer is discarded for the verified extractive synthesizer —
+                # we never surface an assertion we can't tie to a citation.
+                if not _llm_citations_valid(text, citations):
+                    text = _synthesize_extractive(citations)
         else:
             text = _synthesize_extractive(citations)
 

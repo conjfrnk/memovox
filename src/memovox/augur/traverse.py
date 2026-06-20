@@ -75,4 +75,9 @@ def expand(
                     visited.add(nc.moment_id)
                     nxt.append(nc.moment_id)
         frontier = nxt
-    return sorted(scored.items(), key=lambda x: x[1], reverse=True)
+    # Secondary key on moment_id: same-hop neighbors all share score 1/(hop+1), and the
+    # `scored` dict's insertion order is set by iterating a `set` of neighbor claim ids —
+    # PYTHONHASHSEED-dependent. Without the tiebreak the cited-moment order (and thus the
+    # final answer for a contradiction-strategy query) varies run-to-run once the corpus
+    # has cross-video claim edges (the [nli] path).
+    return sorted(scored.items(), key=lambda x: (-x[1], x[0]))

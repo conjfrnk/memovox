@@ -93,7 +93,13 @@ def youtube_id(url: str) -> Optional[str]:
         parts = urlsplit(url)
     except ValueError:
         return None
-    host = (parts.hostname or "").lower().lstrip("www.")
+    host = (parts.hostname or "").lower()
+    # Strip the literal "www." PREFIX (not str.lstrip, which strips any leading run of
+    # the chars {w,.} and so misread look-alikes — "ww.youtube.com", "wyoutube.com" —
+    # as youtube.com, rewriting ids + citation deep links onto a domain the source
+    # never named).
+    if host.startswith("www."):
+        host = host[4:]
     if host == "youtu.be":
         vid = parts.path.lstrip("/").split("/")[0]
         return vid or None

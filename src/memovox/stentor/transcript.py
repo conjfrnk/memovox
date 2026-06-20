@@ -39,7 +39,14 @@ _BRACKET_CENSOR_RE = re.compile(r"^[\s_]+$")
 #: survives. ``_URL_PAREN_RE`` mops up an orphaned ``](url)`` / bare ``(url)`` left when
 #: the sentence splitter broke inside a link (e.g. "…crazy short](https://…) post").
 _MD_LINK_RE = re.compile(r"\[([^\]\n]{0,200})\]\((https?://[^)\s]+)\)")
-_URL_PAREN_RE = re.compile(r"\]?\((https?://[^)\s]+)\)")
+#: Excludes ``(`` from the URL body so a fresh ``(`` terminates the run instead of
+#: letting the body span the whole string — without it, ``"(http://x"`` repeated makes
+#: the outer ``\(`` retry at every paren offset, an O(n²) ReDoS (a ~600KB cue hangs for
+#: minutes). A URL with a literal ``(`` (rare in captions) is simply left unstripped.
+_URL_PAREN_RE = re.compile(r"\]?\((https?://[^)\s(]+)\)")
+#: A cue timing line is ``<ts> --> <ts>`` with each side purely numeric. Used to reject a
+#: prose line that merely CONTAINS ``-->`` (an arrow in speech) as a fake timestamp line.
+_TS_SIDE_RE = re.compile(r"^[\d:.,]+$")
 #: Musical-note markers wrap sung lyrics in captions. A line carrying one is music
 #: (a song), NOT spoken video content, so it becomes a timeline event rather than a
 #: claim. Unambiguous: these glyphs appear only for music, so there is no false
@@ -189,6 +196,17 @@ def _parse_ts(value: str) -> float:
     return h * 3600 + m * 60 + sec
 
 
+def _is_timestamp_line(line: str) -> bool:
+    """True iff ``line`` is a real cue timing line (``<ts> --> <ts>``, each side numeric).
+
+    Guards against a malformed block whose only ``-->`` is an arrow inside speech: such
+    a line would otherwise be accepted as the timestamp (``_parse_ts`` swallows the parse
+    error to 0.0) and the real content before the arrow would be silently dropped."""
+    left, _, right = line.partition("-->")
+    right_ts = right.strip().split(" ")[0] if right.strip() else ""
+    return bool(_TS_SIDE_RE.match(left.strip())) and bool(_TS_SIDE_RE.match(right_ts))
+
+
 def parse_cues(text: str) -> List[Segment]:
     """Parse a VTT or SRT document into raw (uncleaned) segments.
 
@@ -211,15 +229,15 @@ def parse_cues(text: str) -> List[Segment]:
         lines = [ln for ln in block.split("\n") if ln.strip()]
         if not lines:
             continue
-        time_idx = next((i for i, ln in enumerate(lines) if "-->" in ln), None)
+        time_idx = next(
+            (i for i, ln in enumerate(lines) if "-->" in ln and _is_timestamp_line(ln)),
+            None,
+        )
         if time_idx is None:
             continue
-        try:
-            left, right = lines[time_idx].split("-->")
-            start = _parse_ts(left)
-            end = _parse_ts(right.strip().split(" ")[0])
-        except ValueError:
-            continue
+        left, _, right = lines[time_idx].partition("-->")
+        start = _parse_ts(left)
+        end = _parse_ts(right.strip().split(" ")[0])
         content_lines = lines[time_idx + 1:]
         if rolling:
             # Keep only lines that carry inline word timing (the new content);
@@ -244,27 +262,47 @@ parse_vtt = parse_cues
 parse_srt = parse_cues
 
 
+def _to_float(value, default: float = 0.0) -> float:
+    """Coerce a JSON timing to float, tolerating null / list / junk so a malformed-but-
+    valid export degrades instead of raising mid-ingest."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def parse_json(data) -> List[Segment]:
-    """Parse a JSON transcript: a list of cues or ``{"segments": [...]}``."""
+    """Parse a JSON transcript: a list of cues or ``{"segments": [...]}``.
+
+    Tolerant of a syntactically-valid-but-wrong-shape document (a list of strings, a
+    ``null`` item, non-numeric timings — all plausible third-party exports): non-dict
+    items are skipped and bad timings coerce to 0.0, so an unexpected shape yields fewer
+    (or zero) segments rather than an uncaught AttributeError/TypeError crashing ingest."""
     if isinstance(data, dict):
         data = data.get("segments", [])
+    if not isinstance(data, list):
+        return []
     segments: List[Segment] = []
-    for item in data or []:
-        start = float(item.get("start", item.get("t_start", 0.0)) or 0.0)
-        end = float(item.get("end", item.get("t_end", start)) or start)
+    for item in data:
+        if not isinstance(item, dict):
+            continue  # a bare string / null / number is not a cue -> skip
+        start = _to_float(item.get("start", item.get("t_start", 0.0)), 0.0)
+        end = _to_float(item.get("end", item.get("t_end", start)), start)
         text = str(item.get("text", "")).strip()
         if not text:
             continue
         # Optional per-word timings (M0.3): a free-path fixture can carry word
         # precision via a "words": [{"word","start","end"}, ...] array per cue.
         words = [
-            Word(word=str(w.get("word", "")), start=float(w.get("start") or 0.0),
-                 end=float(w.get("end") or 0.0))  # `or 0.0` tolerates null/absent timings
+            Word(word=str(w.get("word", "")), start=_to_float(w.get("start"), 0.0),
+                 end=_to_float(w.get("end"), 0.0))  # tolerates null/absent/junk timings
             for w in (item.get("words") or [])
-            if w.get("word")
+            if isinstance(w, dict) and w.get("word")
         ]
+        speaker = item.get("speaker")
         segments.append(Segment(start=start, end=end, text=text,
-                                speaker=item.get("speaker"), words=words))
+                                speaker=speaker if isinstance(speaker, str) else None,
+                                words=words))
     return segments
 
 
@@ -305,12 +343,23 @@ def load_transcript(path: "str | Path", *, duration: Optional[float] = None) -> 
     return parse_plain(raw, duration=duration)
 
 
+def _decode_entities(raw: str) -> str:
+    """Strip markup tags, THEN decode HTML entities. Tag-stripping first keeps a decoded
+    ``&lt;``/``&gt;`` from being re-read as a tag; decoding before the event/bracket/music
+    passes means an entity-encoded annotation (YouTube/WebVTT emit ``&#91;applause&#93;``
+    and ``&#9834;``) is recognized rather than surviving still-escaped into claim text."""
+    return html.unescape(_TAG_RE.sub(" ", raw or ""))
+
+
 def clean_text(raw: str, speakers: "frozenset[str]" = frozenset()) -> Tuple[str, List[str]]:
     """Return (cleaned speech text, list of audio-event keywords).
 
     ``speakers`` is the document's confirmed-speaker set (see :func:`_collect_speakers`),
     used to strip mid-cue/bare interior speaker labels without eating prose appositives.
     """
+    # Tags off + entities decoded UP FRONT (see _decode_entities) so every strip pass below
+    # operates on real glyphs; the trailing ``\s+`` collapse folds any U+00A0 (&nbsp;) out.
+    raw = _decode_entities(raw)
     events = [e.lower() for e in EVENT_RE.findall(raw)]
     stripped = EVENT_RE.sub(" ", raw)
     # Markdown links first (keep label, drop URL), then any orphaned ](url)/(url) — both
@@ -328,12 +377,6 @@ def clean_text(raw: str, speakers: "frozenset[str]" = frozenset()) -> Tuple[str,
         return m.group(0)  # code/math like [i], [b,t], [0] -> keep
 
     stripped = _RESIDUAL_BRACKET_RE.sub(_strip_bracket, stripped)
-    stripped = _TAG_RE.sub(" ", stripped)
-    # Decode HTML entities AFTER tag stripping (so a decoded ``&lt;`` is not re-read
-    # as a tag): WebVTT escapes ``&`` ``<`` ``>`` and emits ``&nbsp;``/``&#39;`` —
-    # left raw, these survive into claim text ("By 1920,&nbsp;&nbsp;"). The trailing
-    # ``\s+`` collapse folds the resulting U+00A0 into a normal space.
-    stripped = html.unescape(stripped)
     stripped = _TURN_ANYWHERE_RE.sub(" ", stripped)  # drop ">>" turn markers
     m = _speaker_prefix(stripped)
     if m:
@@ -376,7 +419,7 @@ def clean_segments(segments: List[Segment]) -> List[Segment]:
     for seg in segments:
         # A musical-note-marked line is song/lyrics, not spoken content — record it
         # as a music event and emit no speech (so it never becomes a claim).
-        if seg.kind != "event" and _MUSIC_NOTE_RE.search(seg.text or ""):
+        if seg.kind != "event" and _MUSIC_NOTE_RE.search(_decode_entities(seg.text)):
             out.append(Segment(start=seg.start, end=seg.start, text="[music]", kind="event"))
             continue
         text, events = clean_text(seg.text, speakers)

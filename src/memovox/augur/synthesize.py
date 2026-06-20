@@ -280,6 +280,7 @@ def synthesize(
 
     text = extractive
     if llm is not None and getattr(llm, "is_generative", False):
+        from .answer import _llm_citations_valid
         try:
             text = _synthesize_llm(llm, topic, citations, consensus_points, contradictions)
         except Exception as exc:  # noqa: BLE001 - graceful fallback, but visible
@@ -287,6 +288,12 @@ def synthesize(
             print(f"memovox: LLM topic synthesis failed ({type(exc).__name__}: {exc}); "
                   "using the extractive synthesizer.", file=sys.stderr)
             text = extractive
+        else:
+            # GROUNDING GATE (mirror ask()): an uncited / dangling-marker generative
+            # synthesis is discarded for the verified extractive one — every surfaced
+            # sentence must carry a citation.
+            if not _llm_citations_valid(text, citations):
+                text = extractive
 
     low_evidence = not text.strip()
     return Synthesis(

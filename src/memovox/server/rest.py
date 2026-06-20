@@ -26,6 +26,10 @@ from . import routes
 def make_handler(mv: Memovox):
     class Handler(BaseHTTPRequestHandler):
         server_version = "memovox/0.1"
+        #: Reject (don't allocate) request bodies larger than this — these JSON request
+        #: bodies are tiny, so a multi-MB Content-Length is abuse, not use. Without the
+        #: cap a client controls the server's allocation up to whatever it advertises.
+        MAX_BODY_BYTES = 4 << 20  # 4 MiB
 
         def log_message(self, *args):  # quiet
             return
@@ -45,6 +49,8 @@ def make_handler(mv: Memovox):
                 return {}  # malformed Content-Length -> empty body, never crash
             if length <= 0:
                 return {}
+            if length > self.MAX_BODY_BYTES:
+                return {}  # oversized -> don't allocate; the route answers a clean 400
             try:
                 data = json.loads(self.rfile.read(length).decode("utf-8"))
             except (ValueError, UnicodeDecodeError):
