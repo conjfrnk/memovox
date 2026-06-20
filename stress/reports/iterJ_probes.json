@@ -1,0 +1,396 @@
+{
+  "store": "/tmp/mv_embed4",
+  "ask_in_corpus": [
+    {
+      "q": "what is Graham's number?",
+      "low_evidence": false,
+      "n_citations": 8,
+      "cite_videos": [
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg",
+        "yt:XTeJ64KD5cg"
+      ],
+      "answer": "That's Graham's number. [1] And Graham's number is if you keep doing this, you keep doing g's, right? [2] And the answer is not bigger than Graham's number. [3] However, to actually see Graham's number-- we have some more paper-- we use arr",
+      "top_citation": "I mean literally. That's Graham's number. What do we know about Graham's number? Well, we don't know what its first digit is. We do know its last digit. Its las"
+    },
+    {
+      "q": "what is AGI?",
+      "low_evidence": false,
+      "n_citations": 8,
+      "cite_videos": [
+        "yt:5KVDDfAkRgc",
+        "yt:5KVDDfAkRgc",
+        "yt:5KVDDfAkRgc",
+        "yt:5KVDDfAkRgc",
+        "yt:YeRS4TbtZWA",
+        "yt:5KVDDfAkRgc",
+        "yt:YeRS4TbtZWA",
+        "yt:YeRS4TbtZWA"
+      ],
+      "answer": "AGI artificial general intelligence is a system that can exhibit all the cognitive capabilities humans can. [1] AGI is not just about tech. [2] claiming that, you know, AGI is just around the corner and being systematically wrong. [3] there",
+      "top_citation": "AGI artificial general intelligence is a system that can exhibit all the cognitive capabilities humans can. Creating a computer system that itself is a worker t"
+    },
+    {
+      "q": "what did Steve Jobs say about connecting the dots?",
+      "low_evidence": false,
+      "n_citations": 8,
+      "cite_videos": [
+        "yt:UF8uR6Z6KLc",
+        "yt:UF8uR6Z6KLc",
+        "yt:nkG2SSzPUns",
+        "yt:1M3Vdl6DRkU",
+        "yt:d95dOH-7GHM",
+        "yt:1M3Vdl6DRkU",
+        "yt:VyEINfRMvdc",
+        "yt:UF8uR6Z6KLc"
+      ],
+      "answer": "to connect the dots looking forward when I was in college but it was very very clear looking backwards 10 years later again you can't connect the dots looking forward you can only connect them looking backwards so you have to trust that th…",
+      "top_citation": "to connect the dots looking forward when I was in college but it was very very clear looking backwards 10 years later again you can't connect the dots looking f"
+    },
+    {
+      "q": "does saturated fat cause heart disease?",
+      "low_evidence": false,
+      "n_citations": 8,
+      "cite_videos": [
+        "yt:aqBHXNGKvKU",
+        "yt:aqBHXNGKvKU",
+        "yt:aqBHXNGKvKU",
+        "yt:aqBHXNGKvKU",
+        "yt:aqBHXNGKvKU",
+        "yt:aqBHXNGKvKU",
+        "yt:aqBHXNGKvKU",
+        "yt:aqBHXNGKvKU"
+      ],
+      "answer": "It shows that reducing saturated fat does nothing to protect your heart. [1] saturated fat intake but showed a very small reduction in cardiac events for those who reduce their saturated fat. [2] pooling all nine of these randomized control",
+      "top_citation": "A new study has hit the headlines. It shows that reducing saturated fat does nothing to protect your heart. Now, that may surprise some people as we've been tol"
+    },
+    {
+      "q": "what are the risks of a carnivore diet?",
+      "low_evidence": false,
+      "n_citations": 8,
+      "cite_videos": [
+        "yt:n_Smy5-1cHE",
+        "yt:n_Smy5-1cHE",
+        "yt:n_Smy5-1cHE",
+        "yt:n_Smy5-1cHE",
+        "yt:n_Smy5-1cHE",
+        "yt:n_Smy5-1cHE",
+        "yt:n_Smy5-1cHE",
+        "yt:n_Smy5-1cHE"
+      ],
+      "answer": "as a doctor the benefits and risks of a carnivore diet so careful most doctors get nutrition training even today 2024. [1] the carnivore diet does not have the level of evidence that is similar to low carb high-fat diets although carnivore ",
+      "top_citation": "as a doctor the benefits and risks of a carnivore diet so careful most doctors get nutrition training even today 2024"
+    },
+    {
+      "q": "which luxury watch should I buy first?",
+      "low_evidence": false,
+      "n_citations": 8,
+      "cite_videos": [
+        "yt:jlPQjC-CjNg",
+        "yt:jlPQjC-CjNg",
+        "yt:jlPQjC-CjNg",
+        "yt:jlPQjC-CjNg",
+        "yt:jlPQjC-CjNg",
+        "yt:jlPQjC-CjNg",
+        "yt:jlPQjC-CjNg",
+        "yt:jlPQjC-CjNg"
+      ],
+      "answer": "first but for me I've always been a fan of the Santos and I think the Santos as well for most people might be a better choice for a first luxury watch given that it can be worn in scenarios where maybe you need to dress up but also can dre…",
+      "top_citation": "first but for me I've always been a fan of the Santos and I think the Santos as well for most people might be a better choice for a first luxury watch given tha"
+    },
+    {
+      "q": "is the Rolex Submariner a good watch?",
+      "low_evidence": false,
+      "n_citations": 8,
+      "cite_videos": [
+        "yt:sBN_2g0_NE8",
+        "yt:sBN_2g0_NE8",
+        "yt:sBN_2g0_NE8",
+        "yt:sBN_2g0_NE8",
+        "yt:jlPQjC-CjNg",
+        "yt:sBN_2g0_NE8",
+        "yt:jlPQjC-CjNg",
+        "yt:sBN_2g0_NE8"
+      ],
+      "answer": "bad well in some ways the biggest cons of this watch come from its own success for those that do have Rolex fatigue part of the reason I feel it is created for something like the Submariner is that you don't simply just see the sub when yo…",
+      "top_citation": "bad well in some ways the biggest cons of this watch come from its own success for those that do have Rolex fatigue part of the reason I feel it is created for "
+    },
+    {
+      "q": "what is the iPhone 17 Pro camera like?",
+      "low_evidence": false,
+      "n_citations": 8,
+      "cite_videos": [
+        "yt:q0aFOxT6TNw",
+        "yt:q0aFOxT6TNw",
+        "yt:q0aFOxT6TNw",
+        "yt:q0aFOxT6TNw",
+        "yt:q0aFOxT6TNw",
+        "yt:q0aFOxT6TNw",
+        "yt:q0aFOxT6TNw",
+        "yt:q0aFOxT6TNw"
+      ],
+      "answer": "The stuff that makes a really good Pro iPhone, like the improved display, and the much better cameras, and the thicker, better build with improved cooling for shooting videos longer, and better sustained performance, yeah, it turns out the…",
+      "top_citation": "But, it also reminded me about why, in the Android world, like gaming phones kind of have the same effect. The stuff that makes a gaming phone really good, like"
+    },
+    {
+      "q": "how do we reconstruct episodic memory?",
+      "low_evidence": false,
+      "n_citations": 8,
+      "cite_videos": [
+        "yt:d95dOH-7GHM",
+        "yt:d95dOH-7GHM",
+        "yt:d95dOH-7GHM",
+        "yt:d95dOH-7GHM",
+        "yt:d95dOH-7GHM",
+        "yt:d95dOH-7GHM",
+        "yt:d95dOH-7GHM",
+        "yt:d95dOH-7GHM"
+      ],
+      "answer": "So, the fact that we reconstruct our episodic memory so we piece them back together means that our episodic memories are actually very flexible Scientists have been able to exploit this flexibility to plant false childhood memories. [1] \"Th",
+      "top_citation": "to fill in those gaps That could explain the errors in Melanie’s memory of 9/11 my mom worked in New York City growing up all my life. So of course she was in t"
+    },
+    {
+      "q": "how does the brain retrieve a memory?",
+      "low_evidence": false,
+      "n_citations": 8,
+      "cite_videos": [
+        "yt:d95dOH-7GHM",
+        "yt:d95dOH-7GHM",
+        "yt:d95dOH-7GHM",
+        "yt:d95dOH-7GHM",
+        "yt:d95dOH-7GHM",
+        "yt:d95dOH-7GHM",
+        "yt:d95dOH-7GHM",
+        "yt:SdnEbJZoNg8"
+      ],
+      "answer": "When we go to retrieve that memory we have almost many multiple ways of getting into that memory. [1] How does she do that? [2] If you show a person a string of faces, they’ll remember the most emotional ones best When we have an emotional ",
+      "top_citation": "have in your mind the easier is going to be to remember. you know you're creating a narrative. When we go to retrieve that memory we have almost many multiple w"
+    }
+  ],
+  "ask_out_of_corpus": [
+    {
+      "q": "what is the capital of Mongolia?",
+      "low_evidence": true,
+      "n_citations": 0,
+      "cite_videos": [],
+      "answer": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "top_citation": ""
+    },
+    {
+      "q": "who won the 2014 FIFA World Cup?",
+      "low_evidence": true,
+      "n_citations": 0,
+      "cite_videos": [],
+      "answer": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "top_citation": ""
+    },
+    {
+      "q": "how do I bake sourdough bread?",
+      "low_evidence": true,
+      "n_citations": 0,
+      "cite_videos": [],
+      "answer": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "top_citation": ""
+    },
+    {
+      "q": "what is the population of Brazil?",
+      "low_evidence": true,
+      "n_citations": 0,
+      "cite_videos": [],
+      "answer": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "top_citation": ""
+    },
+    {
+      "q": "how do I knit a wool sweater?",
+      "low_evidence": true,
+      "n_citations": 0,
+      "cite_videos": [],
+      "answer": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "top_citation": ""
+    },
+    {
+      "q": "who discovered penicillin?",
+      "low_evidence": true,
+      "n_citations": 0,
+      "cite_videos": [],
+      "answer": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "top_citation": ""
+    },
+    {
+      "q": "who painted the Mona Lisa?",
+      "low_evidence": true,
+      "n_citations": 0,
+      "cite_videos": [],
+      "answer": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "top_citation": ""
+    },
+    {
+      "q": "what is the boiling point of mercury?",
+      "low_evidence": true,
+      "n_citations": 0,
+      "cite_videos": [],
+      "answer": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "top_citation": ""
+    }
+  ],
+  "ask_hard_edge_cases": [
+    {
+      "q": "how do I save energy at home?",
+      "low_evidence": true,
+      "n_citations": 0,
+      "cite_videos": [],
+      "answer": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "top_citation": ""
+    },
+    {
+      "q": "what did Steve Jobs say about death?",
+      "low_evidence": false,
+      "n_citations": 8,
+      "cite_videos": [
+        "yt:UF8uR6Z6KLc",
+        "yt:UF8uR6Z6KLc",
+        "yt:UF8uR6Z6KLc",
+        "yt:UF8uR6Z6KLc",
+        "yt:7ZhdXgRfxHI",
+        "yt:144uOfr4SYA",
+        "yt:1M3Vdl6DRkU",
+        "yt:1M3Vdl6DRkU"
+      ],
+      "answer": "death was a useful but purely concept no one wants to die even people who want to go to heaven don't want to die to get there and yet death is the destination we all share no one has ever. [1] my third story is about death when I was 17 I r",
+      "top_citation": "death was a useful but purely concept no one wants to die even people who want to go to heaven don't want to die to get there and yet death is the destination w"
+    },
+    {
+      "q": "how often should I walk my dog?",
+      "low_evidence": true,
+      "n_citations": 0,
+      "cite_videos": [],
+      "answer": "I don't have enough indexed evidence to answer that confidently. Try ingesting more sources or rephrasing.",
+      "top_citation": ""
+    },
+    {
+      "q": "should I buy the BMW M3?",
+      "low_evidence": false,
+      "n_citations": 8,
+      "cite_videos": [
+        "yt:d5yvnak4x8U",
+        "yt:d5yvnak4x8U",
+        "yt:d5yvnak4x8U",
+        "yt:d5yvnak4x8U",
+        "yt:d5yvnak4x8U",
+        "yt:d5yvnak4x8U",
+        "yt:d5yvnak4x8U",
+        "yt:d5yvnak4x8U"
+      ],
+      "answer": "And the transmission, the fact that it was a manual, the slick top, the competition, and the nice benefits that it offers. [1] The M3 first came out in the 1980s as a high-performance version of the BMW 3 series. [2] finish watching this vi",
+      "top_citation": "desirable high watermark point of the of the entire BMW M3 lineage. Obviously, there are other special ones, but this car just has so much good about it. the st"
+    },
+    {
+      "q": "what do the sources say about superintelligence?",
+      "low_evidence": false,
+      "n_citations": 8,
+      "cite_videos": [
+        "yt:1M3Vdl6DRkU",
+        "yt:144uOfr4SYA",
+        "yt:5KVDDfAkRgc",
+        "yt:144uOfr4SYA",
+        "yt:1M3Vdl6DRkU",
+        "yt:5KVDDfAkRgc",
+        "yt:1M3Vdl6DRkU",
+        "yt:144uOfr4SYA"
+      ],
+      "answer": "So what you said, you did say something that was incredibly important and incredibly correct and probably won't happen, but that's still good, okay? [1] kind of attention that you're seeming to ask for now I want I want to say you know ther",
+      "top_citation": "hole. So what you said, you did say something that was incredibly important and incredibly correct and probably won't happen, but that's still good, okay? So we"
+    }
+  ],
+  "synthesize_in_corpus": [
+    {
+      "topic": "saturated fat",
+      "low_evidence": false,
+      "n_citations": 16,
+      "consensus_count": 0,
+      "contradiction_count": 0,
+      "text": "the higher Pua group relative to the saturated fat group was about 30 milligrams per deiler lower in total cholesterol and based on everything we. [12] learned a lot about body composition and how the body starve so were good but certainly "
+    },
+    {
+      "topic": "diet",
+      "low_evidence": false,
+      "n_citations": 29,
+      "consensus_count": 0,
+      "contradiction_count": 0,
+      "text": "supplement with B12 if you are following a strict vegan diet it's worth being aware of some of the lowlevel symptoms of B12 deficiency. [3] religious Zeal well for sure if you find a diet that works for you it's very human nature to spread "
+    },
+    {
+      "topic": "AGI",
+      "low_evidence": false,
+      "n_citations": 9,
+      "consensus_count": 0,
+      "contradiction_count": 0,
+      "text": "Previous guest of the show Helen Toner wrote an article last year titled “‘Long’ timelines to advanced AI have gotten crazy short .” She pointed out that the longtime AGI sceptics like Gary Marcus and Yann LeCun — who previously thought an "
+    },
+    {
+      "topic": "breakfast",
+      "low_evidence": false,
+      "n_citations": 26,
+      "consensus_count": 0,
+      "contradiction_count": 0,
+      "text": "basis for a fee we started with with the Mexican sule which had a bit of heat to it but not too much from there we shared the pan roasted chicken breast which was tasty but a little dry back in the room we discovered a quirk of our sink it "
+    }
+  ],
+  "synthesize_out_of_corpus": [
+    {
+      "topic": "capital of Mongolia",
+      "low_evidence": true,
+      "n_citations": 0,
+      "consensus_count": 0,
+      "contradiction_count": 0,
+      "text": "I don't have enough indexed evidence to synthesize that topic. Try ingesting more sources or broadening the topic."
+    },
+    {
+      "topic": "history of the Roman Empire",
+      "low_evidence": true,
+      "n_citations": 0,
+      "consensus_count": 0,
+      "contradiction_count": 0,
+      "text": "I don't have enough indexed evidence to synthesize that topic. Try ingesting more sources or broadening the topic."
+    },
+    {
+      "topic": "speed of light in a vacuum",
+      "low_evidence": false,
+      "n_citations": 12,
+      "consensus_count": 0,
+      "contradiction_count": 0,
+      "text": "I saw that one gram can help get us to Alpha Centauri star system if we can get to 0.2 times the speed of light in 20 years. [11] - Just to take a small tangent, how weird is it in the full ranking of weirdness that is physics, how weird is"
+    }
+  ],
+  "contradictions": [
+    {
+      "topic": "saturated fat",
+      "n_pairs": 0,
+      "n_cross_video": 0,
+      "sample": []
+    },
+    {
+      "topic": "breakfast",
+      "n_pairs": 0,
+      "n_cross_video": 0,
+      "sample": []
+    },
+    {
+      "topic": "diet",
+      "n_pairs": 0,
+      "n_cross_video": 0,
+      "sample": []
+    },
+    {
+      "topic": "AGI",
+      "n_pairs": 0,
+      "n_cross_video": 0,
+      "sample": []
+    }
+  ]
+}
