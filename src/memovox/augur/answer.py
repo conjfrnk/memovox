@@ -285,24 +285,66 @@ _CITE_MARKER_RE = re.compile(r"\[(\d+)\]")
 #: separator can smuggle an uncited line past the gate (closing the \n-only whack-a-mole).
 #: Commas/colons/dashes are deliberately NOT boundaries: they join clauses WITHIN one
 #: sentence ("Ribosomes, which are organelles, make proteins [1]"), so splitting on them
-#: would reject legitimate single-citation sentences. A terminator is a boundary only when
-#: it is PRECEDED by a real sentence-ending token — 3+ lowercase ("labs."), a digit ("2019."),
-#: a percent ("90%."), a 3+-letter acronym ("NASA."), or a closing marker "]" — and NOT
-#: immediately FOLLOWED by a digit (so a decimal "$5.99" / version "v2.0" / ratio "3.14" never
-#: splits). So a missing-space run-on ("labs.Real", "3.Then", "NASA.Uncited") and a sentence
-#: ending at a marker ("... [1]. Next") DO split, while an abbreviation/initialism period
-#: (U.S., Dr., Inc., Fig., e.g. — single/2-mixed letter before) does NOT, so a faithful answer
-#: is not wrongly rejected. Corpus-validated over 31 accept/reject cases. (A rare residual
-#: over-refusal — a lowercase "etc." / ellipsis — is fail-closed: it only downgrades a
-#: generative answer to the verified extractive synthesizer, never leaks.)
-_GATE_CLAUSE_RE = re.compile(r"(?:(?<=[a-z]{3})|(?<=\])|(?<=[0-9])|(?<=%)|(?<=[A-Z]{3}))[.!?;]+(?![0-9])[^\S\n]*")
-#: A 2+ letter run = real prose (so "[1]", ".", ", " alone are not "prose").
+#: would reject legitimate single-citation sentences. Sentence boundaries within a line are
+#: detected in code (see :func:`_is_sentence_boundary` / :func:`_gate_clauses`), not a single
+#: regex, so short words, accents, CJK, acronyms, decimals and abbreviations are all handled.
+#: A 2+ letter run = real prose (so "[1]", ".", ", " alone are not "prose"). Unicode-aware,
+#: so accented / CJK / non-Latin words count as prose, like the boundary detector below.
 _GATE_WORD_RE = re.compile(r"[^\W\d_]{2,}")
-#: A citation marker AFTER a terminator ("acids. [1]") cites the PRECEDING sentence (the
-#: extractive synthesizer writes exactly this). Pull it BEFORE the terminator before
-#: clause-splitting — but only across SAME-LINE whitespace ([^\S\n]), so a marker on the
+#: A citation marker AFTER a terminator ("acids. [1]", incl. CJK 。！？) cites the PRECEDING
+#: sentence (the extractive synthesizer writes "acids. [1]"). Pull it BEFORE the terminator
+#: before clause-splitting — only across SAME-LINE whitespace ([^\S\n]), so a marker on the
 #: next line never binds backward across a line break.
-_MARKER_BIND_RE = re.compile(r"([.!?;]+)([^\S\n]+)(\[\d+\](?:[^\S\n]*\[\d+\])*)")
+_MARKER_BIND_RE = re.compile(r"([.!?;。！？]+)([^\S\n]+)(\[\d+\](?:[^\S\n]*\[\d+\])*)")
+#: Sentence terminators: ASCII . ! ? ; plus the CJK ideographic/fullwidth 。 ！ ？.
+_GATE_TERMINATORS = ".!?;。！？"
+
+
+def _is_sentence_boundary(line: str, i: int) -> bool:
+    """True iff the terminator at ``line[i]`` ends a sentence (vs. an abbreviation /
+    initialism / decimal). Done in code, not one mega-regex: lexical sentence segmentation
+    has too many interacting cases (short words, accents, CJK, acronyms, decimals,
+    abbreviations) to keep correct as a single pattern. Bias is FAIL-CLOSED — a plain
+    word/number/percent/acronym/marker end IS a boundary (so an uncited sentence gets split
+    off and rejected); only a clear abbreviation/initialism/decimal is NOT. Worst case, an
+    abbreviation-bearing generative answer is downgraded to the faithful extractive
+    synthesizer, which never leaks an uncited assertion."""
+    ch = line[i]
+    if ch in "。！？":
+        return True  # CJK/fullwidth terminator: no abbreviation convention
+    nxt = line[i + 1] if i + 1 < len(line) else ""
+    if ch == "." and nxt.isdigit():
+        return False  # decimal / version (5.99, v2.0, 3.14)
+    prev = line[i - 1] if i > 0 else ""
+    if prev == "]":
+        return True   # sentence ending at a citation marker ("... [1]. Next")
+    if prev == "%" or prev.isdigit():
+        return True   # ends in a percent ("90%.") or a number/year ("2019.")
+    j = i  # the alphabetic token ending just before the terminator
+    while j > 0 and (line[j - 1].isalpha() or line[j - 1] in "'’"):
+        j -= 1
+    token = line[j:i]
+    if len(token) <= 1:
+        return False  # single letter -> initialism ("U.S.", "e.g.") or no real token
+    if token[0].isupper() and not token.isupper() and len(token) <= 4:
+        return False  # short capitalized abbreviation (Dr, Mr, Inc, Fig, Corp, Prof)
+    return True  # plain word (any script, incl. accented/CJK), long Capitalized word, acronym
+
+
+def _gate_clauses(line: str):
+    """Split one physical line into clauses at sentence boundaries (see _is_sentence_boundary)."""
+    clauses, start, i, n = [], 0, 0, len(line)
+    while i < n:
+        if line[i] in _GATE_TERMINATORS and _is_sentence_boundary(line, i):
+            while i < n and line[i] in _GATE_TERMINATORS:  # consume the terminator run
+                i += 1
+            clauses.append(line[start:i])
+            start = i
+        else:
+            i += 1
+    if start < n:
+        clauses.append(line[start:])
+    return clauses
 
 
 def _llm_citations_valid(text: str, citations: List[Citation]) -> bool:
@@ -310,8 +352,8 @@ def _llm_citations_valid(text: str, citations: List[Citation]) -> bool:
     to a real citation (the never-break invariant). Requires:
       * at least one ``[n]``, and every ``[n]`` resolves to a real citation index, and
       * no prose follows the final ``[n]`` (no uncited trailing clause), and
-      * every physical line (``str.splitlines()``) — and every terminator-clause within it —
-        carries a ``[n]``.
+      * every physical line (``str.splitlines()`` — all unicode line breaks) and every
+        sentence-clause within it (see :func:`_gate_clauses`) carries a ``[n]``.
     On any failure the caller falls back to the verified extractive synthesizer.
 
     SCOPE: this enforces citation STRUCTURE — nothing is asserted without pointing at a
@@ -332,9 +374,9 @@ def _llm_citations_valid(text: str, citations: List[Citation]) -> bool:
     # no uncited prose may follow the final marker (uncited tail)
     if _GATE_WORD_RE.search(bound[list(_CITE_MARKER_RE.finditer(bound))[-1].end():]):
         return False
-    # every physical line, and every terminator-clause within it, must carry a marker
+    # every physical line, and every sentence-clause within it, must carry a marker
     for line in bound.splitlines():
-        for clause in _GATE_CLAUSE_RE.split(line):
+        for clause in _gate_clauses(line):
             if _GATE_WORD_RE.search(clause) and not _CITE_MARKER_RE.search(clause):
                 return False
     return True

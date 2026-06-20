@@ -23,9 +23,10 @@ EVENT_RE = re.compile(
     r"\[\s*(music|applause|laughs?|laughter|laughing|silence|inaudible|noise|"
     r"crosstalk|cheering|chuckles?|singing|humming|instrumental|sighs?|groans?|"
     r"coughs?|gasps?|clears throat|beep|static|whistling|ticking|sizzling|"
-    r"ringing|rings|dings?|bells?|footsteps|wind|rain|thunder)[^\]]{0,80}\]",
+    r"ringing|rings|dings?|bells?|footsteps|wind|rain|thunder)[^\]]{0,160}\]",
     re.IGNORECASE,
-)  # bounded body {0,80}: "[music"-repeated with no "]" is otherwise an O(n^2) ReDoS
+)  # bounded body {0,160}: caps the inner scan (O(n) linear) so "[music"-repeated with no
+#   "]" can't drive O(n^2) backtracking, while still matching a long "[speaking in ...]" body
 #: After the whitelist pass, a RESIDUAL ``[...]`` span in caption text is a non-speech
 #: annotation the whitelist did not name — sound effects ([clock ticking]), foreign-
 #: language markers ([speaking in Thai]), bracketed speaker labels ([Mark Wiens]), or

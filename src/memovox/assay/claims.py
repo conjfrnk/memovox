@@ -358,12 +358,15 @@ def _extract_with_llm(llm: LLMBackend, moment: Moment) -> List[Claim]:
 
 
 def _parse_json_array(raw: str) -> list:
+    # Slice from the first '[' to the last ']' rather than a greedy ``re.search(r"\[.*\]")``
+    # — the regex backtracks O(n^2) on a long un-closed-bracket run from a degenerate LLM
+    # (the ReDoS class). find/rfind is linear and byte-identical on well-formed output.
     raw = raw.strip()
-    match = re.search(r"\[.*\]", raw, re.DOTALL)
-    if not match:
+    i, j = raw.find("["), raw.rfind("]")
+    if i < 0 or j < i:
         return []
     try:
-        data = json.loads(match.group(0))
+        data = json.loads(raw[i:j + 1])
         return data if isinstance(data, list) else []
     except ValueError:
         return []

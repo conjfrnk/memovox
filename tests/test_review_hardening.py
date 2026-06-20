@@ -925,5 +925,50 @@ class TestRound6DigestInjection(unittest.TestCase):
         self.assertIn("](https://youtu.be/ABCDEFGHIJK?t=0)", out)  # benign deep link preserved
 
 
+# --------------------------------------------------------------------------- #
+# Round 6 — gate non-ASCII/CJK/short-word bypasses + a 6th ReDoS (found re-reviewing r5)
+# --------------------------------------------------------------------------- #
+
+
+class TestRound6Hardening(unittest.TestCase):
+    def _cits(self, n=2):
+        from memovox.augur.types import Citation
+        return [Citation(index=i, video_id="v", moment_id=f"v#m{i}", t_start_s=0, t_end_s=1,
+                         source_text="x") for i in range(1, n + 1)]
+
+    def test_gate_rejects_shortword_accent_cjk_bypasses(self):
+        # round-6 (HIGH): the ASCII-only [a-z]{3} splitter missed short lowercase words,
+        # accented word-ends, and CJK sentence terminators -> uncited fabrication leaked.
+        from memovox.augur.answer import _llm_citations_valid as V
+        c = self._cits()
+        for t in ["It is titanium and that is so. They make proteins [1].",   # short word "so."
+                  "They did it. The drug allegedly cures cancer [1].",          # short word "it."
+                  "Ribosomes were invented by Napoléon. Real proteins synthesized uncited [1]",  # accent
+                  "Ribosomes are made of café.They were invented by Napoleon uncited [1]",       # accent no-space
+                  "リボソームはチタンでできている。ナポレオンが発明した [1]"]:                    # CJK 。
+            self.assertFalse(V(t, c), f"non-ASCII/short-word bypass accepted: {t!r}")
+
+    def test_gate_accepts_nonascii_cited_answers(self):
+        # the code-based boundary detector must not over-refuse faithful accented/CJK answers
+        from memovox.augur.answer import _llm_citations_valid as V
+        c = self._cits()
+        for t in ["Les ribosomes synthétisent des protéines [1].",
+                  "リボソームはタンパク質を合成する [1]。",
+                  "Café déjà résumé all cited [1]."]:
+            self.assertTrue(V(t, c), f"faithful non-ASCII answer wrongly rejected: {t!r}")
+
+    def test_claims_json_array_parse_is_linear_not_redos(self):
+        # round-6 (MED): the 6th unbounded regex re.search(r"\[.*\]") backtracked O(n^2).
+        from memovox.assay import claims
+        payload = "[" * 200000 + "x"
+        t0 = time.perf_counter()
+        out = claims._parse_json_array(payload)
+        self.assertLess(time.perf_counter() - t0, 0.5, "claims._parse_json_array quadratic")
+        self.assertEqual(out, [])  # no closing ] -> empty (fail-closed)
+        # well-formed array still parses; surrounding junk ignored
+        self.assertEqual(claims._parse_json_array('noise [{"a":1}] trailing'), [{"a": 1}])
+        self.assertEqual(claims._parse_json_array("no array here"), [])
+
+
 if __name__ == "__main__":
     unittest.main()
