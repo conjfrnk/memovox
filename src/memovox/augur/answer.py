@@ -8,7 +8,6 @@ configured. Low-evidence queries are flagged rather than confabulated.
 
 from __future__ import annotations
 
-import math
 import re
 from typing import List, Optional, Tuple
 
@@ -280,25 +279,49 @@ _LLM_SYSTEM = (
 
 
 _CITE_MARKER_RE = re.compile(r"\[(\d+)\]")
+#: Clause boundary for the grounding gate: ANY of . ! ? ; followed by whitespace. This is
+#: deliberately STRICTER than util.split_sentences (which only breaks on a terminator
+#: followed by an uppercase/digit/quote) — otherwise a lowercase or punctuation-joined
+#: continuation ("... [1]. they were invented by Napoleon.") is treated as ONE cited
+#: sentence and the uncited continuation rides along.
+_GATE_CLAUSE_RE = re.compile(r"[.!?;]+\s+")
+#: A 2+ letter run = real prose (so "[1]", ".", ", " alone are not "prose").
+_GATE_WORD_RE = re.compile(r"[^\W\d_]{2,}")
+#: A citation marker sitting AFTER a sentence terminator ("acids. [1]") cites the
+#: PRECEDING sentence (the extractive synthesizer writes exactly this form). Pull such a
+#: marker to BEFORE the terminator before clause-splitting, so it binds to its sentence.
+_MARKER_BIND_RE = re.compile(r"([.!?;]+)(\s+)(\[\d+\](?:\s*\[\d+\])*)")
 
 
 def _llm_citations_valid(text: str, citations: List[Citation]) -> bool:
-    """True iff a GENERATED answer is safe to surface as-is (the never-break invariant).
+    """True iff a GENERATED answer is safe to surface as-is: every assertion is ATTRIBUTED
+    to a real citation (the never-break invariant). Requires:
+      * at least one ``[n]``, and every ``[n]`` resolves to a real citation index, and
+      * every prose-bearing clause (split on . ! ? ;) carries a ``[n]``, and
+      * no prose follows the final ``[n]`` (no uncited trailing clause).
+    On any failure the caller falls back to the verified extractive synthesizer.
 
-    A generative LLM can return uncited assertions, fabricated quotes, or a ``[n]`` that
-    points at no source — none of which the relevance gate (which inspects the retrieved
-    EVIDENCE, not the generated TEXT) catches. We require, minimally, that the text is
-    citation-grounded: every sentence carries at least one ``[n]`` AND every ``[n]``
-    resolves to a real citation index. A compliant grounded answer passes unchanged; any
-    failure makes the caller fall back to the verified extractive synthesizer (which cites
-    every sentence) rather than emit an uncited claim."""
-    if not text.strip():
+    SCOPE: this enforces citation STRUCTURE — nothing is asserted without pointing at a
+    source. It does NOT verify the cited text is semantically ENTAILED by that source:
+    faithfulness of a generative paraphrase is the model's responsibility (constrained by
+    the system prompt) and is reliably checkable only with an NLI backend, not lexically
+    (a faithful synonym paraphrase shares no tokens with its source, while a topic-matched
+    fabrication shares the subject word — so token overlap separates neither)."""
+    text = (text or "").strip()
+    if not text:
         return False
     valid = {c.index for c in citations}
-    markers = {int(m) for m in _CITE_MARKER_RE.findall(text)}
-    if not markers or (markers - valid):
+    markers = list(_CITE_MARKER_RE.finditer(text))
+    if not markers or any(int(m.group(1)) not in valid for m in markers):
         return False  # no citation at all, or a dangling marker -> reject
-    return all(_CITE_MARKER_RE.search(s) for s in split_sentences(text))
+    # bind post-terminator markers backward, then require every prose clause to be cited
+    bound = _MARKER_BIND_RE.sub(r"\3\1\2", text)
+    # no uncited prose may follow the final marker
+    last = list(_CITE_MARKER_RE.finditer(bound))[-1]
+    if _GATE_WORD_RE.search(bound[last.end():]):
+        return False
+    return not any(_GATE_WORD_RE.search(c) and not _CITE_MARKER_RE.search(c)
+                   for c in _GATE_CLAUSE_RE.split(bound))
 
 
 def _synthesize_llm(llm: LLMBackend, query: str, citations: List[Citation]) -> str:

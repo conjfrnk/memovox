@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import html
 import json
+import math
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -264,11 +265,16 @@ parse_srt = parse_cues
 
 def _to_float(value, default: float = 0.0) -> float:
     """Coerce a JSON timing to float, tolerating null / list / junk so a malformed-but-
-    valid export degrades instead of raising mid-ingest."""
+    valid export degrades instead of raising mid-ingest. Non-finite values (NaN / inf,
+    including a huge literal like ``1e400`` that float() rounds to inf) also collapse to
+    ``default``: an inf/nan timestamp otherwise mis-orders moments (every NaN comparison
+    is False) and hard-crashes the deep-link / H:MM:SS formatters downstream. Mirrors the
+    serving boundary's ``math.isfinite`` guard (routes._finite_float)."""
     try:
-        return float(value)
+        f = float(value)
     except (TypeError, ValueError):
         return default
+    return f if math.isfinite(f) else default
 
 
 def parse_json(data) -> List[Segment]:
@@ -288,7 +294,11 @@ def parse_json(data) -> List[Segment]:
             continue  # a bare string / null / number is not a cue -> skip
         start = _to_float(item.get("start", item.get("t_start", 0.0)), 0.0)
         end = _to_float(item.get("end", item.get("t_end", start)), start)
-        text = str(item.get("text", "")).strip()
+        # Only a real string is content. A null/list/number "text" must be dropped, not
+        # str()-coerced — str(None) -> the literal word "None", which would survive the
+        # empty-guard and become a citable one-word speech claim.
+        raw_text = item.get("text", "")
+        text = raw_text.strip() if isinstance(raw_text, str) else ""
         if not text:
             continue
         # Optional per-word timings (M0.3): a free-path fixture can carry word

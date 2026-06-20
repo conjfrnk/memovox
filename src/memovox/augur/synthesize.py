@@ -29,7 +29,7 @@ from ..loom.consensus import clusters_from_groups, partition_claims
 from ..loom.consolidate import _content_tokens, find_contradictions
 from ..loom.models import make_provenance
 from ..loom.store import LoomStore
-from ..util import truncate
+from ..util import split_sentences, truncate
 from .types import Citation
 
 _LOW_EVIDENCE_MSG = (
@@ -127,10 +127,21 @@ def _cluster_entails(cluster, nli: NLIBackend, threshold: float) -> bool:
 
 
 def _cite(text: str, index: int) -> str:
-    snippet = (text or "").strip()
-    if snippet and snippet[-1] not in ".!?":
-        snippet += "."
-    return f"{snippet} [{index}]"
+    """Append the citation marker to EVERY sentence of ``text``, not just the end. A claim
+    is normally one sentence (rule-based extraction splits sentences), but LLM claim
+    extraction can store a multi-sentence ``text`` — a single trailing ``[n]`` would then
+    leave the earlier sentence(s) uncited, breaking the "every synthesis sentence carries a
+    citation" guarantee."""
+    sentences = split_sentences(text) or [(text or "").strip()]
+    out = []
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        if sentence[-1] not in ".!?":
+            sentence += "."
+        out.append(f"{sentence} [{index}]")
+    return " ".join(out)
 
 
 _LLM_SYSTEM = (

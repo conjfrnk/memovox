@@ -482,5 +482,98 @@ class TestServingRobustness(unittest.TestCase):
         mv.close()
 
 
+# --------------------------------------------------------------------------- #
+# Round 2 — residual defects found by the re-review of the round-1 fixes
+# --------------------------------------------------------------------------- #
+
+
+class TestRound2Hardening(unittest.TestCase):
+    def test_grounding_gate_rejects_uncited_continuations(self):
+        # provenance round-2 (HIGH): split_sentences let lowercase / ; / , / no-punct
+        # continuations smuggle uncited prose past the gate.
+        from memovox.augur.answer import _llm_citations_valid as V
+        from memovox.augur.types import Citation
+        c = [Citation(index=1, video_id="v", moment_id="v#m0", t_start_s=0, t_end_s=1,
+                      source_text="Ribosomes synthesize proteins."),
+             Citation(index=2, video_id="v", moment_id="v#m1", t_start_s=0, t_end_s=1,
+                      source_text="x")]
+        reject = [
+            "Real fact [1]. they were invented by Napoleon.",   # lowercase continuation
+            "Real fact [1], uncited run-on about Napoleon",     # comma run-on
+            "Real fact [1]; uncited clause about Napoleon",      # semicolon clause
+            "Uncited middle clause. Real fact [1].",            # uncited leading clause
+            "X. [1] uncited middle. Y. [2]",                    # uncited middle (markers after period)
+            "X. Y.",                                             # fully uncited
+            "Real fact [9].",                                    # dangling marker
+        ]
+        accept = [
+            "Ribosomes synthesize proteins from amino acids. [1]",  # marker after period
+            "Claim one. [1] Claim two. [2]",                        # multi, markers after periods
+            "Claim one [1]. Claim two [2].",                        # multi, markers before periods
+            "Ribosomes synthesize proteins [1]",                    # single, no terminal punct
+            "Fact one [1]; fact two [2].",                          # both clauses cited
+        ]
+        for t in reject:
+            self.assertFalse(V(t, c), f"should reject: {t!r}")
+        for t in accept:
+            self.assertTrue(V(t, c), f"should accept: {t!r}")
+
+    def test_uncited_continuation_not_surfaced_via_ask(self):
+        from memovox import augur
+        from memovox.config import Settings
+        tmp = tempfile.mkdtemp()
+        store, emb = _bio_store(tmp)
+        llm = _make_llm("Ribosomes synthesize proteins [1]. they were secretly invented by Napoleon.")
+        ans = augur.ask(store, "what are ribosomes?", embedder=emb, llm=llm, settings=Settings())
+        self.assertNotIn("Napoleon", ans.text)
+        self.assertTrue(_all_sentences_cited(ans.text) or ans.low_evidence, ans.text)
+        store.close()
+
+    def test_synthesize_cite_cites_every_sentence(self):
+        # provenance round-2 (MED): a multi-sentence claim must get a marker per sentence.
+        from memovox.augur.synthesize import _cite
+        out = _cite("Ribosomes synthesize proteins. They also assemble amino acids", 3)
+        self.assertTrue(_all_sentences_cited(out), out)
+
+    def test_nonfinite_json_timings_coerced_finite(self):
+        # ingest round-2 (MED): NaN/inf/1e400 timings crashed the deep-link / hms layer.
+        from memovox.stentor import transcript as T
+        from memovox import util
+        for payload in ([{"start": "inf", "end": "2", "text": "a real claim"}],
+                        [{"start": "NaN", "end": 1, "text": "claim"}],
+                        [{"start": 1e400, "end": 2, "text": "claim"}]):
+            segs = T.parse_json(payload)
+            self.assertEqual(len(segs), 1)
+            import math
+            self.assertTrue(math.isfinite(segs[0].start), f"non-finite start survived: {payload}")
+            self.assertTrue(math.isfinite(segs[0].end))
+            # downstream formatters no longer crash
+            util.deep_link("https://youtu.be/ABC", segs[0].start)
+            util.seconds_to_hms(segs[0].start)
+
+    def test_null_json_text_dropped_not_stringified(self):
+        # ingest round-2 (LOW): text:null became the literal word "None".
+        from memovox.stentor import transcript as T
+        self.assertEqual(T.parse_json([{"start": 0, "end": 1, "text": None}]), [])
+        # a list/dict text is also dropped, not stringified
+        self.assertEqual(T.parse_json([{"start": 0, "end": 1, "text": ["a"]}]), [])
+
+    def test_export_bad_format_returns_400_not_500(self):
+        # serving round-2 (MED): /export?format=<bad> raised ValueError -> 500 leak.
+        from memovox.sdk import Memovox
+        from memovox.server import routes
+        tmp = tempfile.mkdtemp()
+        mv = Memovox(store=str(pathlib.Path(tmp) / "s"))
+        rep = _ingest_vtt(mv, "WEBVTT\n\n00:00:00.000 --> 00:00:05.000\nhello world here.\n",
+                          source_url="https://youtu.be/abc123")
+        for bad in ("xml", "md/../../etc", "txt"):
+            status, payload, _ = routes.route_export(mv, rep.video_id, {"format": bad})
+            self.assertEqual(int(status), 400, f"{bad} -> {status}")
+        # a real format still works
+        status, _, _ = routes.route_export(mv, rep.video_id, {"format": "json"})
+        self.assertEqual(int(status), 200)
+        mv.close()
+
+
 if __name__ == "__main__":
     unittest.main()

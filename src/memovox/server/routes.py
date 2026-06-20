@@ -103,6 +103,10 @@ def route_export(mv, video_id, params):
         content = mv.export(video_id, fmt=fmt)
     except KeyError:
         return (HTTPStatus.NOT_FOUND, {"error": "unknown video"}, JSON)
+    except ValueError as exc:
+        # bad client-supplied format (mv.export raises ValueError) -> 400, not a 500 that
+        # leaks the raw exception via do_GET's catch-all (and FastAPI parity).
+        return _bad_request(str(exc))
     if fmt == "json":
         return (HTTPStatus.OK, _json.loads(content), JSON)
     return (HTTPStatus.OK, content, MARKDOWN)
