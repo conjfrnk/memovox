@@ -19,8 +19,15 @@ from ...vectormath import cosine, dot, norm, normalize, pack_floats, unpack_floa
 from .base import GraphStore, LexicalIndex, VectorIndex
 
 
+#: Cap the distinct prefix-OR terms in the FTS5 MATCH expression. A real question is tens of
+#: tokens; a 300k-token paste builds a MATCH whose evaluation is ~O(n^2) in term count — a
+#: single-request CPU DoS NOT bounded by the request body-size cap (cost scales with token
+#: COUNT, not bytes). Dedupe + slice keeps the expression small with negligible recall impact.
+_FTS_MAX_TERMS = 200
+
+
 def _fts_query(query: str) -> str:
-    tokens = [t for t in tokenize(query) if t]
+    tokens = list(dict.fromkeys(t for t in tokenize(query) if t))[:_FTS_MAX_TERMS]
     if not tokens:
         return '""'
     return " OR ".join(f'"{t}"*' for t in tokens)

@@ -1233,5 +1233,37 @@ class TestRound9Hardening(unittest.TestCase):
         s.close()
 
 
+# --------------------------------------------------------------------------- #
+# Round 10 — unbounded FTS5 MATCH expression (single-request CPU DoS)
+# --------------------------------------------------------------------------- #
+
+
+class TestRound10Hardening(unittest.TestCase):
+    def test_fts_query_terms_are_capped(self):
+        # round-10 (MED): a huge query built an O(n^2) FTS5 MATCH (64s CPU); the 4 MiB body
+        # cap didn't bound it (cost scales with token COUNT). Cap distinct prefix terms.
+        from memovox.loom.backends.sqlite import _FTS_MAX_TERMS, _fts_query
+        expr = _fts_query(" ".join(f"tok{i}" for i in range(300000)))
+        self.assertLessEqual(expr.count(" OR ") + 1, _FTS_MAX_TERMS)
+        # a normal query is unaffected
+        self.assertEqual(_fts_query("recommended chunk size"),
+                         '"recommended"* OR "chunk"* OR "size"*')
+
+    def test_giant_query_does_not_pin_cpu(self):
+        from memovox.sdk import Memovox
+        from memovox.server import routes
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        mv = Memovox(store=str(tmp / "s"))
+        _ingest_vtt(mv, "WEBVTT\n\n00:00:00.000 --> 00:00:05.000\nThe recommended chunk size is 512 tokens.\n",
+                    source_url="https://youtu.be/abc123")
+        big = " ".join(f"word{i}" for i in range(300000))
+        t0 = time.perf_counter()
+        status, _, _ = routes.route_query(mv, {"query": big})
+        elapsed = time.perf_counter() - t0
+        self.assertEqual(int(status), 200)
+        self.assertLess(elapsed, 10.0, f"giant query took {elapsed:.1f}s — FTS DoS not bounded")
+        mv.close()
+
+
 if __name__ == "__main__":
     unittest.main()
