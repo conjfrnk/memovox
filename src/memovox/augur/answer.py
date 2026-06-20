@@ -279,30 +279,30 @@ _LLM_SYSTEM = (
 
 
 _CITE_MARKER_RE = re.compile(r"\[(\d+)\]")
-#: Clause boundary for the grounding gate: a terminator (. ! ? ;) + whitespace, OR a bare
-#: newline. STRICTER than util.split_sentences (which only breaks on a terminator followed
-#: by uppercase/digit/quote, so a lowercase continuation rides along). Newlines split too —
-#: LLMs emit line-broken prose and bullet lists with NO per-line terminator, which would
-#: otherwise collapse into one clause carrying a single trailing [n] and smuggle uncited
-#: lines through. Commas/colons/dashes are deliberately NOT boundaries: they join clauses
-#: WITHIN one sentence ("Ribosomes, which are organelles, make proteins [1]"), so splitting
-#: on them would reject legitimate single-citation sentences (the semantic faithfulness of a
-#: comma-joined clause attributed to its sentence's citation is out of lexical scope).
-_GATE_CLAUSE_RE = re.compile(r"(?:[.!?;]+\s+|\n+)")
+#: WITHIN-LINE clause boundary: a terminator (. ! ? ;) + same-line whitespace. PHYSICAL
+#: line breaks are handled separately via ``str.splitlines()``, which covers EVERY unicode
+#: line/paragraph separator (\n \r \r\n \v \f \x1c-\x1e \x85    ) — so no exotic
+#: separator can smuggle an uncited line past the gate (closing the \n-only whack-a-mole).
+#: Commas/colons/dashes are deliberately NOT boundaries: they join clauses WITHIN one
+#: sentence ("Ribosomes, which are organelles, make proteins [1]"), so splitting on them
+#: would reject legitimate single-citation sentences.
+_GATE_CLAUSE_RE = re.compile(r"[.!?;]+[^\S\n]+")
 #: A 2+ letter run = real prose (so "[1]", ".", ", " alone are not "prose").
 _GATE_WORD_RE = re.compile(r"[^\W\d_]{2,}")
-#: A citation marker sitting AFTER a sentence terminator ("acids. [1]") cites the
-#: PRECEDING sentence (the extractive synthesizer writes exactly this form). Pull such a
-#: marker to BEFORE the terminator before clause-splitting, so it binds to its sentence.
-_MARKER_BIND_RE = re.compile(r"([.!?;]+)(\s+)(\[\d+\](?:\s*\[\d+\])*)")
+#: A citation marker AFTER a terminator ("acids. [1]") cites the PRECEDING sentence (the
+#: extractive synthesizer writes exactly this). Pull it BEFORE the terminator before
+#: clause-splitting — but only across SAME-LINE whitespace ([^\S\n]), so a marker on the
+#: next line never binds backward across a line break.
+_MARKER_BIND_RE = re.compile(r"([.!?;]+)([^\S\n]+)(\[\d+\](?:[^\S\n]*\[\d+\])*)")
 
 
 def _llm_citations_valid(text: str, citations: List[Citation]) -> bool:
     """True iff a GENERATED answer is safe to surface as-is: every assertion is ATTRIBUTED
     to a real citation (the never-break invariant). Requires:
       * at least one ``[n]``, and every ``[n]`` resolves to a real citation index, and
-      * every prose-bearing clause (split on . ! ? ; or a line break) carries a ``[n]``, and
-      * no prose follows the final ``[n]`` (no uncited trailing clause).
+      * no prose follows the final ``[n]`` (no uncited trailing clause), and
+      * every physical line (``str.splitlines()``) — and every terminator-clause within it —
+        carries a ``[n]``.
     On any failure the caller falls back to the verified extractive synthesizer.
 
     SCOPE: this enforces citation STRUCTURE — nothing is asserted without pointing at a
@@ -310,7 +310,8 @@ def _llm_citations_valid(text: str, citations: List[Citation]) -> bool:
     faithfulness of a generative paraphrase is the model's responsibility (constrained by
     the system prompt) and is reliably checkable only with an NLI backend, not lexically
     (a faithful synonym paraphrase shares no tokens with its source, while a topic-matched
-    fabrication shares the subject word — so token overlap separates neither)."""
+    fabrication shares the subject word — so token overlap separates neither). The default
+    free path never hits this — it uses the extractive synthesizer, faithful by construction."""
     text = (text or "").strip()
     if not text:
         return False
@@ -318,14 +319,16 @@ def _llm_citations_valid(text: str, citations: List[Citation]) -> bool:
     markers = list(_CITE_MARKER_RE.finditer(text))
     if not markers or any(int(m.group(1)) not in valid for m in markers):
         return False  # no citation at all, or a dangling marker -> reject
-    # bind post-terminator markers backward, then require every prose clause to be cited
     bound = _MARKER_BIND_RE.sub(r"\3\1\2", text)
-    # no uncited prose may follow the final marker
-    last = list(_CITE_MARKER_RE.finditer(bound))[-1]
-    if _GATE_WORD_RE.search(bound[last.end():]):
+    # no uncited prose may follow the final marker (uncited tail)
+    if _GATE_WORD_RE.search(bound[list(_CITE_MARKER_RE.finditer(bound))[-1].end():]):
         return False
-    return not any(_GATE_WORD_RE.search(c) and not _CITE_MARKER_RE.search(c)
-                   for c in _GATE_CLAUSE_RE.split(bound))
+    # every physical line, and every terminator-clause within it, must carry a marker
+    for line in bound.splitlines():
+        for clause in _GATE_CLAUSE_RE.split(line):
+            if _GATE_WORD_RE.search(clause) and not _CITE_MARKER_RE.search(clause):
+                return False
+    return True
 
 
 def _synthesize_llm(llm: LLMBackend, query: str, citations: List[Citation]) -> str:

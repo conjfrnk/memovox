@@ -597,8 +597,15 @@ class TestRound3Hardening(unittest.TestCase):
         for t in ["Ribosomes are titanium\nInvented by Napoleon\nReal proteins [1]",
                   "- Ribosomes are titanium\n- Invented by Napoleon\n- Real proteins [1]",
                   "Real fact [1]\nuncited Napoleon stuff. More real [2].",
-                  "Key finding\nRibosomes synthesize proteins [1]."]:
-            self.assertFalse(V(t, c), f"newline bypass accepted: {t!r}")
+                  "Key finding\nRibosomes synthesize proteins [1].",
+                  # every unicode line/paragraph separator — not just \n
+                  "Real fact [1]\runcited Napoleon line",
+                  "Real fact [1]\r\nuncited Napoleon line",
+                  "Real fact [1] uncited Napoleon line",
+                  "Real fact [1] uncited Napoleon line",
+                  "Real fact [1]\x0buncited Napoleon line",
+                  "Real fact [1]\x0cuncited Napoleon line"]:
+            self.assertFalse(V(t, c), f"line-break bypass accepted: {t!r}")
         # legitimate cited forms still pass (no over-refusal regression)
         for t in ["Ribosomes synthesize proteins from amino acids. [1]",
                   "Claim one. [1] Claim two. [2]", "Fact one [1]; fact two [2]."]:
