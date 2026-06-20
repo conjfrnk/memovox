@@ -61,6 +61,12 @@ def plan(query: str) -> QueryPlan:
 # a semicolon, or a sentence-final "?"/"." followed by a new clause. NOT a bare
 # " and " (which joins noun-phrase lists like "scaling laws and compute").
 _BOUNDARY = re.compile(r",\s+(?:and|or)\s+|;\s*|(?<=[?.])\s+(?=\w)")
+#: Cap on decomposed sub-queries. ask() runs ONE full retrieve() (dense brute-force cosine
+#: over the whole corpus + FTS + optional rerank) PER sub-query, so an unbounded clause count
+#: is an attacker-controlled single-request CPU DoS (a query of N "what is X?" clauses -> N
+#: full-corpus retrievals). A real multi-part question has only a handful of clauses; beyond
+#: this ceiling, collapse to a SINGLE verbatim retrieval (identical to the single-clause path).
+_MAX_SUBQUERIES = 16
 _WH = ("what", "which", "who", "whom", "whose", "when", "where", "why", "how")
 # Leading imperative cues that open an independent request.
 _IMPERATIVE = ("explain", "describe", "compare", "list", "show", "find", "summarize",
@@ -94,9 +100,11 @@ def decompose(query: str) -> QueryPlan:
     q = (query or "").strip()
     fragments = [f.strip().strip(" ?.,") for f in _BOUNDARY.split(q)]
     fragments = [f for f in fragments if f]
-    if len(fragments) >= 2 and all(_looks_like_query(f) for f in fragments):
+    if 2 <= len(fragments) <= _MAX_SUBQUERIES and all(_looks_like_query(f) for f in fragments):
         subs = [_classify(f) for f in fragments]
     else:
+        # single clause, OR an abusive many-clause query -> one verbatim retrieval (bounds
+        # the per-leg retrieval cost; byte-identical to today's single-clause path).
         subs = [_classify(q)]
     first = subs[0]
     return QueryPlan(strategy=first.strategy, modality=first.modality,
@@ -121,7 +129,7 @@ def llm_decompose(llm, query: str) -> QueryPlan:
         raw = llm.complete(f"QUESTION: {query}", system=_DECOMPOSE_SYSTEM, temperature=0.0)
         start, end = raw.find("["), raw.rfind("]")
         parts = json.loads(raw[start:end + 1]) if 0 <= start < end else []
-        parts = [str(p).strip() for p in parts if str(p).strip()]
+        parts = [str(p).strip() for p in parts if str(p).strip()][:_MAX_SUBQUERIES]
         if not parts:
             return decompose(query)
         subs = [_classify(p) for p in parts]

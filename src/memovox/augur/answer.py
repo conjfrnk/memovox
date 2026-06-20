@@ -302,11 +302,17 @@ _CITE_MARKER_RE = re.compile(r"\[(\d+)\]")
 #: A 2+ letter run = real prose (so "[1]", ".", ", " alone are not "prose"). Unicode-aware,
 #: so accented / CJK / non-Latin words count as prose, like the boundary detector below.
 _GATE_WORD_RE = re.compile(r"[^\W\d_]{2,}")
+#: SAME-LINE whitespace for the marker-bind: \s MINUS every char str.splitlines() treats as
+#: a line break. It must exclude ALL of them (not just \n) — otherwise the bind pulls the
+#: NEXT line's marker backward across a \r / \v / \f / \x1c-\x1e / NEL / LS / PS that
+#: splitlines() then splits on, making an uncited prior line look cited (a never-break leak).
+_GATE_INLINE_WS = r"[^\S\n\x0b\x0c\r\x1c\x1d\x1e\x85\u2028\u2029]"
 #: A citation marker AFTER a terminator ("acids. [1]", incl. CJK 。！？) cites the PRECEDING
 #: sentence (the extractive synthesizer writes "acids. [1]"). Pull it BEFORE the terminator
-#: before clause-splitting — only across SAME-LINE whitespace ([^\S\n]), so a marker on the
-#: next line never binds backward across a line break.
-_MARKER_BIND_RE = re.compile(r"([.!?;。！？…]+)([^\S\n]+)(\[\d+\](?:[^\S\n]*\[\d+\])*)")
+#: before clause-splitting — only across SAME-LINE whitespace, so a marker on the next line
+#: never binds backward across a line break.
+_MARKER_BIND_RE = re.compile(
+    rf"([.!?;。！？…]+)({_GATE_INLINE_WS}+)(\[\d+\](?:{_GATE_INLINE_WS}*\[\d+\])*)")
 #: Sentence terminators: ASCII . ! ? ; the CJK ideographic/fullwidth 。 ！ ？, and the unicode
 #: ellipsis … (U+2026) — many LLMs emit "…" for "...", so it must gate like ASCII "...".
 _GATE_TERMINATORS = ".!?;。！？…"
@@ -576,7 +582,13 @@ def ask(
                 confidence=round(min(1.0, score_by_id.get(moment.moment_id, 0.0) * 30), 4),
             ) if video else None
             content = _citation_text(moment)
-            snippet = _best_sentence(content, query)
+            # DISPLAY snippet from the VERIFIED transcript only — never surface un-entailment-
+            # checked on-screen OCR/overlay as the answer body (it could assert a slide the
+            # speaker never said, deep-linked to a mismatched moment). Fall back to content
+            # (OCR/caption) ONLY for a pure-visual moment with no transcript (flagged
+            # ocr_unverified). source_text below keeps the full transcript+OCR for the LLM.
+            transcript = (moment.transcript or "").strip()
+            snippet = _best_sentence(transcript or content, query)
             citations.append(
                 Citation(
                     index=i,

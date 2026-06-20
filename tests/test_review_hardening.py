@@ -1318,5 +1318,75 @@ class TestRound11Hardening(unittest.TestCase):
         self.assertLessEqual(A._REL_TOPICALITY_MAX, 1000)
 
 
+# --------------------------------------------------------------------------- #
+# Round 12 — marker-bind line-separator leak, decompose DoS, ask() OCR snippet
+# --------------------------------------------------------------------------- #
+
+
+class TestRound12Hardening(unittest.TestCase):
+    def _cits(self, n=2):
+        from memovox.augur.types import Citation
+        return [Citation(index=i, video_id="v", moment_id=f"v#m{i}", t_start_s=0, t_end_s=1,
+                         source_text="x") for i in range(1, n + 1)]
+
+    def test_marker_bind_does_not_cross_any_line_separator(self):
+        # round-12 (HIGH): the marker-bind's [^\S\n] excluded only \n, so it pulled the next
+        # line's marker backward across a \r / \v / \f / \x1c-\x1e / NEL / LS / PS that
+        # splitlines() then split on — making an uncited prior line look cited.
+        from memovox.augur.answer import _llm_citations_valid as V
+        c = self._cits()
+        for sep in ("\n", "\r", " ", " ", "\x85", "\x0b", "\x0c", "\x1c", "\x1d", "\x1e", "\r\n"):
+            t = f"Vaccines cause autism.{sep}[1] The transcript discusses vaccine safety [2]."
+            self.assertFalse(V(t, c), f"marker bound across separator {sep!r}")
+        # a legitimate space/tab marker-bind and single-citation sentence still pass
+        self.assertTrue(V("Ribosomes synthesize proteins. [1]", c))
+        self.assertTrue(V("Ribosomes synthesize proteins.\t[1]", c))
+
+    def test_decompose_caps_subqueries(self):
+        # round-12 (HIGH): one full-corpus retrieve() per sub-query, uncapped -> CPU DoS.
+        from memovox.augur.planner import _MAX_SUBQUERIES, decompose
+        huge = decompose(" ".join(f"what is energy item{i}?" for i in range(4000)))
+        self.assertEqual(len(huge.subqueries), 1)  # abusive many-clause -> single retrieval
+        # a realistic multi-part question is preserved
+        self.assertEqual(len(decompose("what is RAG? and how does chunking work?").subqueries), 2)
+        self.assertLessEqual(_MAX_SUBQUERIES, 32)
+
+    def test_giant_multiclause_query_does_not_pin_cpu(self):
+        from memovox.sdk import Memovox
+        from memovox.server import routes
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        mv = Memovox(store=str(tmp / "s"))
+        _ingest_vtt(mv, "WEBVTT\n\n00:00:00.000 --> 00:00:05.000\nThe recommended chunk size is 512 tokens.\n",
+                    source_url="https://youtu.be/abc123")
+        big = " ".join(f"what is energy item{i}?" for i in range(4000))
+        t0 = time.perf_counter()
+        status, _, _ = routes.route_query(mv, {"query": big})
+        self.assertLess(time.perf_counter() - t0, 10.0, "multi-clause decomposition DoS not bounded")
+        self.assertEqual(int(status), 200)
+        mv.close()
+
+    def test_ask_snippet_excludes_unverified_ocr_when_transcript_present(self):
+        # round-12 (MED): ask() surfaced an unverified OCR overlay as the answer body (the
+        # round-9 synthesize fix wasn't mirrored to ask).
+        from memovox import augur
+        from memovox.config import Settings
+        from memovox.backends.embed import HashingEmbedder
+        from memovox.config import Config
+        from memovox.loom import LoomStore, Moment, Video
+        s = LoomStore(Config(store=pathlib.Path(tempfile.mkdtemp()) / "s").ensure())
+        e = HashingEmbedder(dim=64)
+        s.upsert_video(Video(video_id="yt:abc", source_url="https://youtu.be/abc", title="Earnings", content_hash="a"))
+        m = Moment("yt:abc#m0000", "yt:abc", 412.0, 440.0,
+                   "And on this next chart you can see our revenue trend.", "spk", index=0)
+        m.ocr_text = "Revenue fell 80%. The company will file for bankruptcy in Q3."
+        s.add_moment(m, e.embed_one(m.text_for_embedding()))
+        a = augur.ask(s, "will the company file for bankruptcy?", embedder=e, settings=Settings())
+        self.assertTrue(a.citations)
+        self.assertNotIn("bankruptcy", a.text)             # OCR not surfaced as answer body
+        self.assertNotIn("bankruptcy", a.citations[0].snippet or "")
+        self.assertTrue(a.citations[0].ocr_unverified)     # still flagged
+        s.close()
+
+
 if __name__ == "__main__":
     unittest.main()
