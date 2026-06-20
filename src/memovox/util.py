@@ -186,6 +186,17 @@ def split_sentences(text: str) -> List[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
+def scrub_surrogates(text):
+    """Replace lone surrogate code points (valid in a Python str and in JSON, but NOT
+    encodable as UTF-8) so they can't crash a SQLite write / utf-8 file write mid-ingest.
+    Mirrors the ``errors="replace"`` posture used when reading transcript files; a lone
+    surrogate carries no legitimate text, so replacing it degrades gracefully. No-op (and
+    no allocation) for normal text."""
+    if isinstance(text, str) and any("\ud800" <= ch <= "\udfff" for ch in text):
+        return text.encode("utf-8", "replace").decode("utf-8")
+    return text
+
+
 def tokenize(text: str) -> List[str]:
     return _word_re.findall((text or "").lower())
 

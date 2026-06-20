@@ -307,6 +307,16 @@ _GATE_TERMINATORS = ".!?;。！？…"
 _GATE_ABBREVIATIONS = frozenset(
     "mr mrs ms dr st jr sr vs etc inc ltd co corp fig no vol pp ed al eg ie eg "
     "prof gen rev hon sen rep dept est mt ave blvd approx esp dr".split())
+#: TITLE abbreviations that precede a NAME ("Mr. Jones", "Dr. Lee") — their period before a
+#: capitalized word is NOT a sentence boundary, so they stay non-boundaries even under the
+#: "<abbrev>. <Capital-word>" rule below (which otherwise splits "U.S. The"/"etc. The").
+_GATE_TITLES = frozenset("mr mrs ms dr st sr jr prof rev gen sen hon capt lt sgt fr gov".split())
+#: A NEW sentence starts here: optional same-line whitespace then a Capital followed by a
+#: lowercase letter (a real Word). The trailing [a-z] is what keeps an initialism's own
+#: continuation letter from looking like a sentence start — "U.S." has "U." then "S." (the
+#: "S" is followed by ".", not a lowercase), so the internal period is NOT split, while
+#: "U.S. The" (the final period then " The") IS.
+_GATE_NEXT_SENTENCE_RE = re.compile(r"[^\S\n]*[A-Z][a-z]")
 
 
 def _is_sentence_boundary(line: str, i: int) -> bool:
@@ -333,11 +343,17 @@ def _is_sentence_boundary(line: str, i: int) -> bool:
     while j > 0 and (line[j - 1].isalpha() or line[j - 1] in "'’"):
         j -= 1
     token = line[j:i]
-    if len(token) <= 1:
-        return False  # single letter -> initialism ("U.S.", "e.g.") or no real token
-    if token.lower() in _GATE_ABBREVIATIONS:
-        return False  # KNOWN abbreviation (Dr, Mr, Inc, Fig, etc.) — allowlist, not "short Cap"
-    return True  # plain word (incl. a short proper noun like "Pope"/"God"), acronym, or number
+    is_abbrev = len(token) <= 1 or token.lower() in _GATE_ABBREVIATIONS
+    if not is_abbrev:
+        return True  # plain word (incl. a short proper noun like "Pope"/"God"), acronym, number
+    # An abbreviation / single-letter initialism period is usually NOT a boundary ("U.S.
+    # economy", "e.g. cost"). But "<abbrev>. <Capital-word>" almost always starts a NEW
+    # sentence ("U.S. The data ...", "etc. The transcript ..."), so split there to catch an
+    # uncited sentence that ends in an abbreviation — EXCEPT a title before a name ("Mr. Jones").
+    if (_GATE_NEXT_SENTENCE_RE.match(line, i + 1) is not None
+            and token.lower() not in _GATE_TITLES):
+        return True
+    return False
 
 
 def _gate_clauses(line: str):

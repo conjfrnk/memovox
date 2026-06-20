@@ -243,11 +243,21 @@ class McpServer:
     def _call_tool(self, params: dict) -> dict:
         name = params.get("name")
         args = params.get("arguments") or {}
+        if not isinstance(args, dict):
+            return _tool_text("'arguments' must be a JSON object.", is_error=True)
         handler = getattr(self, f"_tool_{name}", None)
         if handler is None:
             known = ", ".join(t["name"] for t in TOOLS)
             return _tool_text(f"Unknown tool: {name}. Available tools: {known}",
                               is_error=True)
+        # Validate string-typed args at the boundary (mirrors REST routes._wrong_type): a
+        # wrong-type ({"topic": 2024}) or lone-surrogate value would otherwise reach
+        # .strip()/.lower()/a SQLite bind and surface a raw Python/SQLite error to the model
+        # as isError text. A MISSING required arg is left to the handler's KeyError -> -32602.
+        for arg in _TOOL_STR_ARGS.get(name, ()):
+            err = _bad_str_arg(args, arg)
+            if err:
+                return err
         try:
             return handler(args)
         except KeyError:
@@ -421,6 +431,36 @@ def _tool_text(text: str, *, is_error: bool = False) -> dict:
 
 def _tool_json(obj) -> dict:
     return _tool_text(json.dumps(obj, indent=2, ensure_ascii=False))
+
+
+#: String-typed arguments per tool, validated at the boundary (see _call_tool / _bad_str_arg).
+_TOOL_STR_ARGS = {
+    "ingest_video": ("url", "source_url", "title"),
+    "search_knowledge": ("query", "video_id", "modality"),
+    "synthesize_topic": ("topic",),
+    "find_contradictions": ("topic",),
+    "claim_timeline": ("entity", "topic"),
+    "get_claim_provenance": ("claim_id",),
+    "job_status": ("job_id",),
+}
+
+
+def _bad_str_arg(args: dict, key: str):
+    """Return an isError tool result if ``args[key]`` is PRESENT but not a usable string
+    (wrong type, or a lone surrogate that can't be UTF-8-encoded), else None. A MISSING arg
+    returns None — the handler raises KeyError for a required one (-> -32602). Mirrors the
+    REST routes._wrong_type guard so a model's wrong-type fill gets an actionable message
+    instead of a leaked Python/SQLite exception."""
+    val = args.get(key)
+    if val is None:
+        return None
+    if not isinstance(val, str):
+        return _tool_text(f"{key!r} must be a string.", is_error=True)
+    try:
+        val.encode("utf-8")
+    except UnicodeEncodeError:
+        return _tool_text(f"{key!r} contains invalid characters.", is_error=True)
+    return None
 
 
 def serve_stdio(mv: Memovox, *, stdin=None, stdout=None) -> None:

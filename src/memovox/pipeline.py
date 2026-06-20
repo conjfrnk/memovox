@@ -25,7 +25,7 @@ from .loom.digest import render_digest
 from .loom.models import STATUS_COMMITTED
 from .loom.resolve import link_claim_relations, resolve_entities, resolve_speakers
 from .observe import Tracer
-from .util import make_video_id, slugify
+from .util import make_video_id, scrub_surrogates, slugify
 
 
 @dataclass
@@ -148,11 +148,13 @@ def ingest(
     import math as _math
     duration_s = st.duration if (st.duration is not None and _math.isfinite(st.duration)) else None
 
+    # Scrub lone surrogates from attacker-influenced remote metadata (yt-dlp title/channel)
+    # so an unencodable code point can't crash the SQLite write or the utf-8 digest write.
     video = Video(
         video_id=video_id,
-        source_url=meta.source_url,
-        title=meta.title,
-        channel=meta.channel,
+        source_url=scrub_surrogates(meta.source_url),
+        title=scrub_surrogates(meta.title),
+        channel=scrub_surrogates(meta.channel),
         # None -> use the source's date; an explicit "" is a real blank override (M0.3).
         published_at=published_at if published_at is not None else meta.published_at,
         duration_s=duration_s,

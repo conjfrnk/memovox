@@ -64,6 +64,12 @@ def _topic_claims(store: LoomStore, topic_tokens: set) -> list:
 
 
 def _build_citations(store: LoomStore, moment_ids: List[str]) -> List[Citation]:
+    # Mirror ask()'s visual-trust contract: NEVER blend un-entailment-checked on-screen
+    # OCR into the displayed snippet, and flag a moment carrying unverified visual content
+    # so a client marks it lower-trust. text_for_embedding() concatenates transcript+OCR
+    # (good for RETRIEVAL), but the SNIPPET must be the verified transcript only.
+    from .answer import _citation_text, _includes_unverified_visual
+
     moments = store.get_moments(moment_ids)
     citations: List[Citation] = []
     video_cache: dict = {}
@@ -76,12 +82,16 @@ def _build_citations(store: LoomStore, moment_ids: List[str]) -> List[Citation]:
             video, moment.t_start_s, moment.t_end_s,
             modality=moment.modality, speaker=moment.speaker_id,
         ) if video else None
+        # verified transcript for the snippet; fall back to _citation_text only for a
+        # pure-visual moment (no transcript) — which is then flagged ocr_unverified.
+        snippet = truncate((moment.transcript or "").strip() or _citation_text(moment), 240)
         citations.append(Citation(
             index=i, video_id=moment.video_id, moment_id=moment.moment_id,
             t_start_s=moment.t_start_s, t_end_s=moment.t_end_s, modality=moment.modality,
             speaker=moment.speaker_id, title=video.title if video else None,
             deep_link=prov.deep_link if prov else None,
-            snippet=truncate(moment.text_for_embedding(), 240),
+            snippet=snippet,
+            ocr_unverified=_includes_unverified_visual(moment),
         ))
     return citations
 

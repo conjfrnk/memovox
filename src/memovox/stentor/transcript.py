@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from ..backends.base import Segment, Word
-from ..util import split_sentences
+from ..util import scrub_surrogates, split_sentences
 
 FILLERS = {"um", "uh", "erm", "uhh", "umm", "mm", "hmm", "mhm", "uhm", "ah", "er"}
 EVENT_RE = re.compile(
@@ -306,22 +306,25 @@ def parse_json(data) -> List[Segment]:
         end = _to_float(item.get("end", item.get("t_end", start)), start)
         # Only a real string is content. A null/list/number "text" must be dropped, not
         # str()-coerced — str(None) -> the literal word "None", which would survive the
-        # empty-guard and become a citable one-word speech claim.
+        # empty-guard and become a citable one-word speech claim. A lone surrogate (valid
+        # JSON, unlike the file paths which read with errors="replace") is scrubbed so it
+        # can't crash the SQLite write — JSON-transcript content is the one unsanitized path.
         raw_text = item.get("text", "")
-        text = raw_text.strip() if isinstance(raw_text, str) else ""
+        text = scrub_surrogates(raw_text.strip()) if isinstance(raw_text, str) else ""
         if not text:
             continue
         # Optional per-word timings (M0.3): a free-path fixture can carry word
         # precision via a "words": [{"word","start","end"}, ...] array per cue.
         words = [
-            Word(word=str(w.get("word", "")), start=_to_float(w.get("start"), 0.0),
+            Word(word=scrub_surrogates(str(w.get("word", ""))),
+                 start=_to_float(w.get("start"), 0.0),
                  end=_to_float(w.get("end"), 0.0))  # tolerates null/absent/junk timings
             for w in (item.get("words") or [])
             if isinstance(w, dict) and w.get("word")
         ]
         speaker = item.get("speaker")
         segments.append(Segment(start=start, end=end, text=text,
-                                speaker=speaker if isinstance(speaker, str) else None,
+                                speaker=scrub_surrogates(speaker) if isinstance(speaker, str) else None,
                                 words=words))
     return segments
 
