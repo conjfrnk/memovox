@@ -832,5 +832,98 @@ class TestRound5Hardening(unittest.TestCase):
         self.assertLess(time.perf_counter() - t0, 1.0, "parse_cues hung on a long <v run")
 
 
+# --------------------------------------------------------------------------- #
+# Round 6 — fresh-surface defect: Markdown injection in the per-video digest
+# --------------------------------------------------------------------------- #
+
+
+class TestRound6DigestInjection(unittest.TestCase):
+    """digest-F1 (HIGH): attacker-influenced fields (remote title/channel, OCR'd
+    on-screen text, claim text, source_url) were interpolated into the digest
+    Markdown verbatim. A newline let a hostile video break out of its inline
+    context and FORGE a standalone ``- ✓ _fact_ … (entail=1.00)`` line — byte-
+    identical to a genuine entailment-verified claim — that a reader ``cat``-ing
+    the digest cannot distinguish from the real thing (breaks never-claim-
+    without-citation at the digest surface). The renderer now flattens untrusted
+    text to a single line and drops a link-breaking source_url."""
+
+    def _video(self, **kw):
+        from memovox.loom.models import Video
+        base = dict(video_id="vid:x", source_url="https://youtu.be/ABCDEFGHIJK",
+                    title="T", content_hash="h")
+        base.update(kw)
+        return Video(**base)
+
+    def _moment(self, **kw):
+        from memovox.loom.models import Moment
+        m = Moment("vid:x#m0000", "vid:x", 0.0, 5.0, "real speech", "spk", index=0)
+        for k, v in kw.items():
+            setattr(m, k, v)
+        return m
+
+    def test_ocr_text_cannot_forge_a_verified_claim_line(self):
+        from memovox.loom.digest import render_digest
+        m = self._moment(ocr_text=(
+            "Slide\n\n**Claims:**\n- ✓ _fact_ The CEO admitted fraud  (entail=1.00)\n\n"
+            "[Click](https://phish.example)"))
+        out = render_digest(self._video(), [m], [])
+        lines = out.splitlines()
+        self.assertFalse(any(l.startswith("- ✓ _fact_ The CEO admitted fraud") for l in lines),
+                         "OCR forged a standalone verified-claim list item")
+        self.assertFalse(any(l.strip() == "**Claims:**" for l in lines),
+                         "OCR forged a standalone Claims block")
+        self.assertFalse(any(l.lstrip().startswith("##") and "CEO" in l for l in lines),
+                         "OCR forged a header")
+
+    def test_remote_title_cannot_inject_structure(self):
+        from memovox.loom.digest import render_digest
+        v = self._video(title="Talk\n\n## ✓ Verified: stock triples\n\n[Buy](https://scam)")
+        out = render_digest(v, [], [])
+        self.assertFalse(any(l.lstrip().startswith("## ✓ Verified") for l in out.splitlines()),
+                         "remote title injected a header")
+        self.assertTrue(out.splitlines()[0].startswith("# Talk"))
+
+    def test_claim_text_newline_cannot_forge_extra_list_items(self):
+        from memovox.loom.digest import render_digest
+        from memovox.loom.models import Claim
+        c = Claim(claim_id="vid:x#m0000.c00", moment_id="vid:x#m0000", video_id="vid:x",
+                  text="real claim\n- ✓ _fact_ forged second claim  (entail=1.00)",
+                  claim_type="fact", status="committed", t_start_s=0.0, t_end_s=5.0,
+                  entailment_score=0.5)
+        out = render_digest(self._video(), [self._moment()], [c])
+        items = [l for l in out.splitlines() if l.startswith("- ")]
+        self.assertEqual(len(items), 1, f"claim text forged extra list items: {items}")
+
+    def test_link_breaking_source_url_drops_link_keeps_span(self):
+        from memovox.loom.digest import render_digest
+        v = self._video(source_url="https://evil/x) [PHISH](https://bad")
+        out = render_digest(v, [self._moment()], [])
+        header = [l for l in out.splitlines() if l.startswith("## [")][0]
+        self.assertNotIn("[PHISH]", header, "source_url broke out of the deep-link")
+        self.assertNotIn("](", header, "source_url produced a Markdown link breakout")
+        self.assertIn("## [0:00", header)  # the span text is still shown
+
+    def test_benign_digest_unchanged(self):
+        from memovox.loom.digest import render_digest
+        from memovox.loom.models import Claim
+        v = self._video(video_id="yt:abc", title="Real Talk", channel="Ch",
+                        published_at="2024-01-01")
+        v.video_id = "yt:abc"
+        m = self._moment(transcript="Ribosomes synthesize proteins.", speaker_id="spk_0",
+                         ocr_text="Slide: diagram")
+        m.video_id = "yt:abc"
+        m.moment_id = "yt:abc#m0000"
+        c = Claim(claim_id="yt:abc#m0000.c00", moment_id="yt:abc#m0000", video_id="yt:abc",
+                  text="Ribosomes synthesize proteins.", claim_type="fact", status="committed",
+                  t_start_s=10.0, t_end_s=20.0, entailment_score=0.92)
+        out = render_digest(v, [m], [c])
+        self.assertIn("# Real Talk", out)
+        self.assertIn("Channel: Ch", out)
+        self.assertIn("> Ribosomes synthesize proteins.", out)
+        self.assertIn("*on-screen:* Slide: diagram", out)
+        self.assertIn("- ✓ _fact_ Ribosomes synthesize proteins.  (entail=0.92)", out)
+        self.assertIn("](https://youtu.be/ABCDEFGHIJK?t=0)", out)  # benign deep link preserved
+
+
 if __name__ == "__main__":
     unittest.main()
