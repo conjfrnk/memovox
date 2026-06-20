@@ -526,7 +526,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     except KeyboardInterrupt:
         print("\nInterrupted.", file=sys.stderr)
         return 130
-    except (MemovoxError, FileNotFoundError, KeyError, ValueError) as exc:
+    except (MemovoxError, OSError, KeyError, ValueError) as exc:
+        # OSError covers FileNotFoundError + IsADirectoryError/NotADirectoryError/
+        # PermissionError from a bad ``--out`` target, so an ordinary path mistake prints a
+        # clean "error: ..." (exit 1) instead of an uncaught traceback leaking internal frames.
         print(f"error: {exc}", file=sys.stderr)
         return 1
 

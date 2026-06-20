@@ -970,5 +970,80 @@ class TestRound6Hardening(unittest.TestCase):
         self.assertEqual(claims._parse_json_array("no array here"), [])
 
 
+# --------------------------------------------------------------------------- #
+# Round 7 — gate proper-noun leak, 7th ReDoS, CLI/MCP surfaces (found re-reviewing r6)
+# --------------------------------------------------------------------------- #
+
+
+class TestRound7Hardening(unittest.TestCase):
+    def _cits(self, n=2):
+        from memovox.augur.types import Citation
+        return [Citation(index=i, video_id="v", moment_id=f"v#m{i}", t_start_s=0, t_end_s=1,
+                         source_text="x") for i in range(1, n + 1)]
+
+    def test_gate_rejects_short_proper_noun_sentence_end(self):
+        # round-7 (CRIT): a "short Capitalized word = abbreviation" rule wrongly merged an
+        # uncited sentence ending in a proper noun (Pope/God/Rome/King) into the next clause.
+        from memovox.augur.answer import _llm_citations_valid as V
+        c = self._cits()
+        for t in ["Ribosomes were secretly invented by the Pope. Ribosomes synthesize proteins [1].",
+                  "Napoleon made the God. He also made ribosomes uncited [1]",
+                  "It happened in Rome. Napoleon made them uncited [1].",
+                  "They crowned the King. The drug is fake uncited [1]."]:
+            self.assertFalse(V(t, c), f"proper-noun bypass accepted: {t!r}")
+        # real abbreviations (the allowlist) still preserved -> faithful answer accepted
+        for t in ["The U.S. economy grew [1].", "Mr. Jones and Dr. Lee disagreed [1].",
+                  "Apple Inc. announced results [1].", "See Fig. 3 for details [1]."]:
+            self.assertTrue(V(t, c), f"abbreviation answer wrongly rejected: {t!r}")
+
+    def test_mid_speaker_regex_is_bounded(self):
+        # round-7 (HIGH): _MID_SPEAKER_RE's unbounded leading run was O(n^2).
+        from memovox.stentor import transcript as T
+        t0 = time.perf_counter()
+        T.clean_segments(T.parse_cues(
+            "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n" + ("A1b2C3d4" * 4000) + "\n"))
+        self.assertLess(time.perf_counter() - t0, 1.0, "_MID_SPEAKER_RE quadratic")
+        t0 = time.perf_counter()
+        T._MID_SPEAKER_RE.sub(" ", "A" * 200000)
+        self.assertLess(time.perf_counter() - t0, 1.0, "_MID_SPEAKER_RE.sub quadratic")
+        # a normal mid-cue speaker label is still stripped (confirmed-speaker path)
+        out, _ = T.clean_text("ADDIS :When we go to retrieve", frozenset({"addis"}))
+        self.assertNotIn("ADDIS", out)
+
+    def test_mcp_non_dict_params_returns_invalid_params(self):
+        # round-7 (MED): non-dict params leaked an AttributeError as -32603.
+        import tempfile
+        from memovox.sdk import Memovox
+        from memovox.server.mcp import McpServer
+        mv = Memovox(store=tempfile.mkdtemp())
+        srv = McpServer(mv)
+        for body in ({"jsonrpc": "2.0", "method": "tools/call", "params": [1, 2, 3], "id": 1},
+                     {"jsonrpc": "2.0", "method": "initialize", "params": "x", "id": 2}):
+            err = srv.handle(body).get("error", {})
+            self.assertEqual(err.get("code"), -32602, body)
+            self.assertNotIn("object has no attribute", err.get("message", ""))
+        # a notification (no id) with bad params is silently ignored; valid still works
+        self.assertIsNone(srv.handle({"jsonrpc": "2.0", "method": "tools/call", "params": [1]}))
+        self.assertIn("result", srv.handle({"jsonrpc": "2.0", "method": "initialize",
+                                            "params": {}, "id": 3}))
+        mv.close()
+
+    def test_cli_export_bad_out_path_is_clean_error_not_traceback(self):
+        # round-7 (MED): export --out <dir> raised an uncaught IsADirectoryError traceback.
+        import tempfile
+        from memovox import cli
+        from memovox.sdk import Memovox
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        store = tmp / "s"
+        mv = Memovox(store=str(store))
+        rep = _ingest_vtt(mv, "WEBVTT\n\n00:00:00.000 --> 00:00:05.000\nhello world here.\n",
+                          source_url="https://youtu.be/abc123")
+        mv.close()
+        a_dir = tmp / "outdir"
+        a_dir.mkdir()
+        rc = cli.main(["--store", str(store), "export", rep.video_id, "--out", str(a_dir)])
+        self.assertEqual(rc, 1)  # clean error + exit 1, not an uncaught traceback
+
+
 if __name__ == "__main__":
     unittest.main()

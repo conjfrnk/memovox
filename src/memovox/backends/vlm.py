@@ -10,7 +10,6 @@ on-screen descriptions. The default real backend is an **Ollama** vision model
 from __future__ import annotations
 
 import base64
-import importlib.util
 import json
 import os
 import urllib.error
@@ -85,7 +84,9 @@ class OllamaVLM(VLMBackend):
         try:
             with urllib.request.urlopen(req, timeout=120) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
-            return (body.get("response") or "").strip()
+            # A non-dict JSON body (unexpected server response) must degrade to no caption,
+            # not raise AttributeError and drop the whole visual track.
+            return (body.get("response") or "").strip() if isinstance(body, dict) else ""
         except (urllib.error.URLError, TimeoutError, ValueError):  # pragma: no cover
             return ""
 

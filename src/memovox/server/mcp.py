@@ -195,9 +195,18 @@ class McpServer:
         req_id = request.get("id")
         is_notification = "id" not in request
 
+        # JSON-RPC: "params" (when present) MUST be a structured value. A non-dict params
+        # would reach params.get(...) and raise an AttributeError that the generic handler
+        # below would leak as a -32603 internal error — answer -32602 Invalid params instead.
+        raw_params = request.get("params")
+        if raw_params is not None and not isinstance(raw_params, dict):
+            if is_notification:
+                return None
+            return _error(req_id, -32602, 'Invalid params: "params" must be a JSON object')
+        params = raw_params or {}
+
         try:
             if method == "initialize":
-                params = request.get("params") or {}
                 asked = params.get("protocolVersion")
                 version = asked if asked in SUPPORTED_PROTOCOL_VERSIONS else PROTOCOL_VERSION
                 result = {
@@ -213,7 +222,7 @@ class McpServer:
             elif method == "tools/list":
                 result = {"tools": TOOLS}
             elif method == "tools/call":
-                result = self._call_tool(request.get("params") or {})
+                result = self._call_tool(params)
             else:
                 if is_notification:
                     return None

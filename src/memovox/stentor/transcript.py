@@ -123,7 +123,8 @@ def _speaker_prefix(text: str) -> Optional[re.Match]:
 #:   * BARE form ("ADDIS So, the fact...") — a cue/sentence-initial occurrence of a
 #:     confirmed speaker with no colon at all. Gated strictly on the confirmed set so an
 #:     arbitrary sentence-initial proper noun is never eaten.
-_MID_SPEAKER_RE = re.compile(r"([A-Z][A-Za-z0-9.'’-]*(?:\s+[A-Z][A-Za-z0-9.'’-]*){0,2})(\s*):\s*")
+_MID_SPEAKER_RE = re.compile(
+    r"([A-Z][A-Za-z0-9.'’-]{0,40}(?:\s+[A-Z][A-Za-z0-9.'’-]{0,40}){0,2})(\s*):\s*")  # {0,40}: ReDoS-safe
 
 
 def _collect_speakers(segments: List[Segment]) -> "frozenset[str]":

@@ -298,6 +298,14 @@ _GATE_WORD_RE = re.compile(r"[^\W\d_]{2,}")
 _MARKER_BIND_RE = re.compile(r"([.!?;。！？]+)([^\S\n]+)(\[\d+\](?:[^\S\n]*\[\d+\])*)")
 #: Sentence terminators: ASCII . ! ? ; plus the CJK ideographic/fullwidth 。 ！ ？.
 _GATE_TERMINATORS = ".!?;。！？"
+#: KNOWN abbreviations whose trailing period is NOT a sentence boundary. An ALLOWLIST (not
+#: "any short Capitalized word"): a short proper noun ("Pope", "God", "Rome", "King") is a
+#: real word that DOES end a sentence — treating it as an abbreviation let an uncited
+#: sentence ending in one merge into the next cited clause and leak. A rare true abbreviation
+#: outside this set (e.g. "Sun."/"Mon.") merely over-refuses to the extractive synthesizer.
+_GATE_ABBREVIATIONS = frozenset(
+    "mr mrs ms dr st jr sr vs etc inc ltd co corp fig no vol pp ed al eg ie eg "
+    "prof gen rev hon sen rep dept est mt ave blvd approx esp dr".split())
 
 
 def _is_sentence_boundary(line: str, i: int) -> bool:
@@ -326,9 +334,9 @@ def _is_sentence_boundary(line: str, i: int) -> bool:
     token = line[j:i]
     if len(token) <= 1:
         return False  # single letter -> initialism ("U.S.", "e.g.") or no real token
-    if token[0].isupper() and not token.isupper() and len(token) <= 4:
-        return False  # short capitalized abbreviation (Dr, Mr, Inc, Fig, Corp, Prof)
-    return True  # plain word (any script, incl. accented/CJK), long Capitalized word, acronym
+    if token.lower() in _GATE_ABBREVIATIONS:
+        return False  # KNOWN abbreviation (Dr, Mr, Inc, Fig, etc.) — allowlist, not "short Cap"
+    return True  # plain word (incl. a short proper noun like "Pope"/"God"), acronym, or number
 
 
 def _gate_clauses(line: str):
