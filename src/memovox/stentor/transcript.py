@@ -194,7 +194,12 @@ def _parse_ts(value: str) -> float:
         h, m, sec = 0.0, nums[0], nums[1]
     else:
         h, m, sec = 0.0, 0.0, nums[0]
-    return h * 3600 + m * 60 + sec
+    # A huge all-digit field (e.g. a corrupt exporter) makes float() overflow to inf; an
+    # inf/nan timestamp mis-sorts moments and crashes the deep-link / H:MM:SS formatters
+    # downstream. Clamp to 0.0 so a malformed timing degrades rather than poisoning ingest
+    # (mirrors the JSON path's _to_float guard).
+    total = h * 3600 + m * 60 + sec
+    return total if math.isfinite(total) else 0.0
 
 
 def _is_timestamp_line(line: str) -> bool:
@@ -325,7 +330,9 @@ def parse_plain(text: str, *, duration: Optional[float] = None) -> List[Segment]
     sentences = split_sentences(text)
     if not sentences:
         return []
-    per = (duration / len(sentences)) if duration else 3.0
+    # Guard a non-finite duration (a corrupt probe/metadata value) so synthetic timings
+    # stay finite — an inf/nan per-segment span crashes the deep-link / hms formatters.
+    per = (duration / len(sentences)) if (duration and math.isfinite(duration)) else 3.0
     segments = []
     t = 0.0
     for s in sentences:

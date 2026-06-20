@@ -529,11 +529,18 @@ class TestRound2Hardening(unittest.TestCase):
         self.assertTrue(_all_sentences_cited(ans.text) or ans.low_evidence, ans.text)
         store.close()
 
-    def test_synthesize_cite_cites_every_sentence(self):
-        # provenance round-2 (MED): a multi-sentence claim must get a marker per sentence.
+    def test_synthesize_cite_is_single_trailing_marker(self):
+        # round-3 (MED): _cite reverted to ONE trailing marker — a claim is the atomic
+        # citable unit; per-sentence splitting mangled abbreviations/decimals in the
+        # default extractive synthesis output.
         from memovox.augur.synthesize import _cite
-        out = _cite("Ribosomes synthesize proteins. They also assemble amino acids", 3)
-        self.assertTrue(_all_sentences_cited(out), out)
+        self.assertEqual(_cite("Mr. Jones and Dr. Lee disagreed", 1),
+                         "Mr. Jones and Dr. Lee disagreed. [1]")
+        self.assertEqual(_cite("Dr. Smith said the U.S. economy grew per Fig. 3 reports", 2),
+                         "Dr. Smith said the U.S. economy grew per Fig. 3 reports. [2]")
+        self.assertEqual(_cite("It cost $5.99. 100 units sold", 1),
+                         "It cost $5.99. 100 units sold. [1]")
+        self.assertTrue(_cite("Ribosomes synthesize proteins", 3).endswith("[3]"))
 
     def test_nonfinite_json_timings_coerced_finite(self):
         # ingest round-2 (MED): NaN/inf/1e400 timings crashed the deep-link / hms layer.
@@ -572,6 +579,92 @@ class TestRound2Hardening(unittest.TestCase):
         # a real format still works
         status, _, _ = routes.route_export(mv, rep.video_id, {"format": "json"})
         self.assertEqual(int(status), 200)
+        mv.close()
+
+
+# --------------------------------------------------------------------------- #
+# Round 3 — residual defects found re-reviewing the round-2 fixes
+# --------------------------------------------------------------------------- #
+
+
+class TestRound3Hardening(unittest.TestCase):
+    def test_grounding_gate_rejects_newline_joined_uncited_prose(self):
+        # round-3 (CRIT): bare newlines / bullet lists collapsed into one cited clause.
+        from memovox.augur.answer import _llm_citations_valid as V
+        from memovox.augur.types import Citation
+        c = [Citation(index=1, video_id="v", moment_id="v#m0", t_start_s=0, t_end_s=1, source_text="x"),
+             Citation(index=2, video_id="v", moment_id="v#m1", t_start_s=0, t_end_s=1, source_text="y")]
+        for t in ["Ribosomes are titanium\nInvented by Napoleon\nReal proteins [1]",
+                  "- Ribosomes are titanium\n- Invented by Napoleon\n- Real proteins [1]",
+                  "Real fact [1]\nuncited Napoleon stuff. More real [2].",
+                  "Key finding\nRibosomes synthesize proteins [1]."]:
+            self.assertFalse(V(t, c), f"newline bypass accepted: {t!r}")
+        # legitimate cited forms still pass (no over-refusal regression)
+        for t in ["Ribosomes synthesize proteins from amino acids. [1]",
+                  "Claim one. [1] Claim two. [2]", "Fact one [1]; fact two [2]."]:
+            self.assertTrue(V(t, c), f"valid form wrongly rejected: {t!r}")
+
+    def test_newline_fabrication_not_surfaced_via_ask_or_synthesize(self):
+        from memovox import augur
+        from memovox.config import Settings
+        tmp = tempfile.mkdtemp()
+        store, emb = _bio_store(tmp)
+        llm = _make_llm("Ribosomes are made of titanium\nThey were secretly invented by Napoleon\n"
+                        "Ribosomes synthesize proteins [1]")
+        ans = augur.ask(store, "what are ribosomes?", embedder=emb, llm=llm, settings=Settings())
+        self.assertNotIn("Napoleon", ans.text)
+        self.assertNotIn("titanium", ans.text)
+        store.close()
+
+    def test_vtt_nonfinite_timestamp_does_not_crash(self):
+        # round-3 (MED): huge all-digit VTT/SRT timestamps overflowed to inf -> crash.
+        import math
+        from memovox.stentor import transcript as T
+        from memovox import util
+        segs = T.parse_cues("WEBVTT\n\n" + ("9" * 350) + " --> " + ("9" * 350) + "\nReal content here\n")
+        self.assertEqual(len(segs), 1)
+        self.assertTrue(math.isfinite(segs[0].start) and math.isfinite(segs[0].end))
+        util.deep_link("https://youtu.be/ABC", segs[0].start)  # must not raise
+        util.seconds_to_hms(segs[0].start)
+        # normal timestamps unchanged
+        self.assertAlmostEqual(T._parse_ts("00:01:30.500"), 90.5)
+
+    def test_parse_plain_nonfinite_duration_stays_finite(self):
+        import math
+        from memovox.stentor import transcript as T
+        for dur in (float("inf"), float("nan")):
+            segs = T.parse_plain("Sentence one. Sentence two.", duration=dur)
+            self.assertTrue(all(math.isfinite(s.start) and math.isfinite(s.end) for s in segs),
+                            f"non-finite duration leaked: {dur}")
+
+    def test_lone_surrogate_field_does_not_500(self):
+        # round-3 (MED): a lone surrogate in echoed client text crashed _send (UnicodeEncodeError).
+        import io
+        from memovox.sdk import Memovox
+        from memovox.server.rest import make_handler
+        tmp = tempfile.mkdtemp()
+        mv = Memovox(store=str(pathlib.Path(tmp) / "s"))
+        Handler = make_handler(mv)
+        h = Handler.__new__(Handler)
+        captured = {}
+        h.send_response = lambda *a, **k: captured.setdefault("status", a[0] if a else None)
+        h.send_header = lambda *a, **k: None
+        h.end_headers = lambda: None
+        h.wfile = io.BytesIO()
+        # echo a lone surrogate back through _send — must not raise / 500
+        h._send({"topic": "\ud800", "ok": True})
+        self.assertEqual(h.wfile.getvalue() and True, True)  # produced bytes, no exception
+        mv.close()
+
+    def test_ingest_bad_source_returns_400_not_500(self):
+        # round-3 (MED): a bad client source raised AcquisitionError -> 500 leak.
+        from memovox.sdk import Memovox
+        from memovox.server import routes
+        tmp = tempfile.mkdtemp()
+        mv = Memovox(store=str(pathlib.Path(tmp) / "s"))
+        for bad in ("/nonexistent/path.vtt", "   ", "/etc/hosts"):
+            status, payload, _ = routes.route_ingest(mv, {"source": bad})
+            self.assertEqual(int(status), 400, f"{bad!r} -> {status} {payload}")
         mv.close()
 
 

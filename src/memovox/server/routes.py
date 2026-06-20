@@ -14,6 +14,7 @@ from http import HTTPStatus
 
 import math
 
+from ..errors import AcquisitionError, DemuxError
 from ..loom import LoomStore
 from ..util import deep_link
 
@@ -131,8 +132,14 @@ def route_ingest(mv, body):
             return err
     if not body.get("source"):
         return _bad_request("missing 'source'")
-    report = mv.ingest(body["source"], source_url=body.get("source_url"),
-                       title=body.get("title"))
+    try:
+        report = mv.ingest(body["source"], source_url=body.get("source_url"),
+                           title=body.get("title"))
+    except (AcquisitionError, DemuxError) as exc:
+        # a bad client-supplied source (missing file, bad URL, unsupported type, ffmpeg
+        # failure) is a CLIENT error -> 400, not a catch-all 500 that leaks the internal
+        # exception (mirrors the route_export ValueError->400 fix; keeps FastAPI parity).
+        return _bad_request(str(exc))
     return (HTTPStatus.OK, report.to_dict(), JSON)
 
 

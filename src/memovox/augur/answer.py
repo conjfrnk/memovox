@@ -279,12 +279,16 @@ _LLM_SYSTEM = (
 
 
 _CITE_MARKER_RE = re.compile(r"\[(\d+)\]")
-#: Clause boundary for the grounding gate: ANY of . ! ? ; followed by whitespace. This is
-#: deliberately STRICTER than util.split_sentences (which only breaks on a terminator
-#: followed by an uppercase/digit/quote) — otherwise a lowercase or punctuation-joined
-#: continuation ("... [1]. they were invented by Napoleon.") is treated as ONE cited
-#: sentence and the uncited continuation rides along.
-_GATE_CLAUSE_RE = re.compile(r"[.!?;]+\s+")
+#: Clause boundary for the grounding gate: a terminator (. ! ? ;) + whitespace, OR a bare
+#: newline. STRICTER than util.split_sentences (which only breaks on a terminator followed
+#: by uppercase/digit/quote, so a lowercase continuation rides along). Newlines split too —
+#: LLMs emit line-broken prose and bullet lists with NO per-line terminator, which would
+#: otherwise collapse into one clause carrying a single trailing [n] and smuggle uncited
+#: lines through. Commas/colons/dashes are deliberately NOT boundaries: they join clauses
+#: WITHIN one sentence ("Ribosomes, which are organelles, make proteins [1]"), so splitting
+#: on them would reject legitimate single-citation sentences (the semantic faithfulness of a
+#: comma-joined clause attributed to its sentence's citation is out of lexical scope).
+_GATE_CLAUSE_RE = re.compile(r"(?:[.!?;]+\s+|\n+)")
 #: A 2+ letter run = real prose (so "[1]", ".", ", " alone are not "prose").
 _GATE_WORD_RE = re.compile(r"[^\W\d_]{2,}")
 #: A citation marker sitting AFTER a sentence terminator ("acids. [1]") cites the
@@ -297,7 +301,7 @@ def _llm_citations_valid(text: str, citations: List[Citation]) -> bool:
     """True iff a GENERATED answer is safe to surface as-is: every assertion is ATTRIBUTED
     to a real citation (the never-break invariant). Requires:
       * at least one ``[n]``, and every ``[n]`` resolves to a real citation index, and
-      * every prose-bearing clause (split on . ! ? ;) carries a ``[n]``, and
+      * every prose-bearing clause (split on . ! ? ; or a line break) carries a ``[n]``, and
       * no prose follows the final ``[n]`` (no uncited trailing clause).
     On any failure the caller falls back to the verified extractive synthesizer.
 
