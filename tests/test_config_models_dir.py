@@ -14,8 +14,12 @@ from memovox.config import Config
 
 class ModelsDirOverrideTest(unittest.TestCase):
     def test_default_is_store_subdir(self):
-        cfg = Config(store="/tmp/some_store_xyz")
-        self.assertEqual(cfg.models_dir, cfg.store / "models")
+        # Hermetic regardless of the ambient environment: clear any inherited
+        # MEMOVOX_MODELS_DIR so this asserts the genuine DEFAULT (store/models).
+        with mock.patch.dict(os.environ, clear=False):
+            os.environ.pop("MEMOVOX_MODELS_DIR", None)
+            cfg = Config(store="/tmp/some_store_xyz")
+            self.assertEqual(cfg.models_dir, cfg.store / "models")
 
     def test_env_override_points_outside_store(self):
         with mock.patch.dict(os.environ, {"MEMOVOX_MODELS_DIR": "/tmp/shared_mv_models"}):
