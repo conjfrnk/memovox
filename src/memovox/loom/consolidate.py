@@ -80,10 +80,12 @@ going goes went come comes came make makes made take takes took look looks looki
 see sees seen something someone somebody anything anyone everything nothing nobody
 today now here there back around maybe perhaps right sure fine very much many also
 even still yet ever never always again pretty quite rather almost enough though however
-thank thanks hello hey alright anyway
+thank thanks hello hey alright anyway but
 most important point whole matters day end down
 don won didn isn aren wasn weren haven hasn doesn wouldn couldn shouldn mustn needn
 ain shan mightn oughtn
+write writes wrote note subscribe subscribed channel comment comments bell
+notification notifications click sponsor sponsored watching video videos link description
 """.split())
 
 

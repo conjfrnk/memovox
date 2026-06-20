@@ -308,5 +308,49 @@ class TestPhaticOverlapRejected(unittest.TestCase):
             self.assertNotIn(stem, _distinctive_tokens(_content_tokens(frag)), frag)
 
 
+# ---- Fix: consensus path lacked the distinctive-token gate -------------------
+class TestConsensusPartitionDistinctiveGate(unittest.TestCase):
+    """CONSENSUS_PARTITION_NO_DISTINCTIVE_GATE (round-5 panel): the consensus path
+    (partition_claims/cluster_claims) must apply the SAME distinctive-token gate the
+    contradiction path got in rounds 3-4, else filler-only phatic near-mirrors form bogus
+    cross-video SUPPORTS edges and inflate the consensus_clusters metric (surfaced via
+    MCP/API). The genuine cosine (cos_equiv) branch is untouched."""
+
+    def _claims(self, *pairs):
+        from memovox.loom.models import Claim
+        return [Claim(f"{vid}#m{i}.c0", f"{vid}#m{i}", vid, t, salience=0.5,
+                      t_start_s=0.0, t_end_s=5.0) for i, (vid, t) in enumerate(pairs)]
+
+    def test_filler_only_pair_not_grouped(self):
+        from memovox.loom.consensus import partition_claims
+        claims = self._claims(("yt:a", "okay let us try one thing today"),
+                              ("yt:b", "okay let us try one thing now"))
+        _groups, cross = partition_claims(claims)
+        self.assertEqual(cross, [], "filler-only phatic pair wrongly grouped as consensus")
+
+    def test_but_only_overlap_not_grouped(self):
+        from memovox.loom.consensus import partition_claims
+        claims = self._claims(("yt:a", "yes but I don't really know"),
+                              ("yt:b", "well yes but I don't know honestly"))
+        _groups, cross = partition_claims(claims)
+        self.assertEqual(cross, [], "'but'-only phatic pair wrongly grouped")
+
+    def test_distinctive_pair_still_grouped(self):
+        from memovox.loom.consensus import partition_claims
+        claims = self._claims(
+            ("yt:a", "scaling laws hold beyond current compute budgets"),
+            ("yt:b", "scaling laws hold beyond current compute budgets entirely"))
+        _groups, cross = partition_claims(claims)
+        self.assertEqual(len(cross), 1, "distinctive cross-video near-mirror dropped")
+
+    def test_cluster_claims_defaults_to_no_edge_write(self):
+        # defense-in-depth: the default must be write_edges=False so a future caller using
+        # the default never writes consensus edges (both live callers pass it explicitly).
+        import inspect
+        from memovox.loom.consensus import cluster_claims
+        self.assertIs(
+            inspect.signature(cluster_claims).parameters["write_edges"].default, False)
+
+
 if __name__ == "__main__":
     unittest.main()

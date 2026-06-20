@@ -19,7 +19,9 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from ..util import parse_iso
-from .consolidate import _BUCKET_CAP, DEFAULT_MAX_CLAIMS, _candidate_pairs, _content_tokens
+from .consolidate import (
+    _BUCKET_CAP, DEFAULT_MAX_CLAIMS, _candidate_pairs, _content_tokens, _distinctive_tokens,
+)
 from .models import Claim
 
 # Consensus weighting. Source count dominates (more independent sources asserting
@@ -170,8 +172,14 @@ def partition_claims(
     # scales to the full corpus instead of a 600-claim prefix.
     for cid_a, cid_b in _candidate_pairs(tokens, bucket_cap=bucket_cap):
         toks_a, toks_b = tokens[cid_a], tokens[cid_b]
-        token_equiv = (len(toks_a & toks_b) >= min_shared
-                       and _jaccard(toks_a, toks_b) >= jaccard)
+        # token_equiv mirrors the contradiction-side near-mirror gate, INCLUDING the
+        # distinctive-overlap requirement (>= 1 shared non-filler token): a filler-only
+        # phatic overlap ("okay let's try one thing" / "...") is not a real agreement and
+        # otherwise writes garbage cross-video SUPPORTS edges + inflates consensus_clusters.
+        shared = toks_a & toks_b
+        token_equiv = (len(shared) >= min_shared
+                       and _jaccard(toks_a, toks_b) >= jaccard
+                       and bool(_distinctive_tokens(shared)))
         cos_equiv = (cosine > 0.0 and cid_a in vectors and cid_b in vectors
                      and _cosine(vectors[cid_a], vectors[cid_b]) >= cosine)
         if not (token_equiv or cos_equiv):
@@ -220,14 +228,17 @@ def cluster_claims(
     min_shared: int = 3,
     jaccard: Optional[float] = None,
     max_claims: int = DEFAULT_MAX_CLAIMS,
-    write_edges: bool = True,
+    write_edges: bool = False,
 ) -> List[ClaimCluster]:
     """Partition committed claims into scored clusters of equivalent claims.
 
     Returns ALL clusters (including singletons), each scored. For every
-    CROSS-video equivalent pair a provenanced ``SUPPORTS`` edge is written
-    (``write_edges``); within-video equivalence is left to dedup (W5). ``jaccard``
-    defaults to ``settings.consensus_jaccard``.
+    CROSS-video equivalent pair a provenanced ``SUPPORTS`` edge is written when
+    ``write_edges`` is set; within-video equivalence is left to dedup (W5). ``jaccard``
+    defaults to ``settings.consensus_jaccard``. NB ``write_edges`` defaults to ``False``
+    (defense-in-depth): the live consolidate/synthesize callers pass it explicitly, and a
+    SUPPORTS edge should be persisted only by the NLI-confirmed agreement path, never by
+    raw token/cosine co-location — so an accidental default call writes no edges.
     """
     if jaccard is None:
         jaccard = getattr(store.config.settings, "consensus_jaccard", 0.5)
