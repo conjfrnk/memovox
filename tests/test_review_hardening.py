@@ -1388,5 +1388,55 @@ class TestRound12Hardening(unittest.TestCase):
         s.close()
 
 
+# --------------------------------------------------------------------------- #
+# Round 13 — quadratic CPU DoS in Escapement build_moments (ingest path)
+# --------------------------------------------------------------------------- #
+
+
+class TestRound13Hardening(unittest.TestCase):
+    def _speech(self, i, speaker="spk_0"):
+        from memovox.backends.base import Segment
+        s = Segment(start=i * 0.5, end=i * 0.5 + 0.4, text=f"word {i}", speaker=speaker)
+        s.kind = "speech"
+        return s
+
+    def test_build_moments_is_linear_not_quadratic(self):
+        # round-13 (MED): _event_between (linear scan/seg) and _dominant_speaker(current)
+        # (recomputed over the growing group) made build_moments O(n^2) on a big transcript.
+        from memovox.escapement.fusion import build_moments
+        segs = [self._speech(i) for i in range(80000)]  # no boundaries -> worst case
+        t0 = time.perf_counter()
+        build_moments("vid:x", segs)
+        self.assertLess(time.perf_counter() - t0, 3.0, "build_moments quadratic on 80k segments")
+        # event-heavy variant (the _event_between + _merge_small quadratics)
+        from memovox.backends.base import Segment
+        mixed = []
+        for i in range(40000):
+            mixed.append(self._speech(i))
+            e = Segment(start=i * 0.5 + 0.45, end=i * 0.5 + 0.45, text="[applause]")
+            e.kind = "event"
+            mixed.append(e)
+        t0 = time.perf_counter()
+        build_moments("vid:x", mixed)
+        self.assertLess(time.perf_counter() - t0, 3.0, "build_moments quadratic on event-heavy input")
+
+    def test_build_moments_dominant_speaker_tiebreak_preserved(self):
+        # the incremental Counter must keep _dominant_speaker's first-insertion tie-break,
+        # and be PYTHONHASHSEED-independent (determinism). Equal counts -> first speaker seen.
+        from memovox.escapement.fusion import build_moments
+        from memovox.config import Settings
+        st = Settings()
+        # one group (tiny gaps, no speaker change-driven boundary won't fire since the
+        # dominant stays the first speaker): alternate A/B with A appearing first
+        segs = []
+        for i in range(6):
+            segs.append(self._speech(i, "spk_a" if i % 2 == 0 else "spk_b"))
+        # force a single group by a large max-duration / gap so only the tie-break decides
+        st = st.merged({"moment_max_sec": 100000, "moment_gap_sec": 100000, "moment_min_sec": 0})
+        moments = build_moments("vid:x", segs, settings=st)
+        # spk_a and spk_b each appear 3x; first-seen is spk_a -> dominant is spk_a
+        self.assertEqual(moments[0].speaker_id, "spk_a")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -8,6 +8,7 @@ shifts detected by embedding similarity — rather than at arbitrary token count
 
 from __future__ import annotations
 
+import bisect
 from collections import Counter
 from typing import List, Optional
 
@@ -19,7 +20,16 @@ from ..vectormath import cosine
 
 
 def _event_between(event_times: List[float], lo: float, hi: float) -> bool:
-    return any(lo <= t <= hi for t in event_times)
+    # event_times is pre-sorted: binary-search the first time >= lo. The old linear any()
+    # made build_moments O(speech x events) — a quadratic ingest CPU DoS on a big transcript.
+    i = bisect.bisect_left(event_times, lo)
+    return i < len(event_times) and event_times[i] <= hi
+
+
+def _counter_dominant(counter: Counter) -> Optional[str]:
+    """Most-common speaker in a RUNNING counter (same insertion-order tie-break as
+    _dominant_speaker — most_common breaks ties by first-insertion); None if empty."""
+    return counter.most_common(1)[0][0] if counter else None
 
 
 def _similarity(embedder: Embedder, text_a: str, text_b: str) -> float:
@@ -109,13 +119,19 @@ def _merge_small(groups: List[List[Segment]], settings: Settings) -> List[List[S
     if len(groups) <= 1:
         return groups
     merged: List[List[Segment]] = []
+    merged_counter: Counter = Counter()  # running speaker tally for merged[-1]
     for group in groups:
         duration = group[-1].end - group[0].start
-        same_speaker = merged and _dominant_speaker(merged[-1]) == _dominant_speaker(group)
+        group_counter = Counter(s.speaker for s in group if s.speaker)
+        # incremental merged[-1] dominant (was _dominant_speaker(merged[-1]) recomputed per
+        # group -> O(n^2) when many tiny same-speaker groups fold into one)
+        same_speaker = merged and _counter_dominant(merged_counter) == _counter_dominant(group_counter)
         if merged and duration < settings.moment_min_sec and same_speaker:
             merged[-1].extend(group)
+            merged_counter += group_counter
         else:
             merged.append(list(group))
+            merged_counter = group_counter
     return merged
 
 
@@ -136,10 +152,17 @@ def build_moments(
 
     groups: List[List[Segment]] = []
     current: List[Segment] = [speech[0]]
+    # Running speaker tally for `current`, updated incrementally — recomputing
+    # _dominant_speaker(current) every iteration was O(group) per step => O(speech^2)
+    # (a quadratic ingest CPU DoS when no boundary fires). Insertion order matches the
+    # rebuilt-from-list Counter, so the most_common tie-break is unchanged.
+    cur_counter: Counter = Counter()
+    if speech[0].speaker:
+        cur_counter[speech[0].speaker] += 1
     for prev, seg in zip(speech, speech[1:]):
         gap = seg.start - prev.end
         cur_dur = current[-1].end - current[0].start
-        cur_speaker = _dominant_speaker(current)
+        cur_speaker = _counter_dominant(cur_counter)
 
         boundary = False
         if seg.speaker and cur_speaker and seg.speaker != cur_speaker:
@@ -160,8 +183,13 @@ def build_moments(
         if boundary:
             groups.append(current)
             current = [seg]
+            cur_counter = Counter()
+            if seg.speaker:
+                cur_counter[seg.speaker] += 1
         else:
             current.append(seg)
+            if seg.speaker:
+                cur_counter[seg.speaker] += 1
     groups.append(current)
 
     groups = _merge_small(groups, settings)
