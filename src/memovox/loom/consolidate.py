@@ -67,6 +67,10 @@ class ContradictionPair:
 #: token. NB: salience cannot do this job — real short-form contradictions score salience
 #: 0.20-0.27 (e.g. "scaling laws will/won't hold"), identical to the phatic fragments, so a
 #: salience floor would suppress genuine contradictions while still admitting the garbage.
+#: The set covers two classes that otherwise leak through as bogus "distinctive" tokens:
+#: discourse-FRAME words ("the most important thing is really X" / "the whole point is
+#: that Y"), and apostrophe-contraction tokenizer artifacts — tokenize("don't") == ['don',
+#: 't'], so the len-3 stem 'don'/'won'/'didn'/'isn'/... survives _content_tokens as junk.
 _FILLER = frozenset("""
 okay ok oh yeah yep yes nope well just really actually basically literally honestly
 seriously like know knows knew think thinks thinking thought guess mean means meant
@@ -76,7 +80,10 @@ going goes went come comes came make makes made take takes took look looks looki
 see sees seen something someone somebody anything anyone everything nothing nobody
 today now here there back around maybe perhaps right sure fine very much many also
 even still yet ever never always again pretty quite rather almost enough though however
-thank thanks hello hey alright anyway okay
+thank thanks hello hey alright anyway
+most important point whole matters day end down
+don won didn isn aren wasn weren haven hasn doesn wouldn couldn shouldn mustn needn
+ain shan mightn oughtn
 """.split())
 
 

@@ -30,6 +30,22 @@ class TestValueFramingNotTopical(unittest.TestCase):
         self.assertEqual(_coverage_tokens(q), {"watches"})
 
 
+# ---- Fix: corpus topic words wrongly in _COMMON_WORDS -----------------------
+class TestCorpusTopicWordsAreDistinctive(unittest.TestCase):
+    """WATCH_CAR_TOPIC_OVERREFUSAL (round-4 panel): a word the corpus discusses AS a
+    subject ('watch' -> luxury-watch reviews, 'car' -> car reviews) must stay a
+    DISTINCTIVE topic token. Listed in _COMMON_WORDS it is dropped from the topicality
+    signal, so a question whose only other tokens are framing words ('what watch is best
+    to buy?') loses its sole topic token and is wrongly refused. The df-topicality gate
+    still holds the OOC line (an incidental verb use 'where can I watch the game?' refuses
+    because the absent subject is below min_df)."""
+
+    def test_watch_and_car_stay_distinctive(self):
+        from memovox.augur.answer import _rel_tokens
+        self.assertEqual(_rel_tokens("what watch is best for a first purchase"), {"watch"})
+        self.assertEqual(_rel_tokens("what car should I buy"), {"car"})
+
+
 # ---- Fix 3: mid-cue speaker label -------------------------------------------
 class TestMidCueSpeakerLabel(unittest.TestCase):
     def _speech(self, segs):
@@ -265,6 +281,31 @@ class TestPhaticOverlapRejected(unittest.TestCase):
         nli = _FakeNLI(entailing=[(a, b), (b, a)])
         pairs = find_contradictions(self.store, nli=nli, include_supports=True)
         self.assertGreaterEqual(len(pairs), 1, "distinctive near-mirror wrongly dropped")
+
+    def test_discourse_frame_overlap_makes_no_edge(self):
+        # PHATIC_FRAME_GATE_INCOMPLETE (round-4 panel): a generic discourse FRAME whose
+        # only shared tokens are intensifier/frame words ("the most important thing is
+        # really X") must NOT form an edge even at high salience — DeBERTa hallucinates
+        # contradiction ~1.0 on these. Closes the CLASS, not just the 3 corpus fragments.
+        from memovox.loom.consolidate import find_contradictions
+        a = "the most important thing here is really patience"
+        b = "the most important thing now is really speed"
+        self._add("yt:a#c0", "yt:a", a, salience=0.9)
+        self._add("yt:b#c0", "yt:b", b, salience=0.9)
+        nli = _FakeNLI(contradicting=[(a, b), (b, a)])
+        pairs = find_contradictions(self.store, nli=nli, include_supports=True)
+        self.assertEqual(len(pairs), 0, "discourse-frame pair wrongly produced an edge")
+
+    def test_contraction_artifact_not_distinctive(self):
+        # tokenize("don't") == ['don','t'] -> 'don' survived as a bogus len-3 'distinctive'
+        # token (likewise won/didn/isn/...). The contraction STEM must be treated as filler
+        # (a genuine content word in the same phrase, e.g. 'agree', stays distinctive).
+        from memovox.loom.consolidate import _distinctive_tokens, _content_tokens
+        for frag, stem in (("we don't really think so", "don"),
+                           ("they won't ever change", "won"),
+                           ("it isn't one thing", "isn"),
+                           ("that doesn't matter", "doesn")):
+            self.assertNotIn(stem, _distinctive_tokens(_content_tokens(frag)), frag)
 
 
 if __name__ == "__main__":

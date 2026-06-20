@@ -45,13 +45,19 @@ _REL_STOP = {
 # Common English content words (verbs/nouns/adjectives) that are NOT topic-distinctive.
 # Dropped from the relevance signal so they cannot veto a real question (a df=0 generic
 # verb like "arrive") or fake relevance for an absent topic (an incidentally-rare word
-# like "capital"/"boiling"). Curated to contain zero domain/topic terms.
+# like "capital"/"boiling"). Curated to contain zero domain/topic terms — a word the actual
+# corpus discusses AS a subject ("watch" -> luxury-watch reviews, "car" -> car reviews)
+# must NOT live here, or a watch/car question whose only other tokens are framing words
+# ("what watch is best for a first purchase?") loses its sole distinctive token and is
+# wrongly refused. The df-topicality gate + per-moment coverage still hold the OOC line for
+# an incidental verb use ("where can I watch the game?" — the absent subject 'game/football'
+# is below min_df, so it still refuses).
 _COMMON_WORDS = frozenset("""
 able about above across act actual add after again against age ago agree air all
 allow almost alone along already also although always among amount another answer any
 anyone anything appear area around arrive ask available away back bad base because
 become been before begin behind believe below best better between big bit body both
-break bring build business call came can cannot car care carry case catch cause center
+break bring build business call came can cannot care carry case catch cause center
 certain chance change check child choose city claim class clear close come common
 community company complete consider continue control cost could country couple course
 cover create current cut data day deal decide deep develop die difference different
@@ -76,7 +82,7 @@ soon sort sound space speak special spend stand start state stay step still stop
 street strong study stuff such sure system take talk teach team tell thank their them
 then there thing think this those though thought three through time today together told
 too took top total touch toward tried true try turn type under understand until upon
-use used usual very view visit wait walk want watch water way week well went were what
+use used usual very view visit wait walk want water way week well went were what
 when where whether while white whole why will win window wish within without word work
 world would write wrong year yes yet young
 recommend recommended recommends recommendation recommendations suggest suggests
