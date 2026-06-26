@@ -293,13 +293,24 @@ def resolve_speakers(store, *, voiceprints: Optional[Dict[str, Sequence[float]]]
     for spk in named:
         norm = _normalize_name(_speaker_name(spk))
         placed = False
-        for i, existing in enumerate(cluster_norms):
-            if norm == existing or difflib.SequenceMatcher(
-                None, norm, existing
-            ).ratio() >= _NAME_SIMILARITY:
-                clusters[i].append(spk)
-                placed = True
-                break
+        # An EMPTY normalized name carries no comparable ASCII signal: _normalize_name strips
+        # every non-Latin script (CJK, Cyrillic, Arabic, Greek, Hebrew, ...) to "", so two
+        # such names matched via "" == "" (and difflib 1.0 on two empties) and collapsed EVERY
+        # non-Latin-named speaker across all videos into ONE fictitious identity. Never
+        # fuzzy-cluster on an empty norm (each non-Latin name stays its own cluster, the
+        # conservative §12 posture); exact-name unification still happens via the canonical id
+        # below (a content hash of the original name), so two videos with the SAME non-Latin
+        # speaker still resolve together while two DIFFERENT ones stay distinct.
+        if norm:
+            for i, existing in enumerate(cluster_norms):
+                if not existing:
+                    continue
+                if norm == existing or difflib.SequenceMatcher(
+                    None, norm, existing
+                ).ratio() >= _NAME_SIMILARITY:
+                    clusters[i].append(spk)
+                    placed = True
+                    break
         if not placed:
             clusters.append([spk])
             cluster_norms.append(norm)
@@ -311,7 +322,13 @@ def resolve_speakers(store, *, voiceprints: Optional[Dict[str, Sequence[float]]]
         # the golden der is unchanged; this just decouples the id from hash order.
         rep = min(members, key=lambda s: _normalize_name(_speaker_name(s)))
         rep_name = _speaker_name(rep)
-        canonical_id = "spk:" + slugify(rep_name, default="speaker")
+        # slugify() drops all non-ASCII, so a non-Latin name degenerates to the default and
+        # EVERY such speaker would collide on one canonical id ("spk:speaker"). Fall back to a
+        # content hash of the original name when the slug is empty, so distinct non-Latin
+        # speakers get distinct ids while two videos sharing the SAME name still unify (the
+        # hash is a pure function of the name). Latin names keep their slug -> byte-identical.
+        slug = slugify(rep_name, default="")
+        canonical_id = "spk:" + (slug or ("u-" + short_hash(rep_name)))
         # Upsert the canonical identity row once.
         store.upsert_speaker(
             Speaker(

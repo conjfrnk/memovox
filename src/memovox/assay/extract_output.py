@@ -44,10 +44,21 @@ def validate_document(doc: dict) -> None:
             raise ValueError(f"claim type {c['type']!r} not in {CLAIM_TYPES}")
 
 
+def _claim_sort_key(c: Claim):
+    """(moment_id, NUMERIC claim index) — so the document follows extraction SEQUENCE.
+
+    Claim ids are ``<moment_id>.c<index>`` with a 2-digit-min index, so a raw STRING sort
+    misorders a moment's 100th+ claim (".c100" sorts before ".c11"/".c99"). Sorting on the
+    parsed integer keeps the natural order; identical to the string sort for the common
+    <100-claims-per-moment case (zero-padded 2-digit indices already sort correctly)."""
+    base, sep, idx = c.claim_id.rpartition(".c")
+    return (base, int(idx)) if (sep and idx.isdigit()) else (c.claim_id, -1)
+
+
 def _build(claims: List[Claim]) -> dict:
     entities: set = set()
     docs = []
-    for c in sorted(claims, key=lambda x: x.claim_id):  # deterministic ordering
+    for c in sorted(claims, key=_claim_sort_key):  # deterministic, sequence-preserving order
         docs.append(_claim_doc(c))
         entities.update(extract_mentions(c))
     doc = {"version": SCHEMA_VERSION, "claims": docs, "entities": sorted(entities)}

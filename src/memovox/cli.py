@@ -364,6 +364,12 @@ def worker_main() -> int:
 
 
 def cmd_serve(args, mv: Memovox) -> int:
+    # argparse accepts any int for --port; an out-of-range value reaches socket.bind() and
+    # raises OverflowError ("port must be 0-65535"), an ArithmeticError NOT in main()'s caught
+    # tuple — so it would escape as a raw traceback. Validate up front for a clean error.
+    if not 0 <= args.port <= 65535:
+        print("error: --port must be between 0 and 65535", file=sys.stderr)
+        return 2
     if getattr(args, "fastapi", False):
         from .server import fastapi_app
         if not fastapi_app.is_available():

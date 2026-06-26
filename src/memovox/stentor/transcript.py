@@ -19,6 +19,9 @@ from ..backends.base import Segment, Word
 from ..util import scrub_surrogates, split_sentences
 
 FILLERS = {"um", "uh", "erm", "uhh", "umm", "mm", "hmm", "mhm", "uhm", "ah", "er"}
+#: Upper bound on a parsed timestamp (seconds). ~115 days — past any real single media, so a
+#: corrupt exporter's absurd-but-finite timing collapses to 0.0 instead of poisoning ordering.
+_MAX_TIMESTAMP_S = 1e7
 EVENT_RE = re.compile(
     r"\[\s*(music|applause|laughs?|laughter|laughing|silence|inaudible|noise|"
     r"crosstalk|cheering|chuckles?|singing|humming|instrumental|sighs?|groans?|"
@@ -186,6 +189,31 @@ _TURN_ANYWHERE_RE = re.compile(r">>+\s*")
 _INLINE_TS_RE = re.compile(r"<\d{1,2}:\d{2}:\d{2}[.,]\d{3}>")
 
 
+def _is_rolling(text: str) -> bool:
+    """True iff the document is a YouTube auto-caption "rolling" transcript.
+
+    Decided from actual CUE CONTENT — what fraction of cues carry inline word-timestamps —
+    NOT a document-wide search. The old ``_INLINE_TS_RE.search(whole_text)`` flipped the
+    entire document into dedup mode if a single ``<H:MM:SS.mmm>``-shaped token appeared
+    ANYWHERE (a ``NOTE``/``STYLE`` comment block, or one hand-authored karaoke cue), after
+    which every plain cue was discarded — up to TOTAL transcript loss (0 segments). Genuine
+    rolling captions carry inline timing across MANY cues, so require at least two CUES to
+    bear it. (No majority test: genuine YouTube rolling tags only the ~half "scroll" cues, so
+    requiring a majority wrongly declassified real rolling captions and un-deduped them.)"""
+    blocks = re.split(r"\n\n+", text)
+    inline = 0
+    for block in blocks:
+        lines = [ln for ln in block.split("\n") if ln.strip()]
+        ti = next((i for i, ln in enumerate(lines) if "-->" in ln and _is_timestamp_line(ln)), None)
+        if ti is None:
+            continue  # NOTE/STYLE/REGION or header block — never a content cue
+        if any(_INLINE_TS_RE.search(ln) for ln in lines[ti + 1:]):
+            inline += 1
+            if inline >= 2:
+                return True
+    return False
+
+
 def _parse_ts(value: str) -> float:
     s = value.strip().replace(",", ".")
     parts = s.split(":")
@@ -199,12 +227,13 @@ def _parse_ts(value: str) -> float:
         h, m, sec = 0.0, nums[0], nums[1]
     else:
         h, m, sec = 0.0, 0.0, nums[0]
-    # A huge all-digit field (e.g. a corrupt exporter) makes float() overflow to inf; an
-    # inf/nan timestamp mis-sorts moments and crashes the deep-link / H:MM:SS formatters
-    # downstream. Clamp to 0.0 so a malformed timing degrades rather than poisoning ingest
-    # (mirrors the JSON path's _to_float guard).
+    # A huge all-digit field (a corrupt exporter) either overflows float() to inf OR parses
+    # to a finite-but-absurd value (e.g. 23 nines in the hours field -> ~3.6e26 s): both an
+    # inf/nan AND a finite-but-absurd timestamp mis-sort moments and yield a nonsensical
+    # deep-link (?t=3.6e26). Clamp to 0.0 unless the total is finite AND within a sane bound
+    # (_MAX_TIMESTAMP_S, well past any real media) so a malformed timing degrades cleanly.
     total = h * 3600 + m * 60 + sec
-    return total if math.isfinite(total) else 0.0
+    return total if (math.isfinite(total) and 0.0 <= total <= _MAX_TIMESTAMP_S) else 0.0
 
 
 def _is_timestamp_line(line: str) -> bool:
@@ -229,7 +258,7 @@ def parse_cues(text: str) -> List[Segment]:
     timestamps) is parsed unchanged — every content line of every cue is kept.
     """
     text = text.replace("\r\n", "\n").replace("\r", "\n")
-    rolling = bool(_INLINE_TS_RE.search(text))
+    rolling = _is_rolling(text)
     # Rolling captions put a whitespace-only line *inside* a cue (an empty caption
     # row) and separate cues with a truly-blank line, so split only on truly-blank
     # lines — otherwise the intra-cue space-line orphans the new inline-timed line
@@ -284,7 +313,7 @@ def _to_float(value, default: float = 0.0) -> float:
         f = float(value)
     except (TypeError, ValueError):
         return default
-    return f if math.isfinite(f) else default
+    return f if (math.isfinite(f) and abs(f) <= _MAX_TIMESTAMP_S) else default
 
 
 def parse_json(data) -> List[Segment]:

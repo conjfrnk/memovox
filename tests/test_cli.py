@@ -120,6 +120,13 @@ class TestCLI(unittest.TestCase):
         args = build_parser().parse_args(["worker"])
         self.assertEqual(args.concurrency, 1)
 
+    def test_serve_out_of_range_port_is_clean_error_not_traceback(self):
+        # --port outside 0-65535 reaches socket.bind() -> OverflowError, which is NOT in
+        # main()'s caught tuple; validate up front so it's a clean error, not a raw traceback.
+        for bad in ("99999999", "-1"):
+            code, _ = run(["--store", self.store, "serve", "--port", bad])
+            self.assertEqual(code, 2, f"--port {bad} must return a clean non-zero code")
+
     def test_sync_prints_structured_summary(self):
         from unittest import mock
         from memovox.stentor.acquire import EnumeratedEntry

@@ -13,7 +13,7 @@ import re
 from typing import List, Optional
 
 from ..backends.base import LLMBackend
-from ..loom.models import Claim, Moment
+from ..loom.models import CLAIM_TYPES, Claim, Moment
 from ..util import make_claim_id, split_sentences, tokenize
 from .spans import locate_span
 
@@ -339,6 +339,13 @@ def _extract_with_llm(llm: LLMBackend, moment: Moment) -> List[Claim]:
             text, moment.segments,
             default=(moment.t_start_s, moment.t_end_s),
         )
+        # Clamp the model-supplied type to the CLAIM_TYPES enum. A generative backend can emit
+        # an off-enum label ("ASSERTION"), a decorated one ("fact."), or "" — any of which the
+        # raw .upper() carried through, and validate_document (the structured-extract surface)
+        # then RAISES on the whole video, so one quirky claim poisoned the entire call.
+        ct = str(item.get("type", "FACT")).strip().upper()
+        if ct not in CLAIM_TYPES:
+            ct = "FACT"
         claim = Claim(
             claim_id=make_claim_id(moment.moment_id, len(claims)),
             moment_id=moment.moment_id,
@@ -347,7 +354,7 @@ def _extract_with_llm(llm: LLMBackend, moment: Moment) -> List[Claim]:
             subject=str(item.get("subject", "")),
             predicate=str(item.get("predicate", "")),
             object=str(item.get("object", "")),
-            claim_type=str(item.get("type", "FACT")).upper(),
+            claim_type=ct,
             t_start_s=t0,
             t_end_s=t1,
             speaker_id=moment.speaker_id,
