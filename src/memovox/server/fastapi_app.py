@@ -31,6 +31,7 @@ def build_app(mv):
         )
     from fastapi import FastAPI, Request  # type: ignore
     from fastapi.responses import JSONResponse, PlainTextResponse  # type: ignore
+    from starlette.concurrency import run_in_threadpool  # type: ignore
 
     app = FastAPI(title="memovox", version="0.1")
 
@@ -78,20 +79,32 @@ def build_app(mv):
             return {}
         return body if isinstance(body, dict) else {}
 
+    # The route_* functions are SYNCHRONOUS and do heavy blocking work (route_ingest runs
+    # the multi-minute download+ASR+NLI pipeline; ask/synthesize do SQLite + embedding +
+    # rerank). Calling them inline in an `async def` would run that work ON the single
+    # asyncio event-loop thread, freezing EVERY other request (even GET / health) for the
+    # whole duration. run_in_threadpool offloads them so the loop stays responsive — the GET
+    # handlers are already sync `def` (FastAPI threadpools those automatically); this gives
+    # the POST handlers the same isolation. (The stdlib ThreadingHTTPServer is immune — one
+    # OS thread per request — so this only matters for the uvicorn/FastAPI production runner.)
     @app.post("/ingest")
     async def _ingest(request: Request):
-        return _respond(routes.route_ingest(mv, await _json_body(request)))
+        body = await _json_body(request)
+        return _respond(await run_in_threadpool(routes.route_ingest, mv, body))
 
     @app.post("/query")
     async def _query(request: Request):
-        return _respond(routes.route_query(mv, await _json_body(request)))
+        body = await _json_body(request)
+        return _respond(await run_in_threadpool(routes.route_query, mv, body))
 
     @app.post("/synthesize")
     async def _synthesize(request: Request):
-        return _respond(routes.route_synthesize(mv, await _json_body(request)))
+        body = await _json_body(request)
+        return _respond(await run_in_threadpool(routes.route_synthesize, mv, body))
 
     @app.post("/consolidate")
     async def _consolidate(request: Request):
-        return _respond(routes.route_consolidate(mv, await _json_body(request)))
+        body = await _json_body(request)
+        return _respond(await run_in_threadpool(routes.route_consolidate, mv, body))
 
     return app

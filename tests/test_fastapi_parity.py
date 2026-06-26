@@ -69,6 +69,53 @@ class FastApiParityTest(unittest.TestCase):
         _, pure, _ = routes.route_query(self.mv, {"query": "chunk size?"})
         self.assertEqual(scrub(resp.json()), scrub(pure))
 
+    def test_blocking_post_does_not_freeze_event_loop(self):
+        # A blocking POST route (route_ingest/ask run for seconds-to-minutes) must be
+        # offloaded so it does not monopolize the single asyncio event-loop thread and
+        # starve every other request — including the trivial GET / health probe.
+        if not fastapi_app.is_available():
+            self.skipTest("fastapi not installed (free path)")
+        try:
+            import asyncio
+            import time
+
+            import httpx
+        except ImportError:
+            self.skipTest("httpx not installed")
+
+        orig = routes.route_query
+        SLEEP = 0.8
+        try:
+            def slow_query(mv, body):
+                time.sleep(SLEEP)  # stand-in for the real multi-second ask()/ingest()
+                return orig(mv, body)
+            routes.route_query = slow_query
+            app = fastapi_app.build_app(self.mv)
+
+            async def main():
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(transport=transport, base_url="http://t") as cl:
+                    t0 = time.monotonic()
+
+                    async def do_post():
+                        await cl.post("/query", json={"query": "hi"})
+                        return time.monotonic() - t0
+
+                    async def do_get():
+                        await asyncio.sleep(0.05)  # ensure the POST is in-flight first
+                        await cl.get("/")
+                        return time.monotonic() - t0
+
+                    return await asyncio.gather(do_post(), do_get())
+
+            post_dt, get_dt = asyncio.run(main())
+            # If the loop were blocked, GET would serialize BEHIND the ~0.8s POST. Offloaded,
+            # it returns promptly while the POST is still sleeping in the threadpool.
+            self.assertLess(get_dt, SLEEP * 0.6,
+                            f"GET / was starved by the blocking POST (get={get_dt:.2f}s, post={post_dt:.2f}s)")
+        finally:
+            routes.route_query = orig
+
 
 if __name__ == "__main__":
     unittest.main()

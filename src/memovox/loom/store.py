@@ -280,6 +280,32 @@ class LoomStore:
         """True iff ``video_id`` was fully ingested (vs left partial by a crashed ingest)."""
         return self.get_meta(_INGEST_COMPLETE_PREFIX + video_id) == "1"
 
+    def append_meta_json_id(self, key: str, value_id: str) -> None:
+        """Atomically add ``value_id`` to a JSON sorted-id-list meta value.
+
+        The read-modify-write runs under a single write-locked (``BEGIN IMMEDIATE``)
+        transaction so two concurrent appenders cannot clobber each other — the lost-update
+        failure mode of the old get_meta()+set_meta() whole-value overwrite (a dropped
+        seen-id silently triggers a needless, expensive re-ingest on the next sync).
+        Idempotent: an id already present is a no-op. Format unchanged (sorted JSON list)."""
+        self.conn.execute("BEGIN IMMEDIATE")  # acquire the write lock BEFORE the read
+        try:
+            row = self.conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+            ids: set = set()
+            if row and row["value"]:
+                try:
+                    ids = set(json.loads(row["value"]))
+                except (ValueError, TypeError):
+                    ids = set()  # corrupt cursor -> rebuild from this id
+            if value_id not in ids:
+                ids.add(value_id)
+                self.conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                                  (key, json.dumps(sorted(ids))))
+            self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
+
     # -- observability metrics (M0.1) --------------------------------------
 
     def record_stage_metrics(self, video_id: str, tracer: Tracer) -> None:

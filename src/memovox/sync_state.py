@@ -39,12 +39,13 @@ def seen_ids(store, url: str) -> Set[str]:
 
 
 def mark_seen(store, url: str, video_id: str) -> None:
-    """Record ``video_id`` as seen for this source (additive, idempotent)."""
-    ids = seen_ids(store, url)
-    if video_id in ids:
-        return
-    ids.add(video_id)
-    store.set_meta(_meta_key(url), json.dumps(sorted(ids)))  # sorted -> stable on disk
+    """Record ``video_id`` as seen for this source (additive, idempotent, ATOMIC).
+
+    Delegates to the store's write-locked read-modify-write so two concurrent cursor
+    writers (a direct ``mv.sync()`` racing a worker ``sync`` job) cannot lose an id —
+    the old get/modify/set here was a non-atomic whole-value overwrite (last writer
+    wins, dropping the other's id -> a needless re-ingest on the next sync)."""
+    store.append_meta_json_id(_meta_key(url), video_id)
 
 
 def clear(store, url: str) -> None:
