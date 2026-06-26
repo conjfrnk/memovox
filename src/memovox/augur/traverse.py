@@ -67,7 +67,11 @@ def expand(
                     # surface its moment via a stale edge.
                     if nc is None or nc.status != STATUS_COMMITTED or nc.moment_id in visited:
                         continue
-                    if video_id and not nc.moment_id.startswith(video_id):
+                    # Scope by the moment's VIDEO COMPONENT, not a string prefix: a bare
+                    # startswith would leak a sibling video whose id has this one as a prefix
+                    # (e.g. a client-supplied truncated id), and would scope differently from
+                    # the dense leg's exact match. moment_id is "<video_id>#m####".
+                    if video_id and not nc.moment_id.startswith(video_id + "#"):
                         continue
                     score = 1.0 / (hop + 1)
                     if score > scored.get(nc.moment_id, 0.0):

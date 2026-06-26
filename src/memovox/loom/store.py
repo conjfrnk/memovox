@@ -234,10 +234,17 @@ class LoomStore:
         upgrade), migration creates an EMPTY ``moments_fts`` and flips ``self.fts`` True —
         so ``lexical_search`` / ``doc_freq`` would run MATCH against an empty index and
         silently miss every pre-existing moment. Backfill closes that index-vs-truth gap.
-        Flag-guarded; never runs on the no-fts5 build (returns early) so the flag is first
-        set on the fts5 open, exactly when the backfill is needed."""
-        if not self.fts or self.get_meta("fts_backfilled") == "1":
+        Self-healing via a count invariant (NOT a one-shot flag): a sticky flag left a store
+        written on a no-fts5 build AFTER an earlier fts5 open permanently unindexed (the flag
+        was already 1, so the reopen skipped the backfill). A COUNT(moments) vs
+        COUNT(moments_fts) comparison short-circuits the common in-sync open cheaply and
+        reconciles whenever they diverge — in either direction of the supported transition."""
+        if not self.fts:
             return
+        n_moments = self.conn.execute("SELECT COUNT(*) FROM moments").fetchone()[0]
+        n_fts = self.conn.execute("SELECT COUNT(*) FROM moments_fts").fetchone()[0]
+        if n_moments == n_fts:
+            return  # index already in parity — the fast path on every open
         rows = self.conn.execute(
             "SELECT * FROM moments WHERE moment_id NOT IN (SELECT moment_id FROM moments_fts)"
         ).fetchall()
@@ -245,7 +252,7 @@ class LoomStore:
             m = _row_to_moment(r)
             self.conn.execute("INSERT INTO moments_fts (moment_id, text) VALUES (?, ?)",
                               (m.moment_id, m.text_for_embedding()))
-        self.set_meta("fts_backfilled", "1")  # commits
+        self.conn.commit()
 
     def _backfill_ingest_complete(self) -> None:
         """Pre-marker videos are assumed COMPLETE — they were committed by older code that

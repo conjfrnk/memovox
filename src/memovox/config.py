@@ -15,9 +15,12 @@ SQLite database plus media, frames, and human-readable Markdown digests::
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
+
+from .errors import ConfigError
 
 PIPELINE_VERSION = "0.1.0-phase0"
 ENV_STORE = "MEMOVOX_STORE"
@@ -112,26 +115,57 @@ class Settings:
         for name in valid:
             env_key = f"MEMOVOX_{name.upper()}"
             if env_key in os.environ:
-                raw = os.environ[env_key]
-                data[name] = _coerce(getattr(cls, name), raw)
+                data[name] = _coerce_value(getattr(cls, name), os.environ[env_key], name)
         return cls(**data)
 
     def merged(self, overrides: dict) -> "Settings":
+        # Coerce EVERY override to the field's declared type — applies to both the config.json
+        # layer (untyped native JSON values) and the SDK/CLI kwargs layer. Without this, a JSON
+        # string "false" for a bool field stayed a non-empty (truthy) string — silently flipping
+        # a privacy/safety flag (local_only, asr_allow_cpu) — and a JSON string "8" for an int
+        # field crashed the query path later. (env values already coerce via from_env; this
+        # closes the parallel gap the config.py docstring warns about.)
         data = asdict(self)
         for k, v in (overrides or {}).items():
             if k in data and v is not None:
-                data[k] = v
+                data[k] = _coerce_value(getattr(Settings, k), v, k)
         return Settings(**data)
 
 
-def _coerce(default, raw: str):
+def _coerce_value(default, value, name: str):
+    """Coerce a config override (an env STRING or a native JSON value) to ``default``'s type.
+
+    Raises :class:`ConfigError` (a MemovoxError, so the CLI surfaces a clean ``error: ...``
+    instead of a raw traceback) on a value that cannot be coerced or is non-finite — closing
+    two gaps: a bad env value (``MEMOVOX_TOP_K=abc``) used to crash Config construction with a
+    raw ValueError, and a non-finite float (``MEMOVOX_ANSWER_RELEVANCE_FLOOR=nan``) used to
+    sail through and silently DISABLE the out-of-corpus refusal gate (NaN defeats ``floor>0``
+    and ``relevance<floor``)."""
+    # bool FIRST: bool is a subclass of int, so the int branch below would otherwise swallow it.
     if isinstance(default, bool):
-        return raw.lower() in ("1", "true", "yes", "on")
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in ("1", "true", "yes", "on")
+        if isinstance(value, (int, float)):
+            return bool(value)
+        raise ConfigError(f"setting {name!r}: cannot interpret {value!r} as a boolean")
     if isinstance(default, int):
-        return int(raw)
+        try:
+            return int(value)
+        except (ValueError, TypeError) as exc:
+            raise ConfigError(f"setting {name!r}: {value!r} is not an integer ({exc})") from exc
     if isinstance(default, float):
-        return float(raw)
-    return raw
+        try:
+            f = float(value)
+        except (ValueError, TypeError) as exc:
+            raise ConfigError(f"setting {name!r}: {value!r} is not a number ({exc})") from exc
+        if not math.isfinite(f):
+            raise ConfigError(f"setting {name!r}: {value!r} is not a finite number")
+        return f
+    # str-typed field: accept a string as-is; stringify a stray native scalar (e.g. a JSON
+    # number given for a backend-name field) so the dataclass still holds the declared type.
+    return value if isinstance(value, str) else str(value)
 
 
 class Config:

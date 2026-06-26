@@ -25,7 +25,7 @@ from .loom.digest import render_digest
 from .loom.models import STATUS_COMMITTED
 from .loom.resolve import link_claim_relations, resolve_entities, resolve_speakers
 from .observe import Tracer
-from .util import make_video_id, scrub_surrogates, slugify
+from .util import digest_filename, make_video_id, scrub_surrogates
 
 
 @dataclass
@@ -298,7 +298,7 @@ def ingest(
         # --- human-readable digest --------------------------------------
         with tracer.span("digest") as _sp:
             digest = render_digest(video, moments, all_claims)
-            (config.digests_dir / f"{slugify(video_id)}.md").write_text(digest, encoding="utf-8")
+            (config.digests_dir / digest_filename(video_id)).write_text(digest, encoding="utf-8")
             _sp.add_counter("bytes", len(digest))
 
         # --- persist per-stage metrics + bump the cumulative ledger ------

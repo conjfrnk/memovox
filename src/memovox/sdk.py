@@ -326,10 +326,20 @@ class Memovox:
             return store.list_videos()
 
     def delete_video(self, video_id: str) -> bool:
-        """Redaction primitive (M3.3/§12): delete a video and all its derived
-        moments/claims/edges. Returns True if the video existed."""
+        """Redaction primitive (M3.3/§12): delete a video and all its derived data — the
+        SQLite store AND the on-disk human-readable digest. Returns True if it existed."""
+        from .util import digest_filename, slugify
         with LoomStore(self.config) as store:
-            return store.delete_video(video_id)
+            deleted = store.delete_video(video_id)
+        if deleted:
+            # The digest .md lives on the FILESYSTEM, outside the SQLite store the store-layer
+            # delete scrubs — yet it holds claim text, resolved speaker names, OCR'd on-screen
+            # text and source deep links (the most exposed surface, a plaintext file a user may
+            # sync to cloud / commit to git). Remove it so "forget this video" really forgets —
+            # both the injective name and the legacy slug-only name (pre-injective-scheme stores).
+            for fname in (digest_filename(video_id), f"{slugify(video_id)}.md"):
+                (self.config.digests_dir / fname).unlink(missing_ok=True)
+        return deleted
 
     def get_provenance(self, claim_id: str) -> Optional[dict]:
         from .loom.models import STATUS_COMMITTED, make_provenance

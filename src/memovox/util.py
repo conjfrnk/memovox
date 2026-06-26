@@ -132,6 +132,17 @@ def make_claim_id(moment_id: str, index: int) -> str:
     return f"{moment_id}.c{index:02d}"
 
 
+def digest_filename(video_id: str) -> str:
+    """Injective, human-readable on-disk digest filename for a video.
+
+    ``slugify`` lowercases and collapses every ``[_-]`` run, so two genuinely-distinct video
+    ids that differ only in letter case or ``_`` vs ``-`` (YouTube ids are case-sensitive
+    base64url) collapse to ONE filename and overwrite each other's digest. The ``short_hash``
+    suffix makes the name injective on the FULL id while keeping a readable slug prefix — and
+    lets redaction (delete_video) unlink exactly one video's digest, never a colliding one."""
+    return f"{slugify(video_id)}-{short_hash(video_id, 8)}.md"
+
+
 def deep_link(source_url: Optional[str], t_start: Optional[float]) -> Optional[str]:
     """Build a timestamped deep link into the source, if possible."""
     if not source_url:

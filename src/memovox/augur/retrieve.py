@@ -66,7 +66,10 @@ def retrieve(
     dense = store.vector_search(query_vec, pool, video_id=video_id, query_text=query)
     lexical = store.lexical_search(query, pool)
     if video_id:
-        lexical = [(mid, s) for (mid, s) in lexical if mid.startswith(video_id)]
+        # Exact video-component scope (moment_id is "<video_id>#m####"), matching the dense
+        # leg's `m.video_id = ?` — a bare startswith(video_id) would over-match a sibling video
+        # whose id has this one as a prefix (e.g. a truncated client-supplied filter).
+        lexical = [(mid, s) for (mid, s) in lexical if mid.startswith(video_id + "#")]
     if span is not None:
         # pool is the per-leg candidate cap; saturation (len == pool) means the
         # store had at least this many and some may have been dropped upstream.
