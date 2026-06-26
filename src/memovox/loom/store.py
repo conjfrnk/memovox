@@ -288,6 +288,12 @@ class LoomStore:
         failure mode of the old get_meta()+set_meta() whole-value overwrite (a dropped
         seen-id silently triggers a needless, expensive re-ingest on the next sync).
         Idempotent: an id already present is a no-op. Format unchanged (sorted JSON list)."""
+        # The connection uses sqlite3's legacy isolation mode, so an uncommitted write would
+        # leave a transaction open and make the explicit BEGIN IMMEDIATE raise "cannot start a
+        # transaction within a transaction". Flush any pending implicit txn first so this
+        # helper is robust regardless of the caller's connection state.
+        if self.conn.in_transaction:
+            self.conn.commit()
         self.conn.execute("BEGIN IMMEDIATE")  # acquire the write lock BEFORE the read
         try:
             row = self.conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()

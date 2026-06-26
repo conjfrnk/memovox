@@ -14,7 +14,7 @@ from unittest import mock
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
 
 from memovox.config import Config
-from memovox.serving.jobs import JobStore
+from memovox.serving.jobs import JobStore, _args_hash
 
 
 class JobStoreTest(unittest.TestCase):
@@ -93,6 +93,56 @@ class JobStoreTest(unittest.TestCase):
             "SELECT COUNT(*) FROM jobs WHERE kind='ingest'").fetchone()[0]
         self.assertEqual(rows, 1, "concurrent identical enqueues must create exactly one job")
         self.assertEqual(len(set(ids)), 1, "all callers must get the same job id")
+
+    def test_legacy_duplicate_active_jobs_dont_brick_init(self):
+        # A pre-round-15 store could hold duplicate ACTIVE (kind, args_hash) rows (the old
+        # enqueue race). Opening a JobStore must dedup them, not raise on CREATE UNIQUE INDEX.
+        self.jobs.conn.execute("DROP INDEX IF EXISTS idx_jobs_active_dedup")  # mimic legacy schema
+        h = _args_hash({"source": "x"})
+        for n, jid in enumerate(("j1", "j2", "j3")):
+            self.jobs.conn.execute(
+                "INSERT INTO jobs(job_id,kind,args_hash,args_json,state,max_attempts,created_at,updated_at) "
+                "VALUES(?,?,?,?,?,3,?,?)", (jid, "ingest", h, "{}", "queued", float(n), float(n)))
+        self.jobs.conn.commit()
+        js2 = JobStore(self.config)  # __init__ must dedup then build the index without raising
+        active = js2.conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE kind='ingest' AND state IN ('queued','running')"
+        ).fetchone()[0]
+        js2.close()
+        self.assertEqual(active, 1, "duplicate active jobs must collapse to a single keeper")
+
+    def test_enqueue_never_returns_phantom_id_under_vanishing_race(self):
+        # If the active duplicate terminalizes between INSERT OR IGNORE and the fallback
+        # lookup, enqueue must RETRY (insert a real job), never hand back an un-inserted uuid.
+        h = _args_hash({"source": "x"})
+        self.jobs.conn.execute(
+            "INSERT INTO jobs(job_id,kind,args_hash,args_json,state,max_attempts,created_at,updated_at) "
+            "VALUES('dup','ingest',?,?, 'queued',3,1.0,1.0)", (h, "{}"))
+        self.jobs.conn.commit()
+        real = self.jobs.conn
+
+        class _Proxy:  # sqlite3.Connection.execute is read-only, so wrap the whole connection
+            def __init__(self, conn):
+                self._conn = conn
+                self._fired = False
+
+            def execute(self, sql, params=()):
+                if not self._fired and sql.strip().startswith("SELECT job_id FROM jobs WHERE kind"):
+                    self._conn.execute("UPDATE jobs SET state='succeeded' WHERE job_id='dup'")
+                    self._fired = True  # the active dup "vanishes" right as enqueue looks it up
+                return self._conn.execute(sql, params)
+
+            def __getattr__(self, name):
+                return getattr(self._conn, name)
+
+        self.jobs.conn = _Proxy(real)
+        try:
+            jid = self.jobs.enqueue("ingest", {"source": "x"})
+        finally:
+            self.jobs.conn = real
+        job = self.jobs.get_job(jid)
+        self.assertIsNotNone(job, "enqueue must never return a phantom (un-inserted) id")
+        self.assertEqual(job["state"], "queued", "the work must actually be queued")
 
     def test_requeue_stuck_terminalizes_exhausted_attempts(self):
         # A job whose worker process hard-crashes (never records failure) must NOT re-run

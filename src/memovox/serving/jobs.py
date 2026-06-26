@@ -22,6 +22,7 @@ import uuid
 from typing import Optional
 
 from ..config import Config
+from ..errors import MemovoxError
 
 QUEUED, RUNNING, SUCCEEDED, FAILED = "queued", "running", "succeeded", "failed"
 _TERMINAL = (SUCCEEDED, FAILED)
@@ -44,15 +45,20 @@ CREATE TABLE IF NOT EXISTS jobs (
     updated_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_due ON jobs (state, next_run_at);
--- Partial UNIQUE index = the idempotent (kind, args_hash) de-dup enforced ATOMICALLY at
--- the DB layer, so two concurrent enqueue() callers (separate connections, each its own
--- JobStore via the ThreadingHTTPServer) cannot both pass a SELECT-then-INSERT window and
--- create duplicate non-terminal jobs (which would run the same multi-minute ingest twice).
--- Only ACTIVE (queued|running) rows participate, so a fresh job is still enqueueable once
--- the prior one reaches a terminal state.
-CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_active_dedup
-    ON jobs (kind, args_hash) WHERE state IN ('queued', 'running');
 """
+
+#: Partial UNIQUE index = the idempotent (kind, args_hash) de-dup enforced ATOMICALLY at the
+#: DB layer, so two concurrent enqueue() callers (separate connections, each its own JobStore
+#: via the ThreadingHTTPServer) cannot both pass a SELECT-then-INSERT window and create
+#: duplicate non-terminal jobs (which would run the same multi-minute ingest twice). Only
+#: ACTIVE (queued|running) rows participate, so a fresh job is still enqueueable once the
+#: prior one reaches a terminal state. Created SEPARATELY (not in _SCHEMA) so a one-time
+#: cleanup of pre-existing duplicate active rows can run FIRST — otherwise CREATE UNIQUE INDEX
+#: aborts JobStore.__init__ on a legacy store that the old enqueue race had left with dups.
+_ACTIVE_DEDUP_INDEX = (
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_active_dedup "
+    "ON jobs (kind, args_hash) WHERE state IN ('queued', 'running')"
+)
 
 
 def _args_hash(args: dict) -> str:
@@ -73,6 +79,30 @@ class JobStore:
         self.conn.execute("PRAGMA journal_mode = WAL")
         self.conn.execute("PRAGMA busy_timeout = 5000")
         self.conn.executescript(_SCHEMA)
+        self._dedup_active_jobs()          # collapse pre-existing dup active rows FIRST
+        self.conn.execute(_ACTIVE_DEDUP_INDEX)  # ...so this UNIQUE index builds cleanly
+        self.conn.commit()
+
+    def _dedup_active_jobs(self) -> None:
+        """Collapse pre-existing duplicate ACTIVE (queued|running) (kind, args_hash) rows so the
+        partial UNIQUE index can be built. A pre-round-15 store may hold such duplicates (the
+        old SELECT-then-INSERT enqueue race) and ``CREATE UNIQUE INDEX`` would otherwise abort
+        JobStore init on upgrade. Keep the oldest of each group (by created_at, job_id) and
+        terminalize the rest as FAILED — their work is redundant with the keeper. No-op (and
+        cheap) on a store with no duplicates."""
+        rows = self.conn.execute(
+            "SELECT job_id, kind, args_hash FROM jobs WHERE state IN (?, ?) "
+            "ORDER BY kind, args_hash, created_at, job_id", (QUEUED, RUNNING)).fetchall()
+        seen: set = set()
+        now = time.time()
+        for r in rows:
+            key = (r["kind"], r["args_hash"])
+            if key in seen:
+                self.conn.execute(
+                    "UPDATE jobs SET state=?, error=?, updated_at=? WHERE job_id=?",
+                    (FAILED, "deduplicated on upgrade (duplicate active job)", now, r["job_id"]))
+            else:
+                seen.add(key)
         self.conn.commit()
 
     def close(self) -> None:
@@ -97,24 +127,33 @@ class JobStore:
         h = _args_hash(args)
         job_id = uuid.uuid4().hex
         now = time.time()
-        cur = self.conn.execute(
-            "INSERT OR IGNORE INTO jobs (job_id, kind, args_hash, args_json, state, attempts, "
-            "max_attempts, next_run_at, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)",
-            (job_id, kind, h, json.dumps(args, sort_keys=True), QUEUED, max_attempts, now, now, now),
-        )
-        self.conn.commit()
-        if cur.rowcount == 1:
-            return job_id
-        # Ignored: an active (queued|running) job with this (kind, args_hash) already
-        # exists -> return its id (idempotent). The fallback to our own id covers only the
-        # vanishing race where that active job reached a terminal state in between.
-        existing = self.conn.execute(
-            "SELECT job_id FROM jobs WHERE kind=? AND args_hash=? AND state IN (?, ?) "
-            "ORDER BY created_at, job_id LIMIT 1",
-            (kind, h, QUEUED, RUNNING),
-        ).fetchone()
-        return existing["job_id"] if existing else job_id
+        args_json = json.dumps(args, sort_keys=True)
+        # Loop so we NEVER return a phantom id: INSERT OR IGNORE either creates our job
+        # (rowcount 1) or is ignored because an active duplicate exists. If ignored, return
+        # that duplicate's id (idempotent). If the duplicate VANISHED (terminalized) between
+        # the INSERT and the lookup, no active row exists now, so retry the INSERT — it will
+        # succeed. Terminates: each pass either inserts, finds an active dup, or the dup is
+        # gone (so the next INSERT can't be ignored). Bounded as a belt-and-suspenders guard
+        # against a pathological create/terminalize storm.
+        for _ in range(64):
+            cur = self.conn.execute(
+                "INSERT OR IGNORE INTO jobs (job_id, kind, args_hash, args_json, state, attempts, "
+                "max_attempts, next_run_at, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)",
+                (job_id, kind, h, args_json, QUEUED, max_attempts, now, now, now),
+            )
+            self.conn.commit()
+            if cur.rowcount == 1:
+                return job_id  # we created the job
+            existing = self.conn.execute(
+                "SELECT job_id FROM jobs WHERE kind=? AND args_hash=? AND state IN (?, ?) "
+                "ORDER BY created_at, job_id LIMIT 1",
+                (kind, h, QUEUED, RUNNING),
+            ).fetchone()
+            if existing:
+                return existing["job_id"]  # an active duplicate exists -> idempotent
+            # else: the active dup terminalized in the window -> retry the INSERT
+        raise MemovoxError("enqueue did not converge (persistent duplicate-job churn)")
 
     def get_job(self, job_id: str) -> Optional[dict]:
         row = self.conn.execute("SELECT * FROM jobs WHERE job_id=?", (job_id,)).fetchone()

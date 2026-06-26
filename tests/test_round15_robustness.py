@@ -125,6 +125,22 @@ class SyncCursorAtomicTest(unittest.TestCase):
         self.assertEqual(errs, [], "no writer should error")
         self.assertEqual(len(seen), 20, "every concurrently-marked id must survive (no lost update)")
 
+    def test_append_meta_robust_to_open_transaction(self):
+        import json
+        tmp = tempfile.TemporaryDirectory()
+        cfg = Config(store=pathlib.Path(tmp.name) / "s").ensure()
+        store = LoomStore(cfg)
+        try:
+            # leave an UNCOMMITTED write pending so the connection is mid-transaction; the
+            # bare BEGIN IMMEDIATE would otherwise raise "transaction within a transaction".
+            store.conn.execute("INSERT INTO meta (key, value) VALUES ('pending', '1')")
+            self.assertTrue(store.conn.in_transaction)
+            store.append_meta_json_id("k", "vid1")  # must not raise
+            self.assertEqual(json.loads(store.get_meta("k")), ["vid1"])
+        finally:
+            store.close()
+            tmp.cleanup()
+
 
 if __name__ == "__main__":
     unittest.main()
