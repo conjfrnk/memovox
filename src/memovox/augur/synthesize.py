@@ -96,14 +96,35 @@ def _build_citations(store: LoomStore, moment_ids: List[str]) -> List[Citation]:
     return citations
 
 
+#: Bound the pairwise NLI work a SINGLE consensus cluster can trigger. partition_claims
+#: (union-find) can chain hundreds of near-duplicate cross-video claims into ONE cluster,
+#: and the checks below walk every C(k,2) member pair — so a topic that many videos restate
+#: drove hundreds of thousands of nli.classify() calls per synthesize_topic (minutes on a
+#: real DeBERTa backend; an uncapped CPU DoS). The _BUCKET_CAP that bounds find_contradictions
+#: does NOT bound cluster size. A cluster at or under this cap is examined in FULL (so the
+#: 41-video stress corpus and the golden gates stay byte-identical); a larger cluster is
+#: checked on a deterministic claim-id-ordered subset — still enough to confirm consensus or
+#: surface a contradiction, while bounding the worst case to C(cap, 2) comparisons.
+_CLUSTER_MEMBER_CAP = 200
+
+
+def _capped_members(claims):
+    """Deterministic, size-capped member list for the per-cluster pairwise NLI checks."""
+    if len(claims) <= _CLUSTER_MEMBER_CAP:
+        return claims
+    return sorted(claims, key=lambda c: c.claim_id)[:_CLUSTER_MEMBER_CAP]
+
+
 def _cluster_contradicts(cluster, nli: NLIBackend, threshold: float) -> bool:
     """True if any CROSS-video member pair of the cluster is an NLI contradiction.
 
     This is what keeps a lexically-equivalent-but-negated pair (e.g. "X holds" vs
     "X does not hold") from being reported as consensus — the token clustering
-    groups them, but the NLI polarity check demotes them.
+    groups them, but the NLI polarity check demotes them. The member set is capped
+    (``_CLUSTER_MEMBER_CAP``) so a pathologically large cluster cannot drive uncapped
+    O(k^2) NLI.
     """
-    claims = cluster.claims
+    claims = _capped_members(cluster.claims)
     for i in range(len(claims)):
         for j in range(i + 1, len(claims)):
             a, b = claims[i], claims[j]
@@ -123,8 +144,9 @@ def _cluster_entails(cluster, nli: NLIBackend, threshold: float) -> bool:
     both about breakfast, cosine-near, but NEUTRAL) must NOT be reported as agreement. The
     cosine fallback proposes candidates; the NLI must CONFIRM real agreement before it is
     consensus — the agreement-side analog of why contradictions are NLI-verified. Token-
-    equivalent clusters (the free path) trivially pass (near-identical text -> entailment)."""
-    claims = cluster.claims
+    equivalent clusters (the free path) trivially pass (near-identical text -> entailment).
+    The member set is capped (``_CLUSTER_MEMBER_CAP``) to bound the pairwise NLI cost."""
+    claims = _capped_members(cluster.claims)
     for i in range(len(claims)):
         for j in range(i + 1, len(claims)):
             a, b = claims[i], claims[j]

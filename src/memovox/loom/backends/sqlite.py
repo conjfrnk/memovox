@@ -10,6 +10,7 @@ graph ``add_edge`` commits exactly as the legacy method did.
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -82,7 +83,13 @@ class SqliteVectorIndex(VectorIndex):
             raise VectorSpaceError(
                 f"index serves space {self.space!r} but a {space!r}-space query was made"
             )
-        if not query_vec or norm(query_vec) == 0.0:
+        # Reject an empty, zero, OR non-finite query vector. A NaN/Inf query bypasses a bare
+        # ``norm(q) == 0.0`` check (NaN==0.0 / Inf==0.0 are both False), then normalize()
+        # yields all-NaN and every score is NaN — which makes the (-score, id) sort below
+        # non-transitive and the top-k non-deterministic. An optional embed backend can emit
+        # NaN on a degenerate (near-zero) row, and visual_query_vec is external input.
+        qn = norm(query_vec)
+        if not query_vec or not math.isfinite(qn) or qn == 0.0:
             return []
         restrict = self._fts_candidate_ids(query_text) if query_text else None
         if video_id:
@@ -109,7 +116,10 @@ class SqliteVectorIndex(VectorIndex):
             vec = unpack_floats(r["vec"])
             if len(vec) != qlen:
                 continue
-            scored.append((r["moment_id"], score(vec)))
+            s = score(vec)
+            if not math.isfinite(s):
+                continue  # a single NaN/Inf stored vector must not poison the per-leg sort
+            scored.append((r["moment_id"], s))
         # Stable tiebreak by moment_id: SQLite returns rows in no guaranteed order
         # (no ORDER BY), so equal scores would otherwise rank non-deterministically.
         scored.sort(key=lambda x: (-x[1], x[0]))
