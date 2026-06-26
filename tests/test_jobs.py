@@ -66,6 +66,50 @@ class JobStoreTest(unittest.TestCase):
         b = self.jobs.enqueue("consolidate", {})  # prior is terminal -> fresh job
         self.assertNotEqual(a, b)
 
+    def test_concurrent_enqueue_dedups_atomically(self):
+        # Separate connections (as the ThreadingHTTPServer gives each request) racing the
+        # same (kind, args) must yield ONE row, not N — the partial UNIQUE index enforces it.
+        import threading
+        from memovox.serving.jobs import JobStore
+        stores = [JobStore(self.config) for _ in range(12)]
+        barrier = threading.Barrier(len(stores))
+        ids: list = []
+        lock = threading.Lock()
+
+        def worker(js):
+            barrier.wait()  # align the enqueue window to maximize the race
+            jid = js.enqueue("ingest", {"source": "https://youtu.be/x"})
+            with lock:
+                ids.append(jid)
+
+        threads = [threading.Thread(target=worker, args=(js,)) for js in stores]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        for js in stores:
+            js.close()
+        rows = self.jobs.conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE kind='ingest'").fetchone()[0]
+        self.assertEqual(rows, 1, "concurrent identical enqueues must create exactly one job")
+        self.assertEqual(len(set(ids)), 1, "all callers must get the same job id")
+
+    def test_requeue_stuck_terminalizes_exhausted_attempts(self):
+        # A job whose worker process hard-crashes (never records failure) must NOT re-run
+        # forever: once it has used all its attempts requeue terminalizes it (-> FAILED)
+        # instead of looping; a job with attempts remaining is still re-queued for retry.
+        exhausted = self.jobs.enqueue("consolidate", {"a": 1}, max_attempts=2)
+        retriable = self.jobs.enqueue("consolidate", {"a": 2}, max_attempts=3)
+        self.jobs.conn.execute("UPDATE jobs SET state='running', attempts=2 WHERE job_id=?",
+                               (exhausted,))
+        self.jobs.conn.execute("UPDATE jobs SET state='running', attempts=1 WHERE job_id=?",
+                               (retriable,))
+        self.jobs.conn.commit()
+        self.jobs.requeue_stuck_running()
+        ej, rj = self.jobs.get_job(exhausted), self.jobs.get_job(retriable)
+        self.assertEqual(ej["state"], "failed")           # at max_attempts -> terminal, no loop
+        self.assertEqual(rj["state"], "queued")           # attempts remain -> still re-claimable
+
 
 class JobWorkerTest(unittest.TestCase):
     def setUp(self):

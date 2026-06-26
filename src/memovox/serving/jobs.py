@@ -44,6 +44,14 @@ CREATE TABLE IF NOT EXISTS jobs (
     updated_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_due ON jobs (state, next_run_at);
+-- Partial UNIQUE index = the idempotent (kind, args_hash) de-dup enforced ATOMICALLY at
+-- the DB layer, so two concurrent enqueue() callers (separate connections, each its own
+-- JobStore via the ThreadingHTTPServer) cannot both pass a SELECT-then-INSERT window and
+-- create duplicate non-terminal jobs (which would run the same multi-minute ingest twice).
+-- Only ACTIVE (queued|running) rows participate, so a fresh job is still enqueueable once
+-- the prior one reaches a terminal state.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_active_dedup
+    ON jobs (kind, args_hash) WHERE state IN ('queued', 'running');
 """
 
 
@@ -79,25 +87,34 @@ class JobStore:
     def enqueue(self, kind: str, args: Optional[dict] = None, *,
                 max_attempts: int = _DEFAULT_MAX_ATTEMPTS) -> str:
         """Enqueue a job; returns the existing id if an identical (kind, args_hash)
-        job is still non-terminal (idempotent de-dup), else a fresh queued job."""
+        job is still non-terminal (idempotent de-dup), else a fresh queued job.
+
+        The de-dup is enforced by the ``idx_jobs_active_dedup`` partial UNIQUE index, so it
+        is ATOMIC under concurrent enqueue() from separate connections: ``INSERT OR IGNORE``
+        either wins (rowcount 1 -> our id) or is ignored because an active duplicate exists
+        (rowcount 0 -> we return that existing job's id). No SELECT-then-INSERT race window."""
         args = args or {}
         h = _args_hash(args)
-        existing = self.conn.execute(
-            "SELECT job_id FROM jobs WHERE kind=? AND args_hash=? AND state IN (?, ?) LIMIT 1",
-            (kind, h, QUEUED, RUNNING),
-        ).fetchone()
-        if existing:
-            return existing["job_id"]
         job_id = uuid.uuid4().hex
         now = time.time()
-        self.conn.execute(
-            "INSERT INTO jobs (job_id, kind, args_hash, args_json, state, attempts, "
+        cur = self.conn.execute(
+            "INSERT OR IGNORE INTO jobs (job_id, kind, args_hash, args_json, state, attempts, "
             "max_attempts, next_run_at, created_at, updated_at) "
             "VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)",
             (job_id, kind, h, json.dumps(args, sort_keys=True), QUEUED, max_attempts, now, now, now),
         )
         self.conn.commit()
-        return job_id
+        if cur.rowcount == 1:
+            return job_id
+        # Ignored: an active (queued|running) job with this (kind, args_hash) already
+        # exists -> return its id (idempotent). The fallback to our own id covers only the
+        # vanishing race where that active job reached a terminal state in between.
+        existing = self.conn.execute(
+            "SELECT job_id FROM jobs WHERE kind=? AND args_hash=? AND state IN (?, ?) "
+            "ORDER BY created_at, job_id LIMIT 1",
+            (kind, h, QUEUED, RUNNING),
+        ).fetchone()
+        return existing["job_id"] if existing else job_id
 
     def get_job(self, job_id: str) -> Optional[dict]:
         row = self.conn.execute("SELECT * FROM jobs WHERE job_id=?", (job_id,)).fetchone()
@@ -127,9 +144,13 @@ class JobStore:
         return self.get_job(row["job_id"])
 
     def mark_succeeded(self, job_id: str, result: dict) -> None:
+        # ``AND state='running'`` so a zombie/duplicate runner (e.g. a job re-claimed by a
+        # second worker after requeue_stuck_running) cannot resurrect a job that has already
+        # reached a terminal state — the final record stays consistent.
         self.conn.execute(
-            "UPDATE jobs SET state=?, result_json=?, error=NULL, updated_at=? WHERE job_id=?",
-            (SUCCEEDED, json.dumps(result), time.time(), job_id),
+            "UPDATE jobs SET state=?, result_json=?, error=NULL, updated_at=? "
+            "WHERE job_id=? AND state=?",
+            (SUCCEEDED, json.dumps(result), time.time(), job_id, RUNNING),
         )
         self.conn.commit()
 
@@ -141,27 +162,52 @@ class JobStore:
         if job and job["attempts"] < job["max_attempts"]:
             delay = _BACKOFF_BASE_S * (2 ** (job["attempts"] - 1))
             self.conn.execute(
-                "UPDATE jobs SET state=?, next_run_at=?, error=?, updated_at=? WHERE job_id=?",
-                (QUEUED, now + delay, error[:500], now, job_id),
+                "UPDATE jobs SET state=?, next_run_at=?, error=?, updated_at=? "
+                "WHERE job_id=? AND state=?",
+                (QUEUED, now + delay, error[:500], now, job_id, RUNNING),
             )
             self.conn.commit()
             return QUEUED
         self.conn.execute(
-            "UPDATE jobs SET state=?, error=?, updated_at=? WHERE job_id=?",
-            (FAILED, error[:500], now, job_id),
+            "UPDATE jobs SET state=?, error=?, updated_at=? WHERE job_id=? AND state=?",
+            (FAILED, error[:500], now, job_id, RUNNING),
         )
         self.conn.commit()
         return FAILED
 
     def requeue_stuck_running(self) -> int:
-        """Reset jobs left ``running`` by a crashed worker back to ``queued`` so they
-        are re-claimable on restart (crash resumability)."""
-        cur = self.conn.execute(
-            "UPDATE jobs SET state=?, next_run_at=0, updated_at=? WHERE state=?",
-            (QUEUED, time.time(), RUNNING),
-        )
-        self.conn.commit()
-        return cur.rowcount
+        """Reset jobs left ``running`` by a crashed worker so they are re-claimable on
+        restart (crash resumability), returning how many were reset/terminalized.
+
+        A job that hard-crashes the worker PROCESS (segfault in a native ML backend, OOM
+        kill, SIGKILL) never reaches :meth:`mark_failed_or_retry`, which is the ONLY place
+        ``max_attempts`` was enforced. The old "reset every running row" then re-ran it on
+        every restart with attempts climbing past max_attempts UNBOUNDED — an infinite crash
+        loop that re-downloads / re-ASRs an expensive ingest forever. So a job that has
+        already used all its attempts is terminalized here (-> FAILED) instead of being
+        re-queued; the rest are re-queued for immediate re-claim (crash resumability, which
+        the worker-drain paths depend on)."""
+        now = time.time()
+        n = 0
+        with self.conn:
+            rows = self.conn.execute(
+                "SELECT job_id, attempts, max_attempts FROM jobs WHERE state=?", (RUNNING,)
+            ).fetchall()
+            for r in rows:
+                if r["attempts"] >= r["max_attempts"]:
+                    self.conn.execute(
+                        "UPDATE jobs SET state=?, error=?, updated_at=? "
+                        "WHERE job_id=? AND state=?",
+                        (FAILED, "worker died; max attempts exhausted", now, r["job_id"], RUNNING),
+                    )
+                else:
+                    self.conn.execute(
+                        "UPDATE jobs SET state=?, next_run_at=0, updated_at=? "
+                        "WHERE job_id=? AND state=?",
+                        (QUEUED, now, r["job_id"], RUNNING),
+                    )
+                n += 1
+        return n
 
 
 def run_job(mv, job: dict) -> dict:
