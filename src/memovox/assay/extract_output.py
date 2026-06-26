@@ -52,7 +52,8 @@ def _claim_sort_key(c: Claim):
     parsed integer keeps the natural order; identical to the string sort for the common
     <100-claims-per-moment case (zero-padded 2-digit indices already sort correctly)."""
     base, sep, idx = c.claim_id.rpartition(".c")
-    return (base, int(idx)) if (sep and idx.isdigit()) else (c.claim_id, -1)
+    # isascii() guards int(): str.isdigit() is True for Unicode digits ("²") that int() rejects.
+    return (base, int(idx)) if (sep and idx.isascii() and idx.isdigit()) else (c.claim_id, -1)
 
 
 def _build(claims: List[Claim]) -> dict:
