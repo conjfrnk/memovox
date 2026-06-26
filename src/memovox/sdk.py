@@ -326,19 +326,38 @@ class Memovox:
             return store.list_videos()
 
     def delete_video(self, video_id: str) -> bool:
-        """Redaction primitive (M3.3/§12): delete a video and all its derived data — the
-        SQLite store AND the on-disk human-readable digest. Returns True if it existed."""
+        """Redaction primitive (M3.3/§12): delete a video and ALL its derived data — the
+        SQLite store, the on-disk digest, and the downloaded media. Returns True if it existed.
+
+        Scrubs every store-internal filesystem artifact the SQLite-layer delete cannot reach:
+        the digest .md (claim text / speaker names / OCR / deep links) and, for a downloaded
+        ``yt:`` source, the media + ``.info.json`` + sidecar captions in ``media_dir`` (the
+        actual A/V — the most sensitive artifact). A LOCAL-file ingest references the source
+        in place (nothing in the store to remove), so the user's own file is never touched.
+
+        Known residual: extracted keyframes (``frames_dir``) are named by ``slugify(title)``,
+        which can collide across videos and is not recorded per-video, so they are NOT
+        glob-deleted here (that could remove another video's frames). Complete frame
+        redaction needs per-video artifact-path recording — tracked separately.
+        """
         from .util import digest_filename, slugify
         with LoomStore(self.config) as store:
             deleted = store.delete_video(video_id)
-        if deleted:
-            # The digest .md lives on the FILESYSTEM, outside the SQLite store the store-layer
-            # delete scrubs — yet it holds claim text, resolved speaker names, OCR'd on-screen
-            # text and source deep links (the most exposed surface, a plaintext file a user may
-            # sync to cloud / commit to git). Remove it so "forget this video" really forgets —
-            # both the injective name and the legacy slug-only name (pre-injective-scheme stores).
-            for fname in (digest_filename(video_id), f"{slugify(video_id)}.md"):
-                (self.config.digests_dir / fname).unlink(missing_ok=True)
+        if not deleted:
+            return False
+        # digest (universal — every ingest writes one): the injective name AND the legacy
+        # slug-only name (stores written before the injective scheme).
+        for fname in (digest_filename(video_id), f"{slugify(video_id)}.md"):
+            (self.config.digests_dir / fname).unlink(missing_ok=True)
+        # downloaded media for a yt: source — keyed by the YouTube id (== yt-dlp's %(id)s ==
+        # video_id after "yt:"). iterdir + exact "<ytid>." prefix avoids glob-metachar and
+        # prefix-collision issues; covers <ytid>.<ext>, <ytid>.info.json, <ytid>.<lang>.vtt.
+        if video_id.startswith("yt:") and self.config.media_dir.is_dir():
+            ytid = video_id[len("yt:"):]
+            if ytid:
+                for p in self.config.media_dir.iterdir():
+                    if p.is_file() and p.name.startswith(ytid + "."):
+                        p.unlink(missing_ok=True)
         return deleted
 
     def get_provenance(self, claim_id: str) -> Optional[dict]:

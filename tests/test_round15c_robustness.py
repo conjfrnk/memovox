@@ -49,6 +49,29 @@ class RedactionDigestTest(unittest.TestCase):
         self.assertNotEqual(digest_filename("yt:abcDEF12345"), digest_filename("yt:abcdef12345"))
         self.assertNotEqual(digest_filename("yt:a_b"), digest_filename("yt:a-b"))
 
+    def test_delete_video_scrubs_downloaded_media_not_siblings(self):
+        tmp = tempfile.mkdtemp()
+        mv = self._mv(tmp)
+        mv.config.ensure()
+        media = mv.config.media_dir
+        # pre-place downloaded artifacts for THIS yt video + a sibling video's media
+        (media / "abc123XYZ_0.mp4").write_text("av-bytes", encoding="utf-8")
+        (media / "abc123XYZ_0.info.json").write_text("{}", encoding="utf-8")
+        (media / "abc123XYZ_0.en.vtt").write_text("WEBVTT\n", encoding="utf-8")
+        (media / "other999id99.mp4").write_text("sibling", encoding="utf-8")
+        vtt = pathlib.Path(tmp) / "t.en.vtt"
+        vtt.write_text("WEBVTT\n\n00:00:01.000 --> 00:00:09.000\nchunk size is 512.\n",
+                       encoding="utf-8")
+        rep = mv.ingest(str(vtt), source_url="https://youtu.be/abc123XYZ_0")
+        self.assertEqual(rep.video_id, "yt:abc123XYZ_0")
+        mv.delete_video(rep.video_id)
+        names = {p.name for p in media.iterdir()}
+        self.assertNotIn("abc123XYZ_0.mp4", names, "downloaded media must be redacted")
+        self.assertNotIn("abc123XYZ_0.info.json", names)
+        self.assertNotIn("abc123XYZ_0.en.vtt", names)
+        self.assertIn("other999id99.mp4", names, "a sibling video's media must survive")
+        mv.close()
+
 
 class ConfigValidationTest(unittest.TestCase):
     """[3]/[4] env AND config.json values coerce/validate identically (no gate-bypass / crash)."""

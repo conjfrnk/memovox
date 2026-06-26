@@ -147,7 +147,10 @@ class TestMcp(unittest.TestCase):
         handle = json.loads(resp["result"]["content"][0]["text"])
         self.assertIn("job_id", handle)
         self.assertIn(handle["state"], ("queued", "running", "succeeded"))
-        # drain the queue, then job_status resolves the result
+        # Stop the auto-spawned worker first so the explicit drain below is the SOLE worker:
+        # otherwise the two race (the auto-worker's in-flight job vs this worker's requeue),
+        # which is non-deterministic. Production runs a single worker; this restores that.
+        self.mv.close()
         from memovox.serving.jobs import JobWorker
         JobWorker(self.mv, once=True).drain()
         st = self.server.handle({
