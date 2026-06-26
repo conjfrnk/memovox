@@ -36,6 +36,12 @@ from .models import (
 
 SCHEMA_VERSION = 3
 
+#: Per-video "the ingest pipeline ran to completion" marker (meta key prefix). Set as the
+#: LAST step of a successful ingest; checked alongside is_unchanged so a video left
+#: half-written by a crashed/killed ingest is NOT masked as "unchanged" forever. No schema
+#: change — it lives in the existing meta table.
+_INGEST_COMPLETE_PREFIX = "ingest_complete:"
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 
@@ -200,6 +206,8 @@ class LoomStore:
         self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         self.conn.commit()
         self._backfill_normalized_vectors()
+        self._backfill_fts()
+        self._backfill_ingest_complete()
 
     def _backfill_normalized_vectors(self) -> None:
         """One-time (M0.2 W3): unit-normalize any pre-existing main vectors so the
@@ -216,6 +224,42 @@ class LoomStore:
                                   (packed, r["moment_id"]))
         self.set_meta("vectors_normalized", "1")  # commits
 
+    def _backfill_fts(self) -> None:
+        """One-time: populate ``moments_fts`` from the existing ``moments`` rows.
+
+        ``_migrate`` creates ``moments_fts`` ``IF NOT EXISTS`` but only ``add_moment`` ever
+        writes it. memovox deliberately supports a SQLite build WITHOUT fts5 (moments are
+        then indexed only via the LIKE fallback, ``moments_fts`` absent). If such a store is
+        later opened on an fts5-CAPABLE build (system python vs uv/conda, or a wheel
+        upgrade), migration creates an EMPTY ``moments_fts`` and flips ``self.fts`` True —
+        so ``lexical_search`` / ``doc_freq`` would run MATCH against an empty index and
+        silently miss every pre-existing moment. Backfill closes that index-vs-truth gap.
+        Flag-guarded; never runs on the no-fts5 build (returns early) so the flag is first
+        set on the fts5 open, exactly when the backfill is needed."""
+        if not self.fts or self.get_meta("fts_backfilled") == "1":
+            return
+        rows = self.conn.execute(
+            "SELECT * FROM moments WHERE moment_id NOT IN (SELECT moment_id FROM moments_fts)"
+        ).fetchall()
+        for r in rows:
+            m = _row_to_moment(r)
+            self.conn.execute("INSERT INTO moments_fts (moment_id, text) VALUES (?, ?)",
+                              (m.moment_id, m.text_for_embedding()))
+        self.set_meta("fts_backfilled", "1")  # commits
+
+    def _backfill_ingest_complete(self) -> None:
+        """Pre-marker videos are assumed COMPLETE — they were committed by older code that
+        had no partial-ingest marker, so without this the first re-ingest of every legacy
+        video would needlessly rebuild it (is_ingest_complete would read False). One-time,
+        flag-guarded; new videos get the marker the normal way (set at end of ingest)."""
+        if self.get_meta("ingest_complete_backfilled") == "1":
+            return
+        for r in self.conn.execute("SELECT video_id FROM videos").fetchall():
+            self.conn.execute(
+                "INSERT OR REPLACE INTO meta (key, value) VALUES (?, '1')",
+                (_INGEST_COMPLETE_PREFIX + r["video_id"],))
+        self.set_meta("ingest_complete_backfilled", "1")  # commits
+
     # -- meta --------------------------------------------------------------
 
     def set_meta(self, key: str, value: str) -> None:
@@ -227,6 +271,14 @@ class LoomStore:
     def get_meta(self, key: str, default: Optional[str] = None) -> Optional[str]:
         row = self.conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
         return row["value"] if row else default
+
+    def mark_ingest_complete(self, video_id: str) -> None:
+        """Record that ``video_id``'s ingest ran to completion (the LAST ingest step)."""
+        self.set_meta(_INGEST_COMPLETE_PREFIX + video_id, "1")
+
+    def is_ingest_complete(self, video_id: str) -> bool:
+        """True iff ``video_id`` was fully ingested (vs left partial by a crashed ingest)."""
+        return self.get_meta(_INGEST_COMPLETE_PREFIX + video_id) == "1"
 
     # -- observability metrics (M0.1) --------------------------------------
 
@@ -409,6 +461,10 @@ class LoomStore:
                 # rowid reuse safety: force a full re-scan on the next consolidation.
                 self.conn.execute(
                     "INSERT OR REPLACE INTO meta (key, value) VALUES ('consolidation_watermark', '0')")
+                # drop the per-video completion marker (redaction completeness + so a
+                # re-ingest of this id is never masked as "complete" by a stale marker).
+                self.conn.execute("DELETE FROM meta WHERE key = ?",
+                                  (_INGEST_COMPLETE_PREFIX + video_id,))
                 # undo the video's contribution to the cumulative metrics ledger.
                 self._decrement_ledger(ledger_delta)
         return cur.rowcount > 0
@@ -436,12 +492,22 @@ class LoomStore:
         *,
         visual_embedding: Optional[Sequence[float]] = None,
     ) -> None:
+        # UPSERT (update-in-place on conflict) rather than INSERT OR REPLACE: with
+        # foreign_keys=ON, REPLACE first DELETEs the conflicting row, which CASCADE-wipes
+        # this moment's vectors/visual_vectors AND every claim attached to it (and their
+        # mentions). Re-adding a moment must update the parent row, not silently destroy
+        # its derived rows — the same reason upsert_entity uses read-then-UPDATE.
         self.conn.execute(
             """
-            INSERT OR REPLACE INTO moments
+            INSERT INTO moments
             (moment_id, video_id, idx, t_start_s, t_end_s, transcript,
              speaker_id, visual_caption, ocr_text, topic_id)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(moment_id) DO UPDATE SET
+              video_id=excluded.video_id, idx=excluded.idx, t_start_s=excluded.t_start_s,
+              t_end_s=excluded.t_end_s, transcript=excluded.transcript,
+              speaker_id=excluded.speaker_id, visual_caption=excluded.visual_caption,
+              ocr_text=excluded.ocr_text, topic_id=excluded.topic_id
             """,
             (
                 moment.moment_id, moment.video_id, moment.index, moment.t_start_s,
@@ -516,13 +582,23 @@ class LoomStore:
     # -- claims ------------------------------------------------------------
 
     def add_claim(self, claim: Claim) -> None:
+        # UPSERT, not INSERT OR REPLACE: REPLACE would CASCADE-delete this claim's mentions
+        # rows (FK ON DELETE CASCADE) on every re-add. Update-in-place preserves them.
         self.conn.execute(
             """
-            INSERT OR REPLACE INTO claims
+            INSERT INTO claims
             (claim_id, moment_id, video_id, text, subject, predicate, object,
              claim_type, salience, entailment_score, status, superseded_by,
              t_start_s, t_end_s, speaker_id, qualifiers)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(claim_id) DO UPDATE SET
+              moment_id=excluded.moment_id, video_id=excluded.video_id, text=excluded.text,
+              subject=excluded.subject, predicate=excluded.predicate, object=excluded.object,
+              claim_type=excluded.claim_type, salience=excluded.salience,
+              entailment_score=excluded.entailment_score, status=excluded.status,
+              superseded_by=excluded.superseded_by, t_start_s=excluded.t_start_s,
+              t_end_s=excluded.t_end_s, speaker_id=excluded.speaker_id,
+              qualifiers=excluded.qualifiers
             """,
             (
                 claim.claim_id, claim.moment_id, claim.video_id, claim.text,

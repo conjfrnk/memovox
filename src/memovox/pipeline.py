@@ -166,7 +166,12 @@ def ingest(
     owns_store = store is None
     store = store or LoomStore(config)
     try:
-        if not force and store.is_unchanged(video):
+        # is_unchanged alone is not enough: the video row (with its final content_hash) is
+        # committed BEFORE moments/claims, so a crash mid-ingest leaves a partial video that
+        # is_unchanged would mask as "unchanged" forever (never repaired without --force).
+        # Also require the per-video completion marker, set only after the whole pipeline
+        # succeeds — so a partial video falls through to the existed->delete_video rebuild.
+        if not force and store.is_unchanged(video) and store.is_ingest_complete(video_id):
             return IngestReport(video_id, video.title, "unchanged",
                                 asr_backend=st.asr_backend, metrics=tracer.to_dict())
 
@@ -306,6 +311,10 @@ def ingest(
             "visual_events": len(visual.events),
             "frames": visual.n_frames,
         })
+        # LAST step: mark the ingest complete. A crash before this leaves the marker unset,
+        # so the next ingest of the same content rebuilds the partial video instead of
+        # short-circuiting to "unchanged".
+        store.mark_ingest_complete(video_id)
 
         return IngestReport(
             video_id=video_id,
