@@ -108,12 +108,20 @@ class TestCLI(unittest.TestCase):
 
     def test_worker_once_drains_queue(self):
         from memovox import Memovox
+        from memovox.serving.jobs import JobStore
         mv = Memovox(store=self.store, llm_backend="none")
         mv.ingest(str(self.vtt), source_url="https://youtu.be/abc123")
-        job = mv.enqueue_consolidate()
+        # Enqueue via JobStore directly rather than mv.enqueue_consolidate(): the latter's
+        # _ensure_worker() auto-spawns a polling daemon worker, which races the CLI `worker
+        # --once` below — the daemon can claim the job (queued->running) in the window before
+        # the CLI worker's claim_next, leaving it nothing to drain and the job still 'running'
+        # at the assert (flaky). Enqueuing without the auto-worker makes `worker --once` the
+        # SOLE drainer, so this stays a deterministic check that it drains a queued job.
+        with JobStore(mv.config) as jobs:
+            job_id = jobs.enqueue("consolidate", {})
         code, out = run(["--store", self.store, "--llm", "none", "worker", "--once"])
         self.assertEqual(code, 0)
-        self.assertEqual(mv.job_status(job["job_id"])["state"], "succeeded")
+        self.assertEqual(mv.job_status(job_id)["state"], "succeeded")
 
     def test_worker_default_concurrency_is_one(self):
         from memovox.cli import build_parser
