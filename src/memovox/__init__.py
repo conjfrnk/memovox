@@ -19,7 +19,7 @@ Subsystem codenames (spec §3):
     Augur      agentic retrieval + cited answers       (memovox.augur)
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = ["Memovox", "Config", "__version__"]
 
